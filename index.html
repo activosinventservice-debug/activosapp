@@ -31,30 +31,38 @@
     .header-flex{display:flex; align-items:center; justify-content:space-between; gap:12px}
 
     /* Buttons */
-    .btn{display:inline-flex; align-items:center; gap:8px; padding:12px 14px; border:none; cursor:pointer; border-radius:12px; font-weight:700; background:var(--primary); color:var(--on-primary); box-shadow:0 8px 18px rgba(11,110,243,.25); transition:.15s transform,.15s background}
+    .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 14px; border:none; cursor:pointer; border-radius:12px; font-weight:700; background:var(--primary); color:var(--on-primary); box-shadow:0 8px 18px rgba(11,110,243,.25); transition:.15s transform,.15s background}
     .btn:hover{background:var(--primary-variant)} .btn:active{transform:translateY(1px)}
     .btn.tonal{background:#E6F0FF; color:#0B4CB3; border:1px solid #CFE2FF; box-shadow:none}
     .btn.secondary{background:#0F172A; color:#fff}
     .btn.danger{background:var(--danger)}
     .btn.icon{padding:10px 12px}
     .btn-group{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .btn.full{width:100%}
 
     /* Inputs */
     .pill{display:flex; align-items:center; background:#fff; border:1.5px solid var(--border); border-radius:999px; padding:6px 10px; transition:.2s border-color,.2s box-shadow}
     .pill:focus-within{border-color:#8CB8FF; box-shadow:0 0 0 4px rgba(11,110,243,.12)}
     .pill .leading,.pill .trailing{width:40px; display:grid; place-items:center; color:#7B8CA8}
-    .pill input{flex:1; border:none; outline:none; font-size:1rem; padding:10px 4px; background:transparent}
+    .pill input{flex:1; border:none; outline:none; font-size:1rem; padding:10px 4px; background:transparent; min-width:0}
     .select{border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#fff; font-weight:700; color:#0F172A}
     .chip-filter{border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; display:inline-flex; gap:6px; align-items:center; font-weight:700}
     .chip-filter.active{background:var(--chip); border-color:#CFE2FF; color:#0B4CB3}
+
+    /* Layout helpers */
+    .grid-2{display:grid; gap:10px; grid-template-columns:1fr 1fr; max-width:720px}
+    .toolbar-grid{display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center}
+    .searchgroup{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .rcontrols{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end}
+    .stack{display:flex; flex-direction:column; gap:10px}
 
     /* List */
     .list{display:grid; gap:8px}
     .row{display:grid; grid-template-columns:160px 1fr auto; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; transition:.15s border-color,.15s transform}
     .row:hover{border-color:#D6E3FF; transform:translateY(-1px)}
     .sku{font-weight:900}
-    .barcode{font-family:'Courier New',monospace; background:#F4F7FF; padding:4px 8px; border-radius:8px; border:1px dashed #CAD7F1; display:inline-block; color:#0B4CB3}
-    .desc{color:#0F172A; font-size:.95rem; line-height:1.25rem}
+    .barcode{font-family:'Courier New',monospace; background:#F4F7FF; padding:4px 8px; border-radius:8px; border:1px dashed #CAD7F1; display:inline-block; color:#0B4CB3; max-width:100%; overflow:hidden; text-overflow:ellipsis}
+    .desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; word-break:break-word}
     .meta{color:#6B7280; font-size:.8rem; display:flex; gap:18px; flex-wrap:wrap}
 
     .pagination{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px}
@@ -74,10 +82,10 @@
     .chip .material-symbols-rounded{font-size:18px}
     .chip.scroll{
       overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch;
-      font-family:'Courier New',monospace; /* para CB */
+      font-family:'Courier New',monospace;
     }
 
-    /* Gallery (centrada y grande) */
+    /* Gallery */
     .gallery{
       display:flex; gap:14px; overflow-x:auto; padding:12px 0;
       min-height:180px; border-bottom:1px solid var(--border); margin-bottom:12px;
@@ -88,23 +96,23 @@
     }
     .gallery img:hover{transform:scale(1.02)}
 
-    /* Detail blocks (vertical) */
+    /* Detail blocks */
     .section{display:grid; gap:10px; margin:8px 0}
     .item{background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px}
     .label{color:#6B7280; font-size:.85rem; margin-bottom:4px; font-weight:700; display:flex; align-items:center; gap:6px}
-    .value{font-weight:700}
+    .value{font-weight:700; word-break:break-word}
 
-    /* Lightbox / Visor */
+    /* Lightbox */
     .lightbox{position:fixed; inset:0; background:rgba(15,23,42,.9); display:none; align-items:center; justify-content:center; z-index:50}
     .lightbox.show{display:flex}
     .lightbox-content{position:relative; max-width:95vw; max-height:90vh; overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.12)}
     .lightbox-img{user-select:none; pointer-events:auto; cursor:grab; transform-origin:center center; will-change:transform; display:block; max-width:none}
-    .lightbox-toolbar{position:absolute; left:50%; transform:translateX(-50%); bottom:10px; display:flex; gap:8px; background:rgba(255,255,255,.08); backdrop-filter:blur(6px); padding:8px; border-radius:999px; border:1px solid rgba(255,255,255,.18)}
+    .lightbox-toolbar{position:absolute; left:50%; transform:translateX(-50%); bottom:10px; display:flex; gap:8px; background:rgba(255,255,255,.08); backdrop-filter:blur(6px); padding:8px; border-radius:999px; border:1px solid rgba(255,255,255,.18); flex-wrap:wrap; justify-content:center}
     .lightbox-toolbar .btn{background:rgba(255,255,255,.15); color:#fff; box-shadow:none; border:1px solid rgba(255,255,255,.25)}
     .lightbox-toolbar .btn:hover{background:rgba(255,255,255,.25)}
     .lightbox-close{position:absolute; top:10px; right:10px}
 
-    /* CATÁLOGOS */
+    /* Catálogos */
     .tabs{display:flex; gap:8px; flex-wrap:wrap}
     .tab{border:1px solid var(--border); background:#fff; padding:10px 14px; border-radius:999px; cursor:pointer; font-weight:800; color:#0F172A}
     .tab.active{background:var(--primary); border-color:var(--primary); color:#fff}
@@ -113,6 +121,73 @@
     .cat-row:hover{border-color:#D6E3FF}
     .cat-row .label{font-weight:800}
     .cat-row .count{font-size:.85rem; color:#64748B}
+
+    /* =========================
+       RESPONSIVE (CELULAR)
+       ========================= */
+    @media (max-width: 720px){
+      .container{padding:0 12px; margin:12px auto}
+      .card{padding:14px}
+
+      /* Appbar: permite que el chip no reviente */
+      .appbar-inner{padding:10px 12px}
+      .app-title{font-size:1rem}
+      #chip-empresa{max-width:52vw}
+      #chip-empresa-text{display:inline-block; max-width:40vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+      /* Login en 1 columna */
+      .grid-2{grid-template-columns:1fr; max-width:100%}
+
+      /* Headers en columna */
+      .header-flex{flex-direction:column; align-items:stretch}
+      .header-flex > *{width:100%}
+      .btn-group{width:100%}
+
+      /* Botones: mejor toque */
+      .btn{width:100%}
+      .btn.icon{width:auto} /* icon dentro de pill se queda compacto */
+
+      /* Toolbars: de grid a stack */
+      .toolbar-grid{grid-template-columns:1fr; gap:10px}
+      .searchgroup{width:100%}
+      .rcontrols{width:100%; justify-content:flex-start}
+
+      /* Pill: ocupa ancho y permite cortar */
+      .pill{width:100%}
+      .pill input{min-width:0}
+
+      /* Select ocupa ancho bonito */
+      .select{width:100%}
+
+      /* Filas del listado: vertical */
+      .row{
+        grid-template-columns:1fr;
+        gap:10px;
+        align-items:stretch;
+      }
+
+      /* Galería: imágenes más contenidas */
+      .gallery{min-height:140px}
+      .gallery img{height:220px}
+
+      /* Tabs catálogo: mejor en móvil */
+      .tabs{
+        flex-wrap:nowrap;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        padding-bottom:6px;
+      }
+      .tab{white-space:nowrap}
+
+      /* Lightbox toolbar */
+      .lightbox-toolbar{max-width:92vw}
+    }
+
+    @media (max-width: 380px){
+      .btn{padding:11px 12px}
+      .app-title{font-size:.95rem}
+      .gallery img{height:200px}
+    }
   </style>
 </head>
 <body>
@@ -134,11 +209,19 @@
     <!-- LOGIN -->
     <div id="view-login" class="card">
       <h2 style="margin:4px 0 12px">Acceso</h2>
-      <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr; max-width:720px">
-        <div class="pill"><div class="leading"><span class="material-symbols-rounded">mail</span></div><input type="email" id="email" placeholder="Email" autocomplete="username"/></div>
-        <div class="pill"><div class="leading"><span class="material-symbols-rounded">lock</span></div><input type="password" id="password" placeholder="Contraseña" autocomplete="current-password"/></div>
+      <div class="grid-2">
+        <div class="pill">
+          <div class="leading"><span class="material-symbols-rounded">mail</span></div>
+          <input type="email" id="email" placeholder="Email" autocomplete="username"/>
+        </div>
+        <div class="pill">
+          <div class="leading"><span class="material-symbols-rounded">lock</span></div>
+          <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password"/>
+        </div>
       </div>
-      <div style="margin-top:12px"><button class="btn" id="btn-login" onclick="ejecutarLogin()"><span class="material-symbols-rounded">login</span> Entrar</button></div>
+      <div style="margin-top:12px">
+        <button class="btn full" id="btn-login" onclick="ejecutarLogin()"><span class="material-symbols-rounded">login</span> Entrar</button>
+      </div>
       <div id="login-msg" class="error-msg hidden"></div>
     </div>
 
@@ -154,7 +237,10 @@
     <!-- SELECTOR -->
     <div id="view-selector" class="card hidden">
       <div class="header-flex">
-        <div><small style="color:#0B4CB3; font-weight:800;">Empresa Activa</small><h2 id="txt-empresa-actual" style="margin:4px 0 0">—</h2></div>
+        <div>
+          <small style="color:#0B4CB3; font-weight:800;">Empresa Activa</small>
+          <h2 id="txt-empresa-actual" style="margin:4px 0 0">—</h2>
+        </div>
         <button class="btn tonal" onclick="switchView('view-empresas')"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
       </div>
       <div style="display:grid; gap:12px; margin-top:16px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
@@ -167,18 +253,21 @@
     <div id="view-skus" class="card hidden">
       <div class="header-flex" style="margin-bottom:10px">
         <h2 style="margin:0">Activos</h2>
-        <div class="toolbar" style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center">
-          <div class="searchgroup" style="display:flex; gap:10px; align-items:center">
+
+        <div class="toolbar toolbar-grid">
+          <div class="searchgroup">
             <div class="pill" style="flex:1; min-width:280px;">
               <div class="leading"><span class="material-symbols-rounded">search</span></div>
               <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…" onkeyup="debouncedSearch()">
               <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscar()"><span class="material-symbols-rounded">manage_search</span></button>
             </div>
+
             <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
             <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
             <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
           </div>
-          <div class="rcontrols" style="display:flex; gap:10px; align-items:center">
+
+          <div class="rcontrols">
             <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
             <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
               <option value="reciente.desc" selected>Más reciente</option>
@@ -212,9 +301,8 @@
       <div id="pagination" class="pagination"></div>
     </div>
 
-    <!-- DETALLE (exacto al tuyo bueno) -->
+    <!-- DETALLE -->
     <div id="view-detalle" class="card hidden">
-      <!-- TOP BAR: Volver + Anterior/Siguiente -->
       <div class="header-flex" style="margin-bottom:10px">
         <div class="btn-group">
           <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
@@ -226,7 +314,6 @@
         </div>
       </div>
 
-      <!-- CHIPS: SKU · CB (scroll) · GÉNERO · COSTO · ESTATUS -->
       <div class="chips-wrap" style="margin-bottom:8px">
         <span id="chip-sku-wrap" class="chip hidden"><span class="material-symbols-rounded">sell</span><span id="chip-sku"></span></span>
         <span id="chip-cb-wrap" class="chip scroll hidden"><span class="material-symbols-rounded">qr_code_2</span><span id="chip-codbarras"></span></span>
@@ -235,10 +322,8 @@
         <span id="chip-estatus" class="chip hidden"><span class="material-symbols-rounded">verified</span><span id="chip-estatus-text"></span></span>
       </div>
 
-      <!-- Fotos grandes y centradas -->
       <div id="det-fotos" class="gallery"></div>
 
-      <!-- DESCRIPCIÓN -->
       <div class="section">
         <div class="item">
           <div class="label"><span class="material-symbols-rounded">description</span> Descripción</div>
@@ -246,7 +331,6 @@
         </div>
       </div>
 
-      <!-- RESPONSABLE -->
       <div class="section">
         <div class="item">
           <div class="label"><span class="material-symbols-rounded">shield_person</span> Responsable</div>
@@ -254,7 +338,6 @@
         </div>
       </div>
 
-      <!-- BLOQUE VERTICAL PRINCIPAL -->
       <div class="section">
         <div class="item"><div class="label"><span class="material-symbols-rounded">location_on</span> Ubicación</div><div id="det-ubic" class="value"></div></div>
         <div class="item"><div class="label"><span class="material-symbols-rounded">map</span> Localización</div><div id="det-localizacion" class="value"></div></div>
@@ -265,7 +348,6 @@
         <div class="item"><div class="label"><span class="material-symbols-rounded">calendar_clock</span> Fecha de registro</div><div id="det-fecha-reg" class="value"></div></div>
       </div>
 
-      <!-- Facturas PDF -->
       <div class="section">
         <div class="label"><span class="material-symbols-rounded">picture_as_pdf</span> Factura(s)</div>
         <div id="det-facturas" style="display:flex; gap:8px; flex-wrap:wrap"></div>
@@ -289,7 +371,7 @@
         <button class="tab" data-tab="responsable" onclick="setTab('responsable')">Responsable</button>
       </div>
 
-      <div style="margin-top:10px; display:flex; gap:10px; align-items:center">
+      <div class="searchgroup" style="margin-top:10px">
         <div class="pill" style="flex:1; min-width:280px;">
           <div class="leading"><span class="material-symbols-rounded">search</span></div>
           <input type="text" id="cat-search" placeholder="Buscar en el catálogo actual…" onkeyup="filtrarCatalogo()">
@@ -328,15 +410,12 @@
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 
-  // Filtro extra desde Catálogos
   let skuExtraFiltro = null; // { tipo: 'genero'|'ubicacion'|'localizacion'|'responsable', valor: '...' }
-
   let html5QrCode = null, searchDebounce = null, skeletonTimer = null, isLoading = false;
 
   const qs = (id) => document.getElementById(id);
   const show = (el,flag) => el.classList.toggle('hidden', !flag);
 
-  // ------- normalizadores -------
   const norm = (v) => {
     if (v === null || v === undefined) return "";
     const s = String(v).trim();
@@ -350,7 +429,6 @@
     }
     return "";
   };
-  // NO borra ceros (0)
   const getRaw = (obj, ...keys) => {
     for (const k of keys){
       const v = obj?.[k];
@@ -390,24 +468,17 @@
 
   function switchView(id){ document.querySelectorAll('.card').forEach(c => c.classList.add('hidden')); qs(id).classList.remove('hidden'); }
 
-  /* =======================
-     MEJORA: chip con conteo
-     ======================= */
   function actualizarChipFiltroConConteo(){
     if (!(skuExtraFiltro && skuExtraFiltro.valor)) return;
-
-    const col = skuExtraFiltro.tipo; // genero|ubicacion|localizacion|responsable
+    const col = skuExtraFiltro.tipo;
     const iconMap = { genero:'category', ubicacion:'location_on', localizacion:'map', responsable:'badge' };
-
     const label = col.charAt(0).toUpperCase() + col.slice(1);
     const n = Number.isFinite(totalActivos) ? totalActivos : 0;
-
     qs('filtro-text').innerText = `${label}: ${skuExtraFiltro.valor} · ${n} SKU${n===1?'':'s'}`;
     qs('filtro-icon').innerText = iconMap[col] || 'filter_alt';
     show(qs('filtro-activo'), true);
   }
 
-  /* ===== LOGIN ===== */
   async function ejecutarLogin(){
     const emailInput = qs('email').value.trim(), pass = qs('password').value, btn = qs('btn-login'), msg = qs('login-msg');
     btn.disabled = true; msg.classList.add('hidden'); msg.innerText="";
@@ -424,7 +495,6 @@
     finally{ btn.disabled = false; }
   }
 
-  /* ===== EMPRESAS ===== */
   async function esSuperAdmin(){
     try{
       const url = `${SB_URL}/rest/v1/users?email=eq.${encodeURIComponent(userEmail)}&select=esSuperAdmin`;
@@ -475,7 +545,6 @@
     switchView('view-selector');
   }
 
-  /* ===== SKUs ===== */
   function toggleScannerPanel(showIt){ const c = qs('scanner-container'); show(c, !!showIt); if(!showIt) stopScanner(); }
   function toggleSoloBaja(){ soloBaja = !soloBaja; qs('chip-baja').classList.toggle('active', soloBaja); paginaActual = 0; consultarSkus(); }
   function cambiarOrdenUI(){ const v = qs('select-orden').value; if (v.startsWith('sku.')) { sortField='sku'; sortAsc=v.endsWith('asc'); } else { sortField='reciente'; sortAsc=false; } paginaActual=0; consultarSkus(); }
@@ -499,13 +568,12 @@
     if (q !== "0" && q.length >= 2) {
       const qenc = encodeURIComponent(q);
       url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
-    } else if (q !== "0") { /* ignora búsquedas de 1 char */ }
+    } else if (q !== "0") { }
 
     if (soloBaja) url += `&baja=eq.true`;
 
-    // Filtro extra proveniente de Catálogos (solo arma el URL aquí)
     if (skuExtraFiltro && skuExtraFiltro.valor) {
-      const col = skuExtraFiltro.tipo; // genero|ubicacion|localizacion|responsable
+      const col = skuExtraFiltro.tipo;
       const val = encodeURIComponent(skuExtraFiltro.valor);
       url += `&${col}=eq.${val}`;
     } else {
@@ -515,14 +583,10 @@
     isLoading = true; skeletonTimer = setTimeout(()=>{ if(isLoading) qs('skeleton-list').classList.remove('hidden'); }, 160);
     try{
       const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Range': `${desde}-${hasta}`, 'Prefer':'count=exact' } });
-
       const range = res.headers.get('Content-Range');
       if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
 
-      // ✅ MEJORA: ya con totalActivos calculado, actualizamos el chip con conteo
-      if (skuExtraFiltro && skuExtraFiltro.valor) {
-        actualizarChipFiltroConConteo();
-      }
+      if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
 
       cacheSkus = await res.json(); renderTabla(); renderPaginacion();
     }catch(e){ console.error(e); }
@@ -556,7 +620,8 @@
 
   function renderPaginacion(){
     const pag = qs('pagination'); const total = Math.ceil((totalActivos || 0) / TAMANO_PAGINA); let h = "";
-    for(let i=0;i<total;i++){ const visible = (i<2 || i>total-3 || (i>=paginaActual-1 && i<=paginaActual+1));
+    for(let i=0;i<total;i++){
+      const visible = (i<2 || i>total-3 || (i>=paginaActual-1 && i<=paginaActual+1));
       if(visible) h += `<button class="page-btn ${i===paginaActual?'active':''}" onclick="irAPagina(${i})">${i+1}</button>`;
       else if(i===2 || i===total-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
     }
@@ -564,7 +629,6 @@
   }
   function irAPagina(p){ paginaActual=p; consultarSkus(); }
 
-  /* ===== Detalle (tu versión buena) ===== */
   function verDetalleByIndex(idx){
     indiceActual = idx; const i = cacheSkus[idx]; switchView('view-detalle');
 
@@ -575,7 +639,6 @@
     const modelo = getv(i,'modelo');
     const serie  = getv(i,'serie');
     const genero = getv(i,'genero');
-    const cant   = getv(i,'cantidad','qty','existencia');
     const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
     const costoFmt = fmtMoney(costoRaw);
     const ubic   = getv(i,'ubicacion');
@@ -584,43 +647,24 @@
     const fAdq   = getv(i,'fecha_adquisicion','fechaAdquisicion');
     const fReg   = getv(i,'fecha_registro','fechaRegistro','created_at','createdAt');
 
-    // Estatus
     const bajaAt   = getv(i, 'baja_at','bajaAt','fecha_baja','fechaBaja');
     const bajaFlag = isTrue(i?.dadoDeBaja) || isTrue(i?.baja);
     const estatus  = (bajaFlag || !!bajaAt) ? 'Baja' : 'Activo';
 
-    // CHIPS
-    qs('chip-sku').innerText = sku || '';
-    show(qs('chip-sku-wrap'), !!sku);
+    qs('chip-sku').innerText = sku || ''; show(qs('chip-sku-wrap'), !!sku);
+    qs('chip-codbarras').innerText = cb || ''; show(qs('chip-cb-wrap'), !!cb);
+    qs('chip-genero-text').innerText = genero || ''; show(qs('chip-genero'), !!genero);
+    qs('chip-costo-text').innerText = costoFmt || ''; show(qs('chip-costo'), !!(costoFmt));
+    qs('chip-estatus-text').innerText = estatus || ''; show(qs('chip-estatus'), !!estatus);
 
-    qs('chip-codbarras').innerText = cb || '';
-    show(qs('chip-cb-wrap'), !!cb);
-
-    qs('chip-genero-text').innerText = genero || '';
-    show(qs('chip-genero'), !!genero);
-
-    qs('chip-costo-text').innerText = costoFmt || '';
-    show(qs('chip-costo'), !!(costoFmt));
-
-    qs('chip-estatus-text').innerText = estatus || '';
-    show(qs('chip-estatus'), !!estatus);
-
-    // Descripción completa
     const partes = [desc, marca, modelo, serie].map(norm).filter(Boolean);
     qs('det-descripcion-completa').innerText = partes.join(' · ');
+    qs('det-resp').innerText = norm(resp);
+    qs('det-ubic').innerText = norm(ubic);
+    qs('det-localizacion').innerText = norm(loc);
+    qs('det-fecha-adq').innerText = fmtDate(fAdq);
+    qs('det-fecha-reg').innerText = fmtDate(fReg);
 
-    // Responsable
-    qs('det-resp').innerText          = norm(resp);
-
-    // Ubicación / Localización
-    qs('det-ubic').innerText          = norm(ubic);
-    qs('det-localizacion').innerText  = norm(loc);
-
-    // Fechas
-    qs('det-fecha-adq').innerText     = fmtDate(fAdq);
-    qs('det-fecha-reg').innerText     = fmtDate(fReg);
-
-    // Navegación
     qs('btn-prev').disabled = (idx===0);
     qs('btn-next').disabled = (idx===cacheSkus.length-1);
 
@@ -630,7 +674,6 @@
 
   function navegarDetalle(dir){ let n = indiceActual + dir; if(n>=0 && n<cacheSkus.length) verDetalleByIndex(n); }
 
-  /* ===== Fotos (por empresa) ===== */
   async function cargarFotos(sku){
     const div = qs('det-fotos'); div.innerHTML = "";
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre){ return; }
@@ -653,7 +696,6 @@
     }catch(e){ console.error(e); }
   }
 
-  /* ===== Facturas PDF ===== */
   async function cargarFacturas(sku){
     const cont = qs('det-facturas'); cont.innerHTML = "";
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre){ return; }
@@ -677,34 +719,21 @@
     }catch(e){ console.error(e); }
   }
 
-  /* ===== Visor (Lightbox) con zoom/rotación/arrastre) ===== */
   let lb = { scale:1, rot:0, pos:{x:0,y:0}, dragging:false, start:{x:0,y:0} };
   const lbEl = document.getElementById('lightbox');
   const lbImg = document.getElementById('lightbox-img');
 
-  function applyLbTransform(){
-    lbImg.style.transform = `translate(${lb.pos.x}px, ${lb.pos.y}px) scale(${lb.scale}) rotate(${lb.rot}deg)`;
-  }
-  function openLb(src){
-    lb.scale=1; lb.rot=0; lb.pos={x:0,y:0};
-    lbImg.src = src;
-    lbEl.classList.add('show');
-    applyLbTransform();
-  }
-  function closeLb(){
-    lbEl.classList.remove('show');
-    lbImg.src = "";
-  }
+  function applyLbTransform(){ lbImg.style.transform = `translate(${lb.pos.x}px, ${lb.pos.y}px) scale(${lb.scale}) rotate(${lb.rot}deg)`; }
+  function openLb(src){ lb.scale=1; lb.rot=0; lb.pos={x:0,y:0}; lbImg.src = src; lbEl.classList.add('show'); applyLbTransform(); }
+  function closeLb(){ lbEl.classList.remove('show'); lbImg.src = ""; }
   function zoomInLb(){ lb.scale = Math.min(lb.scale+0.2, 5); applyLbTransform(); }
   function zoomOutLb(){ lb.scale = Math.max(lb.scale-0.2, 0.2); applyLbTransform(); }
   function rotateLeftLb(){ lb.rot = (lb.rot - 90) % 360; applyLbTransform(); }
   function rotateRightLb(){ lb.rot = (lb.rot + 90) % 360; applyLbTransform(); }
   function resetLb(){ lb.scale=1; lb.rot=0; lb.pos={x:0,y:0}; applyLbTransform(); }
 
-  // Cerrar al click en fondo (no en contenido)
   lbEl.addEventListener('click', (e)=>{ if(e.target === lbEl) closeLb(); });
 
-  // Arrastre con mouse/touch
   function lbPointerDown(e){
     e.preventDefault();
     lb.dragging = true;
@@ -719,14 +748,8 @@
     lb.pos = { x: p.x - lb.start.x, y: p.y - lb.start.y };
     applyLbTransform();
   }
-  function lbPointerUp(){
-    lb.dragging = false;
-    lbImg.style.cursor = 'grab';
-  }
-  function getPoint(e){
-    if(e.touches && e.touches[0]) return { x:e.touches[0].clientX, y:e.touches[0].clientY };
-    return { x:e.clientX, y:e.clientY };
-  }
+  function lbPointerUp(){ lb.dragging = false; lbImg.style.cursor = 'grab'; }
+  function getPoint(e){ if(e.touches && e.touches[0]) return { x:e.touches[0].clientX, y:e.touches[0].clientY }; return { x:e.clientX, y:e.clientY }; }
   lbImg.addEventListener('mousedown', lbPointerDown);
   window.addEventListener('mousemove', lbPointerMove);
   window.addEventListener('mouseup', lbPointerUp);
@@ -734,7 +757,6 @@
   window.addEventListener('touchmove', lbPointerMove, {passive:false});
   window.addEventListener('touchend', lbPointerUp);
 
-  /* ===== Escáner ===== */
   function startScanner(){
     try{
       if(html5QrCode){ html5QrCode.stop().then(()=> html5QrCode.clear()).catch(()=>{}); }
@@ -746,7 +768,6 @@
   }
   function stopScanner(){ if(html5QrCode){ html5QrCode.stop().then(()=>{ html5QrCode.clear(); }).catch(()=>{}); } }
 
-  /* ===== Catálogos (clic → filtra SKUs) ===== */
   function abrirCatalogos(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     switchView('view-catalogos');
@@ -766,35 +787,26 @@
     limpiarBusquedaCatalogo();
     cargarCatalogoActual(false);
   }
-
   function marcarTab(){
     document.querySelectorAll('.tab').forEach(el=>{
       el.classList.toggle('active', el.getAttribute('data-tab')===currentTab);
     });
   }
-
   function limpiarBusquedaCatalogo(){
     catalogoFilter = '';
     const inp = qs('cat-search'); if (inp) inp.value = '';
     renderCatalogo();
   }
-
-  function filtrarCatalogo(){
-    catalogoFilter = qs('cat-search').value.trim().toLowerCase();
-    renderCatalogo();
-  }
+  function filtrarCatalogo(){ catalogoFilter = qs('cat-search').value.trim().toLowerCase(); renderCatalogo(); }
 
   async function cargarCatalogoActual(forceNetwork){
-    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){
-      renderCatalogo(); return;
-    }
+    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){ renderCatalogo(); return; }
     await cargarCatalogoCompleto(currentTab);
     renderCatalogo();
   }
 
-  // Lee TODOS los valores distintos del campo (en páginas) y los deja únicos/ordenados
   async function cargarCatalogoCompleto(tipo){
-    const col = tipo; // genero | ubicacion | localizacion | responsable
+    const col = tipo;
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
     const pageSize = 1000;
     let desde = 0, total = null;
@@ -833,7 +845,6 @@
       list.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">Cargando ${currentTab}…</div>`;
       return;
     }
-
     if (!filtered.length){
       list.innerHTML = `<div class="chip" style="background:#FEE2E2; border-color:#FCA5A5; color:#991B1B">Sin resultados en “${escapeHtml(currentTab)}”.</div>`;
       return;
@@ -849,7 +860,6 @@
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
     skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
-    // Cambiamos a SKUs y forzamos consulta con el filtro
     switchView('view-skus');
     paginaActual = 0;
     consultarSkus();
@@ -857,7 +867,11 @@
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
-  function logout(){ stopScanner(); sessionToken=""; userEmail=""; empresaSeleccionada=null; cacheSkus=[]; skuExtraFiltro=null; qs('chip-empresa').classList.add('hidden'); switchView('view-login'); }
+  function logout(){
+    stopScanner(); sessionToken=""; userEmail=""; empresaSeleccionada=null; cacheSkus=[]; skuExtraFiltro=null;
+    qs('chip-empresa').classList.add('hidden');
+    switchView('view-login');
+  }
 </script>
 </body>
 </html>
