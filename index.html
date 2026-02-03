@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Inventario Activos Fijos - Web</title>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" />
 
@@ -440,7 +441,7 @@
     <!-- DETALLE -->
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
-        <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
+        <button class="btn tonal" onclick="volverADesdeDetalle()"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
         <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
 
         <span class="divider"></span>
@@ -542,17 +543,24 @@
   </div>
 
 <script>
+  // ⚠️ Recomendación: para producción, NO dejes la anon key hardcodeada en el HTML público.
   const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
   const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
 
-
   let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 
   let skuExtraFiltro = null;
   let html5QrCode = null, searchDebounce = null, skeletonTimer = null, isLoading = false;
+
+  // ✅ para evitar "carreras" (typing + fetch), cancelamos llamadas anteriores
+  let skusAbort = null;
+
+  // ✅ cache y cleanup de blobs (fotos)
+  let fotoBlobUrls = [];
 
   const qs = (id) => document.getElementById(id);
   const show = (el,flag) => el.classList.toggle('hidden', !flag);
@@ -563,6 +571,7 @@
     if (s.toLowerCase() === "null" || s.toLowerCase() === "undefined") return "";
     return s;
   };
+
   const getv = (obj, ...keys) => {
     for (const k of keys){
       const nv = norm(obj?.[k]);
@@ -570,6 +579,7 @@
     }
     return "";
   };
+
   const getRaw = (obj, ...keys) => {
     for (const k of keys){
       const v = obj?.[k];
@@ -613,9 +623,18 @@
     return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   }
 
+  // ✅ helper: onclick seguro con JSON.stringify (evita problemas con comillas)
+  function jsArg(v){ return JSON.stringify(String(v ?? "")); }
+
   function switchView(id){
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
     qs(id).classList.remove('hidden');
+
+    // ✅ si salimos del escáner, lo detenemos
+    if (id !== 'view-skus') toggleScannerPanel(false);
+
+    // ✅ si salimos del detalle, liberamos blobs de fotos
+    if (id !== 'view-detalle') cleanupFotoUrls();
   }
 
   function setSkusMsg(text){
@@ -649,7 +668,13 @@
       const raw = await res.text(); let data = null; try{ data = raw ? JSON.parse(raw) : null }catch{}
       if(!res.ok) throw new Error((data && (data.error_description||data.error||data.message)) || raw || `HTTP ${res.status}`);
       if(!data?.access_token) throw new Error('Respuesta inesperada de Auth: sin access_token');
-      sessionToken = data.access_token; userEmail = emailInput; await cargarEmpresasAutorizadas();
+      sessionToken = data.access_token;
+      userEmail = emailInput;
+
+      // ✅ opcional: recordar último email (solo comodidad)
+      try{ localStorage.setItem("iaf_last_email", userEmail); }catch{}
+
+      await cargarEmpresasAutorizadas();
     }catch(e){
       console.error('Auth error:', e);
       msg.innerText = e.message || 'No se pudo iniciar sesión';
@@ -668,7 +693,8 @@
   }
 
   async function cargarEmpresasAutorizadas(){
-    switchView('view-empresas'); const lista = qs('lista-empresas');
+    switchView('view-empresas');
+    const lista = qs('lista-empresas');
     lista.innerHTML = `<div class="row skeleton" style="height:64px"></div>`;
     try{
       if(await esSuperAdmin()){
@@ -705,13 +731,26 @@
   }
 
   function empresaCard(e){
-    return `<div class="row" style="grid-template-columns:1fr auto; cursor:pointer" onclick="seleccionarEmpresa('${escapeHtml(e.id)}','${escapeHtml(e.nombre)}')">
-      <div><div style="font-weight:900">${escapeHtml(e.nombre)}</div><div class="meta"><span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa</div></div>
-      <div><button class="btn tonal"><span class="material-symbols-rounded">login</span> Entrar</button></div></div>`;
+    const id = norm(e.id), nombre = norm(e.nombre);
+    return `<div class="row" style="grid-template-columns:1fr auto; cursor:pointer"
+      onclick="seleccionarEmpresa(${jsArg(id)},${jsArg(nombre)})">
+      <div>
+        <div style="font-weight:900">${escapeHtml(nombre)}</div>
+        <div class="meta"><span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa</div>
+      </div>
+      <div><button class="btn tonal" type="button"><span class="material-symbols-rounded">login</span> Entrar</button></div>
+    </div>`;
   }
 
   function seleccionarEmpresa(id,nombre){
     empresaSeleccionada = { id, nombre };
+
+    // ✅ recordar empresa (comodidad)
+    try{
+      localStorage.setItem("iaf_last_empresa_id", id);
+      localStorage.setItem("iaf_last_empresa_nombre", nombre);
+    }catch{}
+
     qs('chip-empresa-text').innerText = nombre;
     qs('chip-empresa').classList.remove('hidden');
     qs('txt-empresa-actual').innerText = nombre;
@@ -756,9 +795,7 @@
     searchDebounce=setTimeout(()=>{ paginaActual=0; consultarSkus(); }, 280);
   }
 
-  function reiniciarYBuscar(){
-    paginaActual=0; consultarSkus();
-  }
+  function reiniciarYBuscar(){ paginaActual=0; consultarSkus(); }
 
   function limpiarBusquedaSkus(){
     const input = qs('sku-search');
@@ -796,19 +833,28 @@
     setSkusMsg("");
     if(!empresaSeleccionada) return;
 
+    // ✅ cancelar petición anterior
+    try{ skusAbort?.abort?.(); }catch{}
+    skusAbort = new AbortController();
+
     // ✅ compat: si está vacío, se trata como "0"
     const qInput = norm(qs('sku-search')?.value ?? "");
     const q = qInput ? qInput : "0";
 
     const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
-    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
+    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=*`;
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
     else url += `&order=updated_at.desc`;
 
-    if (q !== "0" && q.length >= 2) {
+    // ✅ búsqueda: si >=2 usa ilike; si =1 también intenta exact sku/cb para que sí responda
+    if (q !== "0") {
       const qenc = encodeURIComponent(q);
-      url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
+      if (q.length >= 2) {
+        url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
+      } else {
+        url += `&or=(sku.eq.${qenc},codigo_barras.eq.${qenc})`;
+      }
     }
 
     if (soloBaja) url += `&baja=eq.true`;
@@ -826,6 +872,7 @@
 
     try{
       const res = await fetch(url, {
+        signal: skusAbort.signal,
         headers:{
           'apikey':SB_KEY,
           'Authorization':`Bearer ${sessionToken}`,
@@ -833,6 +880,17 @@
           'Prefer':'count=exact'
         }
       });
+
+      // ✅ 416: rango fuera (p.ej. se redujo el total); regresamos a página 0
+      if (res.status === 416) {
+        paginaActual = 0;
+        totalActivos = 0;
+        cacheSkus = [];
+        renderTabla();
+        renderPaginacion();
+        setSkusMsg("No hay resultados en esa página. Regresé a la primera.");
+        return;
+      }
 
       if(!res.ok){
         const t = await res.text().catch(()=> "");
@@ -848,6 +906,9 @@
       renderTabla();
       renderPaginacion();
     }catch(e){
+      // ✅ si fue abort, no mostramos error
+      if (e?.name === 'AbortError') return;
+
       console.error(e);
       qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
       qs('pagination').innerHTML = "";
@@ -885,7 +946,7 @@
           ${metaBits ? `<div class="meta">${metaBits}</div>`:''}
         </div>
         <div>
-          <button class="btn tonal" onclick="verDetalleByIndex(${idx})" title="Ver detalle">
+          <button class="btn tonal" type="button" onclick="verDetalleByIndex(${idx})" title="Ver detalle">
             <span class="material-symbols-rounded">visibility</span> Ver
           </button>
         </div>
@@ -901,7 +962,7 @@
     let h = "";
     for(let i=0;i<total;i++){
       const visible = (i<2 || i>total-3 || (i>=paginaActual-1 && i<=paginaActual+1));
-      if(visible) h += `<button class="page-btn ${i===paginaActual?'active':''}" onclick="irAPagina(${i})">${i+1}</button>`;
+      if(visible) h += `<button class="page-btn ${i===paginaActual?'active':''}" type="button" onclick="irAPagina(${i})">${i+1}</button>`;
       else if(i===2 || i===total-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
     }
     pag.innerHTML = h;
@@ -954,14 +1015,29 @@
     cargarFacturas(sku);
   }
 
+  function volverADesdeDetalle(){
+    // ✅ regresa a SKUs (o donde estabas) y limpia recursos
+    cleanupFotoUrls();
+    switchView('view-skus');
+  }
+
   function navegarDetalle(dir){
     let n = indiceActual + dir;
     if(n>=0 && n<cacheSkus.length) verDetalleByIndex(n);
   }
 
+  function cleanupFotoUrls(){
+    try{
+      for (const u of fotoBlobUrls) URL.revokeObjectURL(u);
+    }catch{}
+    fotoBlobUrls = [];
+  }
+
   async function cargarFotos(sku){
     const div = qs('det-fotos');
     div.innerHTML = "";
+    cleanupFotoUrls();
+
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return;
 
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
@@ -980,13 +1056,23 @@
         const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
         if(!rf.ok) continue;
         const b = await rf.blob();
+        const url = URL.createObjectURL(b);
+        fotoBlobUrls.push(url);
+
         const img = document.createElement('img');
-        img.src = URL.createObjectURL(b);
+        img.src = url;
         img.alt = "Foto del activo";
         img.onclick = () => openLb(img.src);
         div.appendChild(img);
       }
-    }catch(e){ console.error(e); }
+
+      if(!(fotos||[]).length){
+        div.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">Sin fotos.</div>`;
+      }
+    }catch(e){
+      console.error(e);
+      div.innerHTML = `<div class="chip" style="background:#FEE2E2; border-color:#FCA5A5; color:#991B1B">Error al cargar fotos.</div>`;
+    }
   }
 
   // ✅ mejora: facturas abren SIEMPRE con token (blob)
@@ -1007,6 +1093,11 @@
         files = rL.ok ? await rL.json() : [];
       }
 
+      if(!(files||[]).length){
+        cont.innerHTML = `<div class="chip" style="background:#EEF2FF; border-color:#C7D2FE; color:#1E3A8A">Sin facturas.</div>`;
+        return;
+      }
+
       for(const f of (files||[])){
         const btn = document.createElement('button');
         btn.className = 'btn tonal';
@@ -1020,7 +1111,6 @@
             const blob = await rf.blob();
             const url = URL.createObjectURL(blob);
             window.open(url, "_blank");
-            // opcional: liberar después
             setTimeout(()=>URL.revokeObjectURL(url), 60_000);
           }catch(e){
             alert(e.message || "Error al abrir factura");
@@ -1028,7 +1118,10 @@
         };
         cont.appendChild(btn);
       }
-    }catch(e){ console.error(e); }
+    }catch(e){
+      console.error(e);
+      cont.innerHTML = `<div class="chip" style="background:#FEE2E2; border-color:#FCA5A5; color:#991B1B">Error al cargar facturas.</div>`;
+    }
   }
 
   // =========================
@@ -1223,7 +1316,7 @@
   function abrirCatalogos(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     switchView('view-catalogos');
-    currentTab = 'genero';
+    currentTab = currentTab || 'genero';
     marcarTab();
     cargarCatalogoActual(true);
   }
@@ -1264,16 +1357,20 @@
     renderCatalogo();
   }
 
+  // ✅ mejora: sin &distinct (a veces falla en PostgREST); paginamos y deduplicamos en JS
   async function cargarCatalogoCompleto(tipo){
     const col = tipo;
-    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
+    const headersBase = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
     const pageSize = 1000;
     let desde = 0, total = null;
     const values = new Set();
 
+    show(qs('cat-total'), true);
+    qs('cat-total-text').innerText = 'Cargando…';
+
     while (true){
-      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=${col}&${col}=not.is.null&distinct`;
-      const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
+      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(col)}&${encodeURIComponent(col)}=not.is.null&order=${encodeURIComponent(col)}.asc`;
+      const res = await fetch(url, { headers: { ...headersBase, 'Range': `${desde}-${desde+pageSize-1}` } });
 
       if(!res.ok){
         const t = await res.text().catch(()=> "");
@@ -1319,15 +1416,15 @@
     }
 
     list.innerHTML = filtered.map(v=>`
-      <div class="cat-row" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">
+      <div class="cat-row" onclick="aplicarCatalogoFiltro(${jsArg(currentTab)},${jsArg(v)})">
         <div class="label">${escapeHtml(v)}</div>
         <div class="count"><span class="material-symbols-rounded" style="font-size:18px">chevron_right</span></div>
       </div>
     `).join('');
   }
 
-  function aplicarCatalogoFiltro(tipo, valorEnc){
-    skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
+  function aplicarCatalogoFiltro(tipo, valor){
+    skuExtraFiltro = { tipo, valor };
     switchView('view-skus');
     paginaActual = 0;
     consultarSkus();
@@ -1335,6 +1432,8 @@
 
   function logout(){
     stopScanner();
+    cleanupFotoUrls();
+
     sessionToken=""; userEmail=""; empresaSeleccionada=null;
     cacheSkus=[]; skuExtraFiltro=null;
     qs('chip-empresa').classList.add('hidden');
@@ -1347,6 +1446,14 @@
     if(qs('view-login') && !qs('view-login').classList.contains('hidden') && e.key === 'Enter'){
       ejecutarLogin();
     }
+  });
+
+  // ✅ autocompletar email recordado
+  document.addEventListener("DOMContentLoaded", ()=>{
+    try{
+      const last = localStorage.getItem("iaf_last_email");
+      if (last && qs('email')) qs('email').value = last;
+    }catch{}
   });
 </script>
 </body>
