@@ -475,7 +475,9 @@
       <div id="filtro-activo" class="chip hidden" style="margin:10px 0 8px">
         <span class="material-symbols-rounded" id="filtro-icon">filter_alt</span>
         <span id="filtro-text">—</span>
-        <button class="btn tonal icon" onclick="limpiarFiltroExtra()" title="Quitar filtro"><span class="material-symbols-rounded">close</span></button>
+        <button class="btn tonal icon" onclick="limpiarFiltroExtra(event)" title="Quitar filtro">
+  <span class="material-symbols-rounded">close</span>
+</button>
       </div>
 
       <!-- Escáner -->
@@ -751,11 +753,29 @@
   function reiniciarYBuscar(){ paginaActual=0; consultarSkus() }
   function abrirModuloSkus(){ switchView('view-skus'); paginaActual=0; const input=qs('sku-search'); if(input) input.value="0"; consultarSkus(); }
 
-  function limpiarFiltroExtra(){
-    skuExtraFiltro=null;
-    show(qs('filtro-activo'), false);
-    paginaActual=0; consultarSkus();
+function limpiarFiltroExtra(ev){
+  // ✅ evita comportamientos raros por propagación (móvil)
+  if (ev) {
+    ev.preventDefault?.();
+    ev.stopPropagation?.();
   }
+
+  // ✅ limpia filtro
+  skuExtraFiltro = null;
+
+  // ✅ oculta chip
+  show(qs('filtro-activo'), false);
+
+  // ✅ reinicia paginación
+  paginaActual = 0;
+
+  // ✅ asegura que sigues en Gestión de SKUs
+  switchView('view-skus');
+
+  // ✅ recarga ya sin filtro
+  consultarSkus();
+}
+
 
   async function consultarSkus(){
     if(!empresaSeleccionada) return;
