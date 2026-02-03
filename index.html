@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Inventario Pro - Web</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <!-- Iconos Material -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" />
 
-  <!-- ✅ Detector móvil/escritorio (agrega class is-mobile / is-desktop al <html>) -->
+  <!-- ✅ Detector móvil/escritorio -->
   <script>
     (function () {
       function isMobileLike() {
@@ -77,6 +76,31 @@
     .rcontrols{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end}
     .stack{display:flex; flex-direction:column; gap:10px}
 
+    /* ✅ Menú superior tipo app (para que “se note diferente”) */
+    .topmenu{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:8px;
+      box-shadow:0 8px 18px rgba(0,40,100,.06);
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .topmenu::-webkit-scrollbar{height:0}
+    .topmenu .btn, .topmenu .chip-filter, .topmenu .select{
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .topmenu .divider{
+      width:1px; height:26px;
+      background:var(--border);
+      flex:0 0 auto;
+      opacity:.9;
+    }
+
     /* List */
     .list{display:grid; gap:8px}
     .row{display:grid; grid-template-columns:160px 1fr auto; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; transition:.15s border-color,.15s transform}
@@ -84,7 +108,7 @@
     .sku{font-weight:900}
     .barcode{font-family:'Courier New',monospace; background:#F4F7FF; padding:4px 8px; border-radius:8px; border:1px dashed #CAD7F1; display:inline-block; color:#0B4CB3; max-width:100%; overflow:hidden; text-overflow:ellipsis}
     .desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; word-break:break-word}
-    .meta{color:#6B7280; font-size:.8rem; display:flex; gap:18px; flex-wrap:wrap}
+    .meta{color:#6B7280; font-size:.8rem; display:flex; gap:14px; flex-wrap:wrap}
 
     .pagination{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px}
     .page-btn{border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:800; color:#0F172A}
@@ -119,6 +143,7 @@
 
     /* Detail blocks */
     .section{display:grid; gap:10px; margin:8px 0}
+    .section.full{grid-template-columns:1fr}
     .item{background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px}
     .label{color:#6B7280; font-size:.85rem; margin-bottom:4px; font-weight:700; display:flex; align-items:center; gap:6px}
     .value{font-weight:700; word-break:break-word}
@@ -144,11 +169,10 @@
     .cat-row .count{font-size:.85rem; color:#64748B}
 
     /* =========================
-       ✅ MÓVIL: botones más intuitivos y ordenados
-       (en vez de hacer TODO width:100%)
+       ✅ MÓVIL: compactar y “menú arriba”
        ========================= */
     html.is-mobile .container{padding:0 12px; margin:12px auto}
-    html.is-mobile .card{padding:14px}
+    html.is-mobile .card{padding:12px}
 
     /* Appbar: chip no reviente */
     html.is-mobile .appbar-inner{padding:10px 12px}
@@ -159,78 +183,147 @@
     /* Login 1 columna */
     html.is-mobile .grid-2{grid-template-columns:1fr; max-width:100%}
 
-    /* Header: NO apiles todo en columna (se siente raro),
-       solo deja que “quiebre” natural y con separación */
-    html.is-mobile .header-flex{flex-wrap:wrap; align-items:center}
-    html.is-mobile .btn-group{flex-wrap:wrap}
-
-    /* ✅ Botones en móvil: compactos, consistentes */
+    /* Botones móvil: compactos */
     html.is-mobile .btn{
       padding:10px 12px;
       border-radius:12px;
-      width:auto;              /* <- clave: ya NO 100% */
-      box-shadow:none;         /* menos “bloque grande” */
+      width:auto;
+      box-shadow:none;
     }
-    html.is-mobile .btn.full{width:100%} /* solo cuando tú quieras */
+    html.is-mobile .btn.full{width:100%}
 
-    /* Toolbars: de grid a stack (pero con buen orden) */
-    html.is-mobile .toolbar-grid{grid-template-columns:1fr; gap:10px}
-
-    /* ===== SKUs: acciones en “fila de botones” tipo app ===== */
-    html.is-mobile .searchgroup{
-      display:grid;
-      grid-template-columns:1fr 1fr; /* 2 columnas para acciones */
+    /* ✅ Menú superior: se ve como “barra” arriba y horizontal */
+    html.is-mobile .topmenu{
+      border-radius:16px;
+      padding:8px;
       gap:8px;
-      width:100%;
-      align-items:stretch;
+    }
+    html.is-mobile .topmenu .btn,
+    html.is-mobile .topmenu .chip-filter{
+      padding:9px 10px;
+      border-radius:14px;
+    }
+    html.is-mobile .topmenu .select{
+      padding:9px 10px;
+      border-radius:14px;
+      min-width:150px;
     }
 
-    /* La barra de búsqueda ocupa toda la fila (2 columnas) */
+    /* ✅ Barra de búsqueda: más delgada para ahorrar alto */
+    html.is-mobile .pill{padding:5px 10px}
+    html.is-mobile .pill input{padding:9px 4px; font-size:.98rem}
+    html.is-mobile .pill .leading{width:36px}
+    html.is-mobile .btn.icon{padding:9px 10px}
+
+    /* ===== SKUs: optimizar espacios ===== */
+
+    /* Header SKUs: compactar margen */
+    html.is-mobile #view-skus .header-flex{gap:10px; margin-bottom:8px !important}
+
+    /* Toolbar grid -> stack, pero ordenado */
+    html.is-mobile .toolbar-grid{grid-template-columns:1fr; gap:8px}
+
+    /* Searchgroup: solo la pill ocupa su línea; el menú queda aparte */
+    html.is-mobile .searchgroup{
+      display:block;
+      width:100%;
+    }
     html.is-mobile .searchgroup .pill{
-      grid-column:1 / -1;
       width:100%;
       min-width:0 !important;
     }
 
-    /* Botones de acciones (Escáner / Catálogos / Modos) */
-    html.is-mobile .searchgroup > button.btn{
-      width:100%;
-      justify-content:center;
-    }
+    /* ✅ Rcontrols ya se va al menú, aquí queda “por si acaso” */
+    html.is-mobile .rcontrols{display:none}
 
-    /* Controles derechos: también en 2 columnas, parejitos */
-    html.is-mobile .rcontrols{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:8px;
-      width:100%;
-      justify-content:stretch;
-    }
-    html.is-mobile .rcontrols > *{width:100%}
-
-    /* Pill: ocupa ancho y permite cortar */
-    html.is-mobile .pill{width:100%}
-    html.is-mobile .pill input{min-width:0}
-
-    /* Select: full */
-    html.is-mobile .select{width:100%}
-
-    /* Filas del listado: vertical y con botón “Ver” full (solo ese) */
+    /* ✅ LISTA: que cada SKU ocupe menos alto, sin quitar info */
+    html.is-mobile .list{gap:8px}
     html.is-mobile .row{
-      grid-template-columns:1fr;
-      gap:10px;
-      align-items:stretch;
+      padding:10px 12px;
+      gap:8px;
+      grid-template-columns:1fr auto; /* info + acción */
+      align-items:start;
     }
-    html.is-mobile .row > div:last-child .btn{width:100%}
+    /* Reacomodar los 3 bloques del row (sin tocar JS) */
+    html.is-mobile .row > div:nth-child(1){
+      grid-column:1/2; grid-row:1/2;
+    }
+    html.is-mobile .row > div:nth-child(2){
+      grid-column:1/2; grid-row:2/3;
+    }
+    html.is-mobile .row > div:nth-child(3){
+      grid-column:2/3; grid-row:1/3;
+      display:flex; align-items:center; justify-content:flex-end;
+    }
+    /* Ver: tipo icono vertical compacto */
+    html.is-mobile .row > div:nth-child(3) .btn{
+      width:auto;
+      padding:10px 10px;
+      border-radius:14px;
+    }
+    html.is-mobile .row > div:nth-child(3) .btn span.material-symbols-rounded{font-size:20px}
+    html.is-mobile .row > div:nth-child(3) .btn{gap:0}
+    html.is-mobile .row > div:nth-child(3) .btn{line-height:0}
+    /* Opcional: ocultar palabra "Ver" solo en móvil para ahorrar (no quita info del SKU) */
+    html.is-mobile .row > div:nth-child(3) .btn { font-size:0; }
+    html.is-mobile .row > div:nth-child(3) .btn span.material-symbols-rounded{font-size:22px}
 
-    /* Scanner: botones en 2 columnas (más intuitivo) */
+    /* Textos más apretados */
+    html.is-mobile .sku{font-size:1rem}
+    html.is-mobile .barcode{padding:3px 8px; border-radius:10px; font-size:.9rem}
+    html.is-mobile .desc{font-size:.93rem; line-height:1.18rem}
+    html.is-mobile .meta{font-size:.78rem; gap:10px; margin-top:2px}
+
+    /* Scanner: botones en línea */
     html.is-mobile #scanner-container > div:last-child{
-      display:grid !important;
-      grid-template-columns:1fr 1fr;
+      display:flex !important;
       gap:8px !important;
-      justify-content:stretch !important;
+      justify-content:center !important;
+      flex-wrap:nowrap !important;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
     }
-    html.is-mobile #scanner-container > div:last-child .btn{width:100%}
+    html.is-mobile #scanner-container > div:last-child .btn{flex:0 0 auto}
+
+    /* ===== DETALLE: quepa más en 1 pantalla ===== */
+
+    /* Chips: 1 sola línea con scroll (como app) */
+    html.is-mobile .chips-wrap{
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      padding-bottom:4px;
+    }
+    html.is-mobile .chips-wrap::-webkit-scrollbar{height:0}
+    html.is-mobile .chip{
+      padding:7px 10px;
+      border-radius:999px;
+      flex:0 0 auto;
+    }
+
+    /* Galería más contenida */
+    html.is-mobile .gallery{
+      min-height:120px;
+      padding:10px 0;
+      margin-bottom:10px;
+    }
+    html.is-mobile .gallery img{height:200px}
+
+    /* Secciones: 2 columnas para ahorrar alto (sin quitar info) */
+    html.is-mobile .section{gap:8px; margin:6px 0}
+    html.is-mobile .section:not(.full){
+      grid-template-columns:1fr 1fr;
+    }
+    html.is-mobile .item{
+      padding:8px 10px;
+    }
+    html.is-mobile .label{
+      font-size:.8rem;
+      margin-bottom:3px;
+    }
+    html.is-mobile .value{
+      font-size:.92rem;
+    }
 
     /* Tabs catálogo: scroll horizontal */
     html.is-mobile .tabs{
@@ -241,17 +334,11 @@
     }
     html.is-mobile .tab{white-space:nowrap}
 
-    /* Galería */
-    html.is-mobile .gallery{min-height:140px}
-    html.is-mobile .gallery img{height:220px}
-
-    /* Lightbox toolbar */
-    html.is-mobile .lightbox-toolbar{max-width:92vw}
-
     @media (max-width: 380px){
       html.is-mobile .btn{padding:10px 11px}
       html.is-mobile .app-title{font-size:.95rem}
-      html.is-mobile .gallery img{height:200px}
+      html.is-mobile .gallery img{height:185px}
+      html.is-mobile .select{min-width:140px}
     }
   </style>
 </head>
@@ -318,33 +405,35 @@
     <div id="view-skus" class="card hidden">
       <div class="header-flex" style="margin-bottom:10px">
         <h2 style="margin:0">Activos</h2>
+      </div>
 
-        <div class="toolbar toolbar-grid">
-          <div class="searchgroup">
-            <div class="pill" style="flex:1; min-width:280px;">
-              <div class="leading"><span class="material-symbols-rounded">search</span></div>
-              <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…" onkeyup="debouncedSearch()">
-              <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscar()"><span class="material-symbols-rounded">manage_search</span></button>
-            </div>
+      <!-- ✅ MENÚ SUPERIOR (botones horizontales tipo app) -->
+      <div class="topmenu" style="margin-bottom:10px">
+        <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
+        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
 
-            <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
-            <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
-            <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
-          </div>
+        <span class="divider"></span>
 
-          <div class="rcontrols">
-            <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
-            <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
-              <option value="reciente.desc" selected>Más reciente</option>
-              <option value="sku.asc">SKU ↑</option>
-              <option value="sku.desc">SKU ↓</option>
-            </select>
-          </div>
+        <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
+        <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
+          <option value="reciente.desc" selected>Más reciente</option>
+          <option value="sku.asc">SKU ↑</option>
+          <option value="sku.desc">SKU ↓</option>
+        </select>
+      </div>
+
+      <!-- Búsqueda -->
+      <div class="searchgroup">
+        <div class="pill" style="flex:1; min-width:280px;">
+          <div class="leading"><span class="material-symbols-rounded">search</span></div>
+          <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…" onkeyup="debouncedSearch()">
+          <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscar()"><span class="material-symbols-rounded">manage_search</span></button>
         </div>
       </div>
 
       <!-- Chip de filtro aplicado desde Catálogos -->
-      <div id="filtro-activo" class="chip hidden" style="margin-bottom:8px">
+      <div id="filtro-activo" class="chip hidden" style="margin:10px 0 8px">
         <span class="material-symbols-rounded" id="filtro-icon">filter_alt</span>
         <span id="filtro-text">—</span>
         <button class="btn tonal icon" onclick="limpiarFiltroExtra()" title="Quitar filtro"><span class="material-symbols-rounded">close</span></button>
@@ -359,7 +448,7 @@
         </div>
       </div>
 
-      <div id="list-wrapper" style="margin-top:12px">
+      <div id="list-wrapper" style="margin-top:10px">
         <div id="skeleton-list" class="list hidden"><div class="row skeleton" style="height:64px"></div></div>
         <div id="rows" class="list"></div>
       </div>
@@ -368,15 +457,15 @@
 
     <!-- DETALLE -->
     <div id="view-detalle" class="card hidden">
-      <div class="header-flex" style="margin-bottom:10px">
-        <div class="btn-group">
-          <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
-          <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
-        </div>
-        <div class="btn-group">
-          <button id="btn-prev" class="btn tonal" onclick="navegarDetalle(-1)"><span class="material-symbols-rounded">chevron_left</span> Anterior</button>
-          <button id="btn-next" class="btn tonal" onclick="navegarDetalle(1)">Siguiente <span class="material-symbols-rounded">chevron_right</span></button>
-        </div>
+      <!-- ✅ MENÚ SUPERIOR DETALLE -->
+      <div class="topmenu" style="margin-bottom:10px">
+        <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
+        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+
+        <span class="divider"></span>
+
+        <button id="btn-prev" class="btn tonal" onclick="navegarDetalle(-1)"><span class="material-symbols-rounded">chevron_left</span> Anterior</button>
+        <button id="btn-next" class="btn tonal" onclick="navegarDetalle(1)">Siguiente <span class="material-symbols-rounded">chevron_right</span></button>
       </div>
 
       <div class="chips-wrap" style="margin-bottom:8px">
@@ -389,14 +478,14 @@
 
       <div id="det-fotos" class="gallery"></div>
 
-      <div class="section">
+      <div class="section full">
         <div class="item">
           <div class="label"><span class="material-symbols-rounded">description</span> Descripción</div>
           <div id="det-descripcion-completa" class="value"></div>
         </div>
       </div>
 
-      <div class="section">
+      <div class="section full">
         <div class="item">
           <div class="label"><span class="material-symbols-rounded">shield_person</span> Responsable</div>
           <div id="det-resp" class="value"></div>
@@ -413,7 +502,7 @@
         <div class="item"><div class="label"><span class="material-symbols-rounded">calendar_clock</span> Fecha de registro</div><div id="det-fecha-reg" class="value"></div></div>
       </div>
 
-      <div class="section">
+      <div class="section full">
         <div class="label"><span class="material-symbols-rounded">picture_as_pdf</span> Factura(s)</div>
         <div id="det-facturas" style="display:flex; gap:8px; flex-wrap:wrap"></div>
       </div>
@@ -475,7 +564,7 @@
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 
-  let skuExtraFiltro = null; // { tipo: 'genero'|'ubicacion'|'localizacion'|'responsable', valor: '...' }
+  let skuExtraFiltro = null;
   let html5QrCode = null, searchDebounce = null, skeletonTimer = null, isLoading = false;
 
   const qs = (id) => document.getElementById(id);
@@ -677,7 +766,7 @@
       return `<div class="row">
         <div><div class="sku">${sku}</div>${cb ? `<div class="barcode">${cb}</div>`:''}</div>
         <div><div class="desc">${desc}</div>${metaBits ? `<div class="meta">${metaBits}</div>`:''}</div>
-        <div><button class="btn tonal" onclick="verDetalleByIndex(${idx})"><span class="material-symbols-rounded">visibility</span> Ver</button></div>
+        <div><button class="btn tonal" onclick="verDetalleByIndex(${idx})" title="Ver detalle"><span class="material-symbols-rounded">visibility</span> Ver</button></div>
       </div>`;
     }).join('');
     qs('rows').innerHTML = rows || "<p style='color:var(--muted)'>Sin resultados</p>";
