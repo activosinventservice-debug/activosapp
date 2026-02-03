@@ -4,24 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Inventario Activos Fijos - Web</title>
-
-  <!-- ✅ Endurecimiento básico -->
-  <meta name="referrer" content="no-referrer"/>
-  <!-- Nota: CSP “real” se recomienda en headers del hosting. En <meta> funciona en muchos casos,
-       pero NO sustituye headers. Aún así ayuda. -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' https://unpkg.com;
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src https://fonts.gstatic.com;
-    img-src 'self' blob: data: https:;
-    connect-src 'self' https://cfowmccvnzcrssgkabtt.supabase.co;
-    frame-ancestors 'none';
-    base-uri 'self';
-    object-src 'none';
-    upgrade-insecure-requests;
-  "/>
-
   <script src="https://unpkg.com/html5-qrcode"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" />
 
@@ -68,6 +50,23 @@
     .hidden{display:none}
     .header-flex{display:flex; align-items:center; justify-content:space-between; gap:12px}
 
+    /* ✅ mensajes */
+    .error-msg{
+      margin-top:12px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #FCA5A5;
+      background:#FEE2E2;
+      color:#991B1B;
+      font-weight:800;
+    }
+    .debug-msg{
+      margin-top:8px;
+      color:#64748B;
+      font-size:.9rem;
+      font-weight:700;
+    }
+
     /* Buttons */
     .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 14px; border:none; cursor:pointer; border-radius:12px; font-weight:700; background:var(--primary); color:var(--on-primary); box-shadow:0 8px 18px rgba(11,110,243,.25); transition:.15s transform,.15s background}
     .btn:hover{background:var(--primary-variant)} .btn:active{transform:translateY(1px)}
@@ -94,7 +93,7 @@
     .rcontrols{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end}
     .stack{display:flex; flex-direction:column; gap:10px}
 
-    /* ✅ Menú superior tipo app (para que “se note diferente”) */
+    /* ✅ Menú superior tipo app */
     .topmenu{
       display:flex;
       gap:8px;
@@ -108,16 +107,8 @@
       -webkit-overflow-scrolling:touch;
     }
     .topmenu::-webkit-scrollbar{height:0}
-    .topmenu .btn, .topmenu .chip-filter, .topmenu .select{
-      white-space:nowrap;
-      flex:0 0 auto;
-    }
-    .topmenu .divider{
-      width:1px; height:26px;
-      background:var(--border);
-      flex:0 0 auto;
-      opacity:.9;
-    }
+    .topmenu .btn, .topmenu .chip-filter, .topmenu .select{ white-space:nowrap; flex:0 0 auto; }
+    .topmenu .divider{ width:1px; height:26px; background:var(--border); flex:0 0 auto; opacity:.9; }
 
     /* List */
     .list{display:grid; gap:8px}
@@ -143,10 +134,7 @@
       background:#E6F0FF; color:#0B4CB3; border:1px solid #CFE2FF; font-weight:700; min-width:0; max-width:100%;
     }
     .chip .material-symbols-rounded{font-size:18px}
-    .chip.scroll{
-      overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch;
-      font-family:'Courier New',monospace;
-    }
+    .chip.scroll{ overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch; font-family:'Courier New',monospace; }
 
     /* Gallery */
     .gallery{
@@ -166,7 +154,7 @@
     .label{color:#6B7280; font-size:.85rem; margin-bottom:4px; font-weight:700; display:flex; align-items:center; gap:6px}
     .value{font-weight:700; word-break:break-word}
 
-    /* Lightbox (base) */
+    /* Lightbox */
     .lightbox{position:fixed; inset:0; background:rgba(15,23,42,.9); display:none; align-items:center; justify-content:center; z-index:50}
     .lightbox.show{display:flex}
     .lightbox-content{position:relative; max-width:95vw; max-height:90vh; overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.12)}
@@ -176,8 +164,31 @@
     .lightbox-toolbar .btn:hover{background:rgba(255,255,255,.25)}
     .lightbox-close{position:absolute; top:10px; right:10px}
 
-    body.lb-open{ overflow:hidden; touch-action:none; }
+    /* ✅ skeleton */
+    .skeleton{
+      position:relative;
+      overflow:hidden;
+      background:#EEF2FF;
+      border-color:#E5E7EB;
+    }
+    .skeleton::after{
+      content:"";
+      position:absolute;
+      top:0; left:-40%;
+      width:40%;
+      height:100%;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+      animation:shimmer 1.1s infinite;
+    }
+    @keyframes shimmer{
+      0%{ left:-40% }
+      100%{ left:120% }
+    }
 
+    /* =========================
+       ✅ MEJORA VISOR MÓVIL
+       ========================= */
+    body.lb-open{ overflow:hidden; touch-action:none; }
     .lightbox{ padding:10px; }
     .lightbox-content{
       width: min(980px, 96vw);
@@ -196,21 +207,9 @@
       touch-action: none;
       max-width:none;
     }
-    html.is-mobile .lightbox-content{
-      width: 98vw;
-      height: 94dvh;
-      border-radius: 16px;
-    }
-    html.is-mobile .lightbox-toolbar{
-      bottom: 10px;
-      padding: 10px 12px;
-      gap: 10px;
-      border-radius: 999px;
-    }
-    html.is-mobile .lightbox-toolbar .btn{
-      padding: 11px 12px;
-      border-radius: 999px;
-    }
+    html.is-mobile .lightbox-content{ width: 98vw; height: 94dvh; border-radius: 16px; }
+    html.is-mobile .lightbox-toolbar{ bottom: 10px; padding: 10px 12px; gap: 10px; border-radius: 999px; }
+    html.is-mobile .lightbox-toolbar .btn{ padding: 11px 12px; border-radius: 999px; }
 
     /* Catálogos */
     .tabs{display:flex; gap:8px; flex-wrap:wrap}
@@ -222,6 +221,9 @@
     .cat-row .label{font-weight:800}
     .cat-row .count{font-size:.85rem; color:#64748B}
 
+    /* =========================
+       ✅ MÓVIL: compactar
+       ========================= */
     html.is-mobile .container{padding:0 12px; margin:12px auto}
     html.is-mobile .card{padding:12px}
     html.is-mobile .appbar-inner{padding:10px 12px}
@@ -229,43 +231,22 @@
     html.is-mobile #chip-empresa{max-width:52vw}
     html.is-mobile #chip-empresa-text{display:inline-block; max-width:40vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
     html.is-mobile .grid-2{grid-template-columns:1fr; max-width:100%}
-    html.is-mobile .btn{
-      padding:10px 12px;
-      border-radius:12px;
-      width:auto;
-      box-shadow:none;
-    }
+    html.is-mobile .btn{ padding:10px 12px; border-radius:12px; width:auto; box-shadow:none; }
     html.is-mobile .btn.full{width:100%}
-    html.is-mobile .topmenu{
-      border-radius:16px;
-      padding:8px;
-      gap:8px;
-    }
-    html.is-mobile .topmenu .btn,
-    html.is-mobile .topmenu .chip-filter{
-      padding:9px 10px;
-      border-radius:14px;
-    }
-    html.is-mobile .topmenu .select{
-      padding:9px 10px;
-      border-radius:14px;
-      min-width:150px;
-    }
+    html.is-mobile .topmenu{ border-radius:16px; padding:8px; gap:8px; }
+    html.is-mobile .topmenu .btn, html.is-mobile .topmenu .chip-filter{ padding:9px 10px; border-radius:14px; }
+    html.is-mobile .topmenu .select{ padding:9px 10px; border-radius:14px; min-width:150px; }
     html.is-mobile .pill{padding:5px 10px}
     html.is-mobile .pill input{padding:9px 4px; font-size:.98rem}
     html.is-mobile .pill .leading{width:36px}
     html.is-mobile .btn.icon{padding:9px 10px}
+
     html.is-mobile #view-skus .header-flex{gap:10px; margin-bottom:8px !important}
     html.is-mobile .toolbar-grid{grid-template-columns:1fr; gap:8px}
-    html.is-mobile .searchgroup{
-      display:block;
-      width:100%;
-    }
-    html.is-mobile .searchgroup .pill{
-      width:100%;
-      min-width:0 !important;
-    }
+    html.is-mobile .searchgroup{ display:block; width:100%; }
+    html.is-mobile .searchgroup .pill{ width:100%; min-width:0 !important; }
     html.is-mobile .rcontrols{display:none}
+
     html.is-mobile .list{gap:8px}
     html.is-mobile .row{
       padding:10px 12px;
@@ -273,30 +254,22 @@
       grid-template-columns:1fr auto;
       align-items:start;
     }
-    html.is-mobile .row > div:nth-child(1){
-      grid-column:1/2; grid-row:1/2;
-    }
-    html.is-mobile .row > div:nth-child(2){
-      grid-column:1/2; grid-row:2/3;
-    }
+    html.is-mobile .row > div:nth-child(1){ grid-column:1/2; grid-row:1/2; }
+    html.is-mobile .row > div:nth-child(2){ grid-column:1/2; grid-row:2/3; }
     html.is-mobile .row > div:nth-child(3){
       grid-column:2/3; grid-row:1/3;
       display:flex; align-items:center; justify-content:flex-end;
     }
-    html.is-mobile .row > div:nth-child(3) .btn{
-      width:auto;
-      padding:10px 10px;
-      border-radius:14px;
-    }
-    html.is-mobile .row > div:nth-child(3) .btn span.material-symbols-rounded{font-size:20px}
-    html.is-mobile .row > div:nth-child(3) .btn{gap:0}
-    html.is-mobile .row > div:nth-child(3) .btn{line-height:0}
-    html.is-mobile .row > div:nth-child(3) .btn { font-size:0; }
+    html.is-mobile .row > div:nth-child(3) .btn{ width:auto; padding:10px 10px; border-radius:14px; }
     html.is-mobile .row > div:nth-child(3) .btn span.material-symbols-rounded{font-size:22px}
+    html.is-mobile .row > div:nth-child(3) .btn{gap:0; line-height:0}
+    html.is-mobile .row > div:nth-child(3) .btn { font-size:0; }
+
     html.is-mobile .sku{font-size:1rem}
     html.is-mobile .barcode{padding:3px 8px; border-radius:10px; font-size:.9rem}
     html.is-mobile .desc{font-size:.93rem; line-height:1.18rem}
     html.is-mobile .meta{font-size:.78rem; gap:10px; margin-top:2px}
+
     html.is-mobile #scanner-container > div:last-child{
       display:flex !important;
       gap:8px !important;
@@ -306,6 +279,7 @@
       -webkit-overflow-scrolling:touch;
     }
     html.is-mobile #scanner-container > div:last-child .btn{flex:0 0 auto}
+
     html.is-mobile .chips-wrap{
       flex-wrap:nowrap;
       overflow-x:auto;
@@ -313,31 +287,17 @@
       padding-bottom:4px;
     }
     html.is-mobile .chips-wrap::-webkit-scrollbar{height:0}
-    html.is-mobile .chip{
-      padding:7px 10px;
-      border-radius:999px;
-      flex:0 0 auto;
-    }
-    html.is-mobile .gallery{
-      min-height:120px;
-      padding:10px 0;
-      margin-bottom:10px;
-    }
+    html.is-mobile .chip{ padding:7px 10px; border-radius:999px; flex:0 0 auto; }
+
+    html.is-mobile .gallery{ min-height:120px; padding:10px 0; margin-bottom:10px; }
     html.is-mobile .gallery img{height:200px}
+
     html.is-mobile .section{gap:8px; margin:6px 0}
-    html.is-mobile .section:not(.full){
-      grid-template-columns:1fr 1fr;
-    }
-    html.is-mobile .item{
-      padding:8px 10px;
-    }
-    html.is-mobile .label{
-      font-size:.8rem;
-      margin-bottom:3px;
-    }
-    html.is-mobile .value{
-      font-size:.92rem;
-    }
+    html.is-mobile .section:not(.full){ grid-template-columns:1fr 1fr; }
+    html.is-mobile .item{ padding:8px 10px; }
+    html.is-mobile .label{ font-size:.8rem; margin-bottom:3px; }
+    html.is-mobile .value{ font-size:.92rem; }
+
     html.is-mobile .tabs{
       flex-wrap:nowrap;
       overflow-x:auto;
@@ -384,7 +344,7 @@
         </div>
       </div>
       <div style="margin-top:12px">
-        <button class="btn full" id="btn-login"><span class="material-symbols-rounded">login</span> Entrar</button>
+        <button class="btn full" id="btn-login" onclick="ejecutarLogin()"><span class="material-symbols-rounded">login</span> Entrar</button>
       </div>
       <div id="login-msg" class="error-msg hidden"></div>
     </div>
@@ -393,7 +353,7 @@
     <div id="view-empresas" class="card hidden">
       <div class="header-flex">
         <h2 style="margin:0">Mis Empresas</h2>
-        <button class="btn secondary" id="btn-logout-empresas"><span class="material-symbols-rounded">logout</span> Salir</button>
+        <button class="btn secondary" onclick="logout()"><span class="material-symbols-rounded">logout</span> Salir</button>
       </div>
       <div id="lista-empresas" style="margin-top:12px; display:grid; gap:10px"></div>
     </div>
@@ -405,11 +365,11 @@
           <small style="color:#0B4CB3; font-weight:800;">Empresa Activa</small>
           <h2 id="txt-empresa-actual" style="margin:4px 0 0">—</h2>
         </div>
-        <button class="btn tonal" id="btn-cambiar-empresa"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
+        <button class="btn tonal" onclick="switchView('view-empresas')"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
       </div>
       <div style="display:grid; gap:12px; margin-top:16px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-        <button class="btn" id="btn-modulo-skus"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
-        <button class="btn tonal" id="btn-abrir-catalogos-selector"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button class="btn" onclick="abrirModuloSkus()"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
+        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
       </div>
     </div>
 
@@ -419,45 +379,59 @@
         <h2 style="margin:0">Activos</h2>
       </div>
 
+      <!-- ✅ MENÚ SUPERIOR -->
       <div class="topmenu" style="margin-bottom:10px">
-        <button class="btn tonal" id="btn-open-scanner"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
-        <button class="btn tonal" id="btn-abrir-catalogos-skus"><span class="material-symbols-rounded">category</span> Catálogos</button>
-        <button class="btn tonal" id="btn-volver-modos"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
+        <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
+        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
 
         <span class="divider"></span>
 
-        <button id="chip-baja" class="chip-filter"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
-        <select id="select-orden" class="select">
+        <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
+        <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
           <option value="reciente.desc" selected>Más reciente</option>
           <option value="sku.asc">SKU ↑</option>
           <option value="sku.desc">SKU ↓</option>
         </select>
       </div>
 
+      <!-- Búsqueda -->
       <div class="searchgroup">
         <div class="pill" style="flex:1; min-width:280px;">
           <div class="leading"><span class="material-symbols-rounded">search</span></div>
-          <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…">
-          <button class="btn tonal icon" title="Buscar" id="btn-buscar"><span class="material-symbols-rounded">manage_search</span></button>
+          <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…" onkeyup="onSkuSearchKey(event)">
+          <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscar()"><span class="material-symbols-rounded">manage_search</span></button>
+          <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaSkus()"><span class="material-symbols-rounded">close</span></button>
         </div>
       </div>
 
+      <!-- Chip de filtro -->
       <div id="filtro-activo" class="chip hidden" style="margin:10px 0 8px">
         <span class="material-symbols-rounded" id="filtro-icon">filter_alt</span>
         <span id="filtro-text">—</span>
-        <button class="btn tonal icon" id="btn-quitar-filtro" title="Quitar filtro"><span class="material-symbols-rounded">close</span></button>
+        <button class="btn tonal icon" onclick="limpiarFiltroExtra(event)" title="Quitar filtro">
+          <span class="material-symbols-rounded">close</span>
+        </button>
       </div>
 
+      <!-- Errores de listado -->
+      <div id="skus-msg" class="error-msg hidden"></div>
+
+      <!-- Escáner -->
       <div id="scanner-container" class="scanner-wrap hidden">
         <div id="reader"></div>
         <div style="text-align:center; margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
-          <button class="btn" id="btn-start-scanner"><span class="material-symbols-rounded">play_circle</span> Activar cámara</button>
-          <button class="btn tonal" id="btn-close-scanner"><span class="material-symbols-rounded">close</span> Cerrar</button>
+          <button class="btn" onclick="startScanner()"><span class="material-symbols-rounded">play_circle</span> Activar cámara</button>
+          <button class="btn tonal" onclick="toggleScannerPanel(false)"><span class="material-symbols-rounded">close</span> Cerrar</button>
         </div>
       </div>
 
       <div id="list-wrapper" style="margin-top:10px">
-        <div id="skeleton-list" class="list hidden"><div class="row skeleton" style="height:64px"></div></div>
+        <div id="skeleton-list" class="list hidden">
+          <div class="row skeleton" style="height:64px"></div>
+          <div class="row skeleton" style="height:64px"></div>
+          <div class="row skeleton" style="height:64px"></div>
+        </div>
         <div id="rows" class="list"></div>
       </div>
       <div id="pagination" class="pagination"></div>
@@ -466,13 +440,13 @@
     <!-- DETALLE -->
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
-        <button class="btn tonal" id="btn-volver-skus"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
-        <button class="btn tonal" id="btn-abrir-catalogos-detalle"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
+        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
 
         <span class="divider"></span>
 
-        <button id="btn-prev" class="btn tonal"><span class="material-symbols-rounded">chevron_left</span> Anterior</button>
-        <button id="btn-next" class="btn tonal">Siguiente <span class="material-symbols-rounded">chevron_right</span></button>
+        <button id="btn-prev" class="btn tonal" onclick="navegarDetalle(-1)"><span class="material-symbols-rounded">chevron_left</span> Anterior</button>
+        <button id="btn-next" class="btn tonal" onclick="navegarDetalle(1)">Siguiente <span class="material-symbols-rounded">chevron_right</span></button>
       </div>
 
       <div class="chips-wrap" style="margin-bottom:8px">
@@ -520,23 +494,23 @@
       <div class="header-flex" style="margin-bottom:8px">
         <h2 style="margin:0">Catálogos</h2>
         <div class="btn-group">
-          <button class="btn tonal" id="btn-modos-desde-catalogos"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
-          <button class="btn" id="btn-ir-skus-desde-catalogos"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
+          <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
+          <button class="btn" onclick="switchView('view-skus')"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
         </div>
       </div>
 
       <div class="tabs" id="tabs-catalogos">
-        <button class="tab active" data-tab="genero" data-tabkey="genero">Género</button>
-        <button class="tab" data-tab="ubicacion" data-tabkey="ubicacion">Ubicación</button>
-        <button class="tab" data-tab="localizacion" data-tabkey="localizacion">Localización</button>
-        <button class="tab" data-tab="responsable" data-tabkey="responsable">Responsable</button>
+        <button class="tab active" data-tab="genero" onclick="setTab('genero')">Género</button>
+        <button class="tab" data-tab="ubicacion" onclick="setTab('ubicacion')">Ubicación</button>
+        <button class="tab" data-tab="localizacion" onclick="setTab('localizacion')">Localización</button>
+        <button class="tab" data-tab="responsable" onclick="setTab('responsable')">Responsable</button>
       </div>
 
       <div class="searchgroup" style="margin-top:10px">
         <div class="pill" style="flex:1; min-width:280px;">
           <div class="leading"><span class="material-symbols-rounded">search</span></div>
-          <input type="text" id="cat-search" placeholder="Buscar en el catálogo actual…">
-          <button class="btn tonal icon" title="Limpiar" id="btn-limpiar-cat"><span class="material-symbols-rounded">close</span></button>
+          <input type="text" id="cat-search" placeholder="Buscar en el catálogo actual…" onkeyup="filtrarCatalogo()">
+          <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaCatalogo()"><span class="material-symbols-rounded">close</span></button>
         </div>
         <div id="cat-total" class="chip hidden"><span class="material-symbols-rounded">list_alt</span><span id="cat-total-text">0</span></div>
       </div>
@@ -551,23 +525,26 @@
     <div class="lightbox-content">
       <img id="lightbox-img" class="lightbox-img" alt="Vista previa"/>
       <div class="lightbox-toolbar">
-        <button class="btn" id="lb-zoom-out"><span class="material-symbols-rounded">zoom_out</span></button>
-        <button class="btn" id="lb-zoom-in"><span class="material-symbols-rounded">zoom_in</span></button>
-        <button class="btn" id="lb-rot-left"><span class="material-symbols-rounded">rotate_left</span></button>
-        <button class="btn" id="lb-rot-right"><span class="material-symbols-rounded">rotate_right</span></button>
-        <button class="btn" id="lb-reset"><span class="material-symbols-rounded">restart_alt</span></button>
+        <button class="btn" onclick="zoomOutLb()"><span class="material-symbols-rounded">zoom_out</span></button>
+        <button class="btn" onclick="zoomInLb()"><span class="material-symbols-rounded">zoom_in</span></button>
+        <button class="btn" onclick="rotateLeftLb()"><span class="material-symbols-rounded">rotate_left</span></button>
+        <button class="btn" onclick="rotateRightLb()"><span class="material-symbols-rounded">rotate_right</span></button>
+        <button class="btn" onclick="resetLb()"><span class="material-symbols-rounded">restart_alt</span></button>
 
-        <button class="btn" id="lb-open"><span class="material-symbols-rounded">download</span></button>
-        <button class="btn danger" id="lb-close"><span class="material-symbols-rounded">close</span></button>
+        <button class="btn" onclick="window.open(document.getElementById('lightbox-img').src,'_blank')">
+          <span class="material-symbols-rounded">download</span>
+        </button>
+
+        <button class="btn danger" onclick="closeLb()"><span class="material-symbols-rounded">close</span></button>
       </div>
-      <button class="btn tonal lightbox-close" id="lb-close2"><span class="material-symbols-rounded">close</span></button>
+      <button class="btn tonal lightbox-close" onclick="closeLb()"><span class="material-symbols-rounded">close</span></button>
     </div>
   </div>
 
 <script>
   const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
-  // ✅ anon key es pública por diseño; seguridad depende de RLS (que ya tienes ON).
   const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
+
 
   let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
@@ -579,28 +556,6 @@
 
   const qs = (id) => document.getElementById(id);
   const show = (el,flag) => el.classList.toggle('hidden', !flag);
-
-  // =========================
-  // ✅ Sanitización / hardening JS
-  // =========================
-  function escapeHtml(s){ return String(s ?? "").replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
-  function safeText(el, v){ el.textContent = (v ?? "").toString(); }
-  function safeAttr(el, k, v){ el.setAttribute(k, (v ?? "").toString()); }
-  function safeUrlPath(p){
-    // evita paths raros para storage (no permite .. ni backslashes)
-    const s = String(p ?? "");
-    if(!s) return "";
-    if(s.includes("..") || s.includes("\\") || s.startsWith("/")) return "";
-    return s;
-  }
-
-  // Wrapper fetch: agrega headers + evita cache
-  async function sbFetch(url, opts = {}){
-    const headers = { ...(opts.headers || {}), 'apikey': SB_KEY };
-    if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
-    // Nota: no usamos localStorage para token (evita persistirlo; baja impacto en XSS)
-    return fetch(url, { ...opts, headers, cache: 'no-store' });
-  }
 
   const norm = (v) => {
     if (v === null || v === undefined) return "";
@@ -628,6 +583,7 @@
     const s = String(v ?? "").trim().toLowerCase();
     return s === "true" || s === "t" || s === "1";
   };
+
   const fmtDate = (raw) => {
     const s = norm(raw); if (!s) return "";
     const asNum = Number(s);
@@ -639,6 +595,7 @@
     if (!isNaN(d2.getTime())) return d2.toLocaleDateString('es-MX', { year:'numeric', month:'2-digit', day:'2-digit' });
     return s;
   };
+
   const fmtMoney = (raw) => {
     if (raw === null || raw === undefined) return "";
     if (typeof raw === 'number') {
@@ -652,9 +609,21 @@
     return new Intl.NumberFormat('es-MX', { style:'currency', currency:'MXN', maximumFractionDigits:2 }).format(num);
   };
 
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+  }
+
   function switchView(id){
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
     qs(id).classList.remove('hidden');
+  }
+
+  function setSkusMsg(text){
+    const el = qs('skus-msg');
+    if(!el) return;
+    if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
+    el.innerText = text;
+    el.classList.remove('hidden');
   }
 
   function actualizarChipFiltroConConteo(){
@@ -663,157 +632,95 @@
     const iconMap = { genero:'category', ubicacion:'location_on', localizacion:'map', responsable:'badge' };
     const label = col.charAt(0).toUpperCase() + col.slice(1);
     const n = Number.isFinite(totalActivos) ? totalActivos : 0;
-    safeText(qs('filtro-text'), `${label}: ${skuExtraFiltro.valor} · ${n} SKU${n===1?'':'s'}`);
-    safeText(qs('filtro-icon'), iconMap[col] || 'filter_alt');
+    qs('filtro-text').innerText = `${label}: ${skuExtraFiltro.valor} · ${n} SKU${n===1?'':'s'}`;
+    qs('filtro-icon').innerText = iconMap[col] || 'filter_alt';
     show(qs('filtro-activo'), true);
   }
 
-  // =========================
-  // ✅ Login sin inline handlers
-  // =========================
   async function ejecutarLogin(){
     const emailInput = qs('email').value.trim(), pass = qs('password').value, btn = qs('btn-login'), msg = qs('login-msg');
-    btn.disabled = true; msg.classList.add('hidden'); safeText(msg, "");
+    btn.disabled = true; msg.classList.add('hidden'); msg.innerText="";
     try{
       const res = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
         method:'POST',
-        headers:{ 'apikey': SB_KEY, 'Authorization':`Bearer ${SB_KEY}`, 'Content-Type':'application/json' },
+        headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${SB_KEY}`, 'Content-Type':'application/json' },
         body: JSON.stringify({ email: emailInput, password: pass })
       });
       const raw = await res.text(); let data = null; try{ data = raw ? JSON.parse(raw) : null }catch{}
       if(!res.ok) throw new Error((data && (data.error_description||data.error||data.message)) || raw || `HTTP ${res.status}`);
       if(!data?.access_token) throw new Error('Respuesta inesperada de Auth: sin access_token');
-
-      sessionToken = data.access_token;
-      userEmail = emailInput;
-
-      await cargarEmpresasAutorizadas();
+      sessionToken = data.access_token; userEmail = emailInput; await cargarEmpresasAutorizadas();
     }catch(e){
       console.error('Auth error:', e);
-      safeText(msg, e.message || 'No se pudo iniciar sesión');
+      msg.innerText = e.message || 'No se pudo iniciar sesión';
       msg.classList.remove('hidden');
-    }finally{
-      btn.disabled = false;
-    }
+    } finally { btn.disabled = false; }
   }
 
-  // =========================
-  // ✅ Reemplazo de esSuperAdmin por RPC (blindaje)
-  // =========================
-  // Debes crear en Supabase un RPC como:
-  // create or replace function public.is_super_admin() returns boolean
-  // language sql security definer as $$
-  //   select coalesce((select esSuperAdmin from public.users where user_id = auth.uid()), false);
-  // $$;
-  // y permitir execute a authenticated.
   async function esSuperAdmin(){
     try{
-      const res = await sbFetch(`${SB_URL}/rest/v1/rpc/is_super_admin`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: '{}' });
+      const url = `${SB_URL}/rest/v1/users?email=eq.${encodeURIComponent(userEmail)}&select=esSuperAdmin`;
+      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
       if(!res.ok) return false;
-      const v = await res.json();
-      return v === true;
-    }catch{
-      return false;
-    }
+      const u = await res.json();
+      return u[0]?.esSuperAdmin === true;
+    }catch{ return false }
   }
 
   async function cargarEmpresasAutorizadas(){
-    switchView('view-empresas');
-    const lista = qs('lista-empresas');
+    switchView('view-empresas'); const lista = qs('lista-empresas');
     lista.innerHTML = `<div class="row skeleton" style="height:64px"></div>`;
     try{
       if(await esSuperAdmin()){
-        const resEmp = await sbFetch(`${SB_URL}/rest/v1/empresas?select=id,nombre&order=nombre.asc`);
+        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre&order=nombre.asc`, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
         if(!resEmp.ok) throw new Error("Error al cargar empresas");
         const empresas = await resEmp.json();
-        renderEmpresas(empresas);
+        lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>No hay empresas registradas.</p>";
         return;
       }
 
-      // ✅ Ideal: que empresa_user_permissions use user_id=auth.uid() en RLS.
-      // Si hoy tu tabla guarda email, esto sigue funcionando, pero es mejor migrar a user_id.
       const email = encodeURIComponent(userEmail);
+      const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
 
-      const resVer = await sbFetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&puedeVerEmpresa=eq.true&select=empresaNombre`);
+      const resVer = await fetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&puedeVerEmpresa=eq.true&select=empresaNombre`, headers);
       if(!resVer.ok){ console.error(await resVer.text()); throw new Error("Error al consultar permisos (ver)"); }
       const arrVer = await resVer.json();
 
-      const resAdm = await sbFetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&esAdminEmpresa=eq.true&select=empresaNombre`);
+      const resAdm = await fetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&esAdminEmpresa=eq.true&select=empresaNombre`, headers);
       if(!resAdm.ok){ console.error(await resAdm.text()); throw new Error("Error al consultar permisos (admin)"); }
       const arrAdm = await resAdm.json();
 
-      const set = new Set();
-      [...arrVer, ...arrAdm].forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
-
+      const set = new Set(); [...arrVer, ...arrAdm].forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
       if(!set.size){ lista.innerHTML = "<p>No tienes empresas asignadas.</p>"; return; }
 
       const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\\"')}"`).join(',');
-      const resEmp = await sbFetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre&order=nombre.asc`);
+      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre&order=nombre.asc`, headers);
       if(!resEmp.ok){ console.error(await resEmp.text()); throw new Error("Error al cargar empresas autorizadas"); }
       const empresas = await resEmp.json();
-
-      renderEmpresas(empresas.length ? empresas : []);
-      if(!empresas.length) lista.innerHTML = "<p>Error: Tienes permisos, pero las empresas no existen.</p>";
-
+      lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>Error: Tienes permisos, pero las empresas no existen.</p>";
     }catch(e){
       console.error(e);
       lista.innerHTML = `<p class='error-msg'>${escapeHtml(e.message)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
     }
   }
 
-  // ✅ Sin onclick string; construimos DOM seguro
-  function renderEmpresas(empresas){
-    const lista = qs('lista-empresas');
-    lista.innerHTML = "";
-    if(!empresas || !empresas.length){
-      lista.innerHTML = "<p>No hay empresas registradas.</p>";
-      return;
-    }
-
-    for(const e of empresas){
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.style.gridTemplateColumns = '1fr auto';
-      row.style.cursor = 'pointer';
-
-      const left = document.createElement('div');
-      const title = document.createElement('div');
-      title.style.fontWeight = '900';
-      title.textContent = e.nombre ?? '';
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.innerHTML = `<span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa`; // fijo (sin datos de BD)
-      left.appendChild(title);
-      left.appendChild(meta);
-
-      const right = document.createElement('div');
-      const btn = document.createElement('button');
-      btn.className = 'btn tonal';
-      btn.type = 'button';
-      btn.innerHTML = `<span class="material-symbols-rounded">login</span> Entrar`;
-      right.appendChild(btn);
-
-      row.appendChild(left);
-      row.appendChild(right);
-
-      const id = String(e.id ?? '');
-      const nombre = String(e.nombre ?? '');
-
-      row.addEventListener('click', ()=> seleccionarEmpresa(id, nombre));
-      btn.addEventListener('click', (ev)=>{ ev.stopPropagation(); seleccionarEmpresa(id, nombre); });
-
-      lista.appendChild(row);
-    }
+  function empresaCard(e){
+    return `<div class="row" style="grid-template-columns:1fr auto; cursor:pointer" onclick="seleccionarEmpresa('${escapeHtml(e.id)}','${escapeHtml(e.nombre)}')">
+      <div><div style="font-weight:900">${escapeHtml(e.nombre)}</div><div class="meta"><span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa</div></div>
+      <div><button class="btn tonal"><span class="material-symbols-rounded">login</span> Entrar</button></div></div>`;
   }
 
   function seleccionarEmpresa(id,nombre){
     empresaSeleccionada = { id, nombre };
-    safeText(qs('chip-empresa-text'), nombre);
+    qs('chip-empresa-text').innerText = nombre;
     qs('chip-empresa').classList.remove('hidden');
-    safeText(qs('txt-empresa-actual'), nombre);
+    qs('txt-empresa-actual').innerText = nombre;
 
-    cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1; qs('rows').innerHTML="";
-    skuExtraFiltro = null; show(qs('filtro-activo'), false);
+    cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1;
+    qs('rows').innerHTML="";
+    skuExtraFiltro = null;
+    show(qs('filtro-activo'), false);
+    setSkusMsg("");
     switchView('view-selector');
   }
 
@@ -822,65 +729,85 @@
     show(c, !!showIt);
     if(!showIt) stopScanner();
   }
+
   function toggleSoloBaja(){
     soloBaja = !soloBaja;
     qs('chip-baja').classList.toggle('active', soloBaja);
     paginaActual = 0;
     consultarSkus();
   }
+
   function cambiarOrdenUI(){
     const v = qs('select-orden').value;
     if (v.startsWith('sku.')) { sortField='sku'; sortAsc=v.endsWith('asc'); }
     else { sortField='reciente'; sortAsc=false; }
-    paginaActual=0;
-    consultarSkus();
+    paginaActual=0; consultarSkus();
   }
+
+  // ✅ mejora: Enter busca, Esc limpia
+  function onSkuSearchKey(ev){
+    if(ev.key === 'Enter'){ reiniciarYBuscar(); return; }
+    if(ev.key === 'Escape'){ limpiarBusquedaSkus(); return; }
+    debouncedSearch();
+  }
+
   function debouncedSearch(){
     if(searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce=setTimeout(()=>{paginaActual=0; consultarSkus();}, 280);
+    searchDebounce=setTimeout(()=>{ paginaActual=0; consultarSkus(); }, 280);
   }
-  function reiniciarYBuscar(){ paginaActual=0; consultarSkus(); }
+
+  function reiniciarYBuscar(){
+    paginaActual=0; consultarSkus();
+  }
+
+  function limpiarBusquedaSkus(){
+    const input = qs('sku-search');
+    if(input) input.value = "";
+    paginaActual = 0;
+    consultarSkus();
+  }
+
   function abrirModuloSkus(){
     switchView('view-skus');
     paginaActual=0;
     const input=qs('sku-search');
-    if(input) input.value="0";
+    if(input) input.value="";
     consultarSkus();
   }
 
   function limpiarFiltroExtra(ev){
-    ev?.preventDefault?.();
-    ev?.stopPropagation?.();
+    if (ev) { ev.preventDefault?.(); ev.stopPropagation?.(); }
     skuExtraFiltro = null;
     resetChipFiltroUI();
     const input = qs('sku-search');
-    if (input) input.value = "0";
+    if (input) input.value = "";
     paginaActual = 0;
     switchView('view-skus');
     consultarSkus();
   }
 
   function resetChipFiltroUI(){
-    safeText(qs('filtro-text'), '—');
-    safeText(qs('filtro-icon'), 'filter_alt');
+    qs('filtro-text').innerText = '—';
+    qs('filtro-icon').innerText = 'filter_alt';
     show(qs('filtro-activo'), false);
   }
 
   async function consultarSkus(){
+    setSkusMsg("");
     if(!empresaSeleccionada) return;
 
-    const q = norm(qs('sku-search')?.value ?? "0");
+    // ✅ compat: si está vacío, se trata como "0"
+    const qInput = norm(qs('sku-search')?.value ?? "");
+    const q = qInput ? qInput : "0";
+
     const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
-    // ✅ Validación leve del search para evitar URLs raras (no es “seguridad” real, pero endurece)
-    const qTrim = q === "0" ? "0" : q.slice(0, 80);
-
-    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=*`;
+    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
     else url += `&order=updated_at.desc`;
 
-    if (qTrim !== "0" && qTrim.length >= 2) {
-      const qenc = encodeURIComponent(qTrim);
+    if (q !== "0" && q.length >= 2) {
+      const qenc = encodeURIComponent(q);
       url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
     }
 
@@ -898,12 +825,19 @@
     skeletonTimer = setTimeout(()=>{ if(isLoading) qs('skeleton-list').classList.remove('hidden'); }, 160);
 
     try{
-      const res = await sbFetch(url, {
+      const res = await fetch(url, {
         headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`,
           'Range': `${desde}-${hasta}`,
           'Prefer':'count=exact'
         }
       });
+
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+      }
 
       const range = res.headers.get('Content-Range');
       if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
@@ -915,6 +849,9 @@
       renderPaginacion();
     }catch(e){
       console.error(e);
+      qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
+      qs('pagination').innerHTML = "";
+      setSkusMsg(e.message || "Error al consultar activos.");
     }finally{
       isLoading=false;
       clearTimeout(skeletonTimer);
@@ -922,20 +859,8 @@
     }
   }
 
-  // ✅ Render seguro: NO innerHTML con datos de BD
   function renderTabla(){
-    const rowsEl = qs('rows');
-    rowsEl.innerHTML = "";
-
-    if(!cacheSkus || !cacheSkus.length){
-      const p = document.createElement('p');
-      p.style.color = 'var(--muted)';
-      p.textContent = 'Sin resultados';
-      rowsEl.appendChild(p);
-      return;
-    }
-
-    cacheSkus.forEach((i, idx) => {
+    const rows = cacheSkus.map((i, idx) => {
       const sku = getv(i,'sku');
       const cb = getv(i,'codigo_barras','codigoBarras');
       const desc = getv(i,'descripcion');
@@ -944,90 +869,45 @@
       const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
       const costoFmt = fmtMoney(costoRaw);
 
-      const row = document.createElement('div');
-      row.className = 'row';
+      const metaBits = [
+        genero && `<span><b>Género:</b> ${escapeHtml(genero)}</span>`,
+        cant && `<span><b>Cant.:</b> ${escapeHtml(cant)}</span>`,
+        costoFmt && `<span><b>Costo:</b> ${escapeHtml(costoFmt)}</span>`
+      ].filter(Boolean).join('');
 
-      const c1 = document.createElement('div');
-      const skuDiv = document.createElement('div');
-      skuDiv.className = 'sku';
-      skuDiv.textContent = sku || '';
-      c1.appendChild(skuDiv);
+      return `<div class="row">
+        <div>
+          <div class="sku">${escapeHtml(sku)}</div>
+          ${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}
+        </div>
+        <div>
+          <div class="desc">${escapeHtml(desc)}</div>
+          ${metaBits ? `<div class="meta">${metaBits}</div>`:''}
+        </div>
+        <div>
+          <button class="btn tonal" onclick="verDetalleByIndex(${idx})" title="Ver detalle">
+            <span class="material-symbols-rounded">visibility</span> Ver
+          </button>
+        </div>
+      </div>`;
+    }).join('');
 
-      if(cb){
-        const cbDiv = document.createElement('div');
-        cbDiv.className = 'barcode';
-        cbDiv.textContent = cb;
-        c1.appendChild(cbDiv);
-      }
-
-      const c2 = document.createElement('div');
-      const descDiv = document.createElement('div');
-      descDiv.className = 'desc';
-      descDiv.textContent = desc || '';
-      c2.appendChild(descDiv);
-
-      const metaBits = [];
-      if(genero) metaBits.push({ k:'Género:', v: genero });
-      if(cant) metaBits.push({ k:'Cant.:', v: cant });
-      if(costoFmt) metaBits.push({ k:'Costo:', v: costoFmt });
-
-      if(metaBits.length){
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        metaBits.forEach(bit=>{
-          const span = document.createElement('span');
-          const b = document.createElement('b');
-          b.textContent = bit.k + ' ';
-          span.appendChild(b);
-          span.appendChild(document.createTextNode(String(bit.v)));
-          meta.appendChild(span);
-        });
-        c2.appendChild(meta);
-      }
-
-      const c3 = document.createElement('div');
-      const btn = document.createElement('button');
-      btn.className = 'btn tonal';
-      btn.type = 'button';
-      btn.title = 'Ver detalle';
-      btn.innerHTML = `<span class="material-symbols-rounded">visibility</span> Ver`;
-      btn.addEventListener('click', ()=> verDetalleByIndex(idx));
-      c3.appendChild(btn);
-
-      row.appendChild(c1);
-      row.appendChild(c2);
-      row.appendChild(c3);
-
-      rowsEl.appendChild(row);
-    });
+    qs('rows').innerHTML = rows || "<p style='color:var(--muted)'>Sin resultados</p>";
   }
 
-  // ✅ Paginación: también sin inline onclick
   function renderPaginacion(){
     const pag = qs('pagination');
-    pag.innerHTML = "";
-
     const total = Math.ceil((totalActivos || 0) / TAMANO_PAGINA);
-
+    let h = "";
     for(let i=0;i<total;i++){
       const visible = (i<2 || i>total-3 || (i>=paginaActual-1 && i<=paginaActual+1));
-
-      if(visible){
-        const b = document.createElement('button');
-        b.className = 'page-btn ' + (i===paginaActual ? 'active' : '');
-        b.type = 'button';
-        b.textContent = String(i+1);
-        b.addEventListener('click', ()=> { paginaActual=i; consultarSkus(); });
-        pag.appendChild(b);
-      } else if(i===2 || i===total-3){
-        const s = document.createElement('span');
-        s.style.padding = '8px 6px';
-        s.style.color = '#9CA3AF';
-        s.textContent = '…';
-        pag.appendChild(s);
-      }
+      if(visible) h += `<button class="page-btn ${i===paginaActual?'active':''}" onclick="irAPagina(${i})">${i+1}</button>`;
+      else if(i===2 || i===total-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
     }
+    pag.innerHTML = h;
   }
+
+  function irAPagina(p){ paginaActual=p; consultarSkus(); }
 
   function verDetalleByIndex(idx){
     indiceActual = idx;
@@ -1053,19 +933,19 @@
     const bajaFlag = isTrue(i?.dadoDeBaja) || isTrue(i?.baja);
     const estatus  = (bajaFlag || !!bajaAt) ? 'Baja' : 'Activo';
 
-    safeText(qs('chip-sku'), sku || ''); show(qs('chip-sku-wrap'), !!sku);
-    safeText(qs('chip-codbarras'), cb || ''); show(qs('chip-cb-wrap'), !!cb);
-    safeText(qs('chip-genero-text'), genero || ''); show(qs('chip-genero'), !!genero);
-    safeText(qs('chip-costo-text'), costoFmt || ''); show(qs('chip-costo'), !!(costoFmt));
-    safeText(qs('chip-estatus-text'), estatus || ''); show(qs('chip-estatus'), !!estatus);
+    qs('chip-sku').innerText = sku || ''; show(qs('chip-sku-wrap'), !!sku);
+    qs('chip-codbarras').innerText = cb || ''; show(qs('chip-cb-wrap'), !!cb);
+    qs('chip-genero-text').innerText = genero || ''; show(qs('chip-genero'), !!genero);
+    qs('chip-costo-text').innerText = costoFmt || ''; show(qs('chip-costo'), !!(costoFmt));
+    qs('chip-estatus-text').innerText = estatus || ''; show(qs('chip-estatus'), !!estatus);
 
     const partes = [desc, marca, modelo, serie].map(norm).filter(Boolean);
-    safeText(qs('det-descripcion-completa'), partes.join(' · '));
-    safeText(qs('det-resp'), norm(resp));
-    safeText(qs('det-ubic'), norm(ubic));
-    safeText(qs('det-localizacion'), norm(loc));
-    safeText(qs('det-fecha-adq'), fmtDate(fAdq));
-    safeText(qs('det-fecha-reg'), fmtDate(fReg));
+    qs('det-descripcion-completa').innerText = partes.join(' · ');
+    qs('det-resp').innerText = norm(resp);
+    qs('det-ubic').innerText = norm(ubic);
+    qs('det-localizacion').innerText = norm(loc);
+    qs('det-fecha-adq').innerText = fmtDate(fAdq);
+    qs('det-fecha-reg').innerText = fmtDate(fReg);
 
     qs('btn-prev').disabled = (idx===0);
     qs('btn-next').disabled = (idx===cacheSkus.length-1);
@@ -1079,110 +959,83 @@
     if(n>=0 && n<cacheSkus.length) verDetalleByIndex(n);
   }
 
-  // ✅ Storage: preferimos descargar blob (como ya hacías) para no exponer URL permanente.
-  // Para facturas: usamos signed URL por RPC (blindaje). Si no existe RPC, cae al modo actual.
   async function cargarFotos(sku){
     const div = qs('det-fotos');
     div.innerHTML = "";
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return;
 
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
       const urlV2 = `${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.foto&select=bucket,path`;
-      const r2 = await sbFetch(urlV2); let fotos = r2.ok ? await r2.json() : [];
+      const r2 = await fetch(urlV2, { headers });
+      let fotos = r2.ok ? await r2.json() : [];
 
       if(!Array.isArray(fotos) || !fotos.length){
         const urlLegacy = `${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.foto&select=bucket,path`;
-        const rL = await sbFetch(urlLegacy); fotos = rL.ok ? await rL.json() : [];
+        const rL = await fetch(urlLegacy, { headers });
+        fotos = rL.ok ? await rL.json() : [];
       }
 
       for(const f of (fotos||[])){
-        const bucket = norm(f.bucket);
-        const path = safeUrlPath(f.path);
-        if(!bucket || !path) continue;
-
-        const rf = await sbFetch(`${SB_URL}/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${path}`);
+        const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
         if(!rf.ok) continue;
-
         const b = await rf.blob();
         const img = document.createElement('img');
         img.src = URL.createObjectURL(b);
         img.alt = "Foto del activo";
-        img.addEventListener('click', ()=> openLb(img.src));
+        img.onclick = () => openLb(img.src);
         div.appendChild(img);
       }
-    }catch(e){
-      console.error(e);
-    }
+    }catch(e){ console.error(e); }
   }
 
-  // RPC recomendado:
-  // create or replace function public.get_signed_url(bucket text, path text)
-  // returns text language plpgsql security definer as $$
-  // begin
-  //   return (select (storage.sign(bucket, path, 60)).signed_url);
-  // end $$;
-  // y policy/permission para execute a authenticated.
-  async function tryGetSignedUrl(bucket, path){
-    try{
-      const res = await sbFetch(`${SB_URL}/rest/v1/rpc/get_signed_url`, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ bucket, path })
-      });
-      if(!res.ok) return "";
-      const signed = await res.json();
-      return typeof signed === 'string' ? signed : "";
-    }catch{
-      return "";
-    }
-  }
-
+  // ✅ mejora: facturas abren SIEMPRE con token (blob)
   async function cargarFacturas(sku){
     const cont = qs('det-facturas');
     cont.innerHTML = "";
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return;
 
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
       const urlV2 = `${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.factura&select=bucket,path`;
-      const r2 = await sbFetch(urlV2); let files = r2.ok ? await r2.json() : [];
+      const r2 = await fetch(urlV2, { headers });
+      let files = r2.ok ? await r2.json() : [];
 
       if(!Array.isArray(files) || !files.length){
         const urlLegacy = `${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.factura&select=bucket,path`;
-        const rL = await sbFetch(urlLegacy); files = rL.ok ? await rL.json() : [];
+        const rL = await fetch(urlLegacy, { headers });
+        files = rL.ok ? await rL.json() : [];
       }
 
       for(const f of (files||[])){
-        const bucket = norm(f.bucket);
-        const path = safeUrlPath(f.path);
-        if(!bucket || !path) continue;
-
-        const a = document.createElement('a');
-        a.className = 'btn tonal';
-        a.style.textDecoration='none';
-        a.target = "_blank";
-        a.rel = "noopener noreferrer"; // ✅ evita tabnabbing
-
-        // Intento firmado (más seguro). Si no hay RPC, cae al authenticated normal.
-        let href = await tryGetSignedUrl(bucket, path);
-        if(!href){
-          href = `${SB_URL}/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${path}`;
-        }
-
-        a.href = href;
-        a.innerHTML = `<span class="material-symbols-rounded">picture_as_pdf</span> Abrir factura`;
-        cont.appendChild(a);
+        const btn = document.createElement('button');
+        btn.className = 'btn tonal';
+        btn.type = 'button';
+        btn.innerHTML = `<span class="material-symbols-rounded">picture_as_pdf</span> Abrir factura`;
+        btn.onclick = async (ev)=>{
+          ev.stopPropagation();
+          try{
+            const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
+            if(!rf.ok) throw new Error(`No se pudo abrir factura (HTTP ${rf.status})`);
+            const blob = await rf.blob();
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank");
+            // opcional: liberar después
+            setTimeout(()=>URL.revokeObjectURL(url), 60_000);
+          }catch(e){
+            alert(e.message || "Error al abrir factura");
+          }
+        };
+        cont.appendChild(btn);
       }
-    }catch(e){
-      console.error(e);
-    }
+    }catch(e){ console.error(e); }
   }
 
   // =========================
-  // ✅ LIGHTBOX: sin inline onclick
+  // ✅ LIGHTBOX MEJORADO
   // =========================
   let lb = {
-    scale: 1,
-    rot: 0,
+    scale: 1, rot: 0,
     pos: { x: 0, y: 0 },
     dragging: false,
     start: { x: 0, y: 0 },
@@ -1195,19 +1048,24 @@
     swipeStartY: 0,
   };
 
-  const lbEl = qs('lightbox');
-  const lbImg = qs('lightbox-img');
-
+  const lbEl = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
   function applyLbTransform(){
-    lbImg.style.transform = `translate(${lb.pos.x}px, ${lb.pos.y}px) scale(${lb.scale}) rotate(${lb.rot}deg)`;
+    lbImg.style.transform =
+      `translate(${lb.pos.x}px, ${lb.pos.y}px) scale(${lb.scale}) rotate(${lb.rot}deg)`;
   }
 
   function openLb(src){
     lb.scale = 1; lb.rot = 0; lb.pos = { x: 0, y: 0 };
-    lb.dragging = false; lb.pointers.clear();
-    lb.pinchStartDist = 0; lb.pinchStartScale = 1;
-    lb.lastTap = 0; lb.swipeCloseArmed = false;
+    lb.dragging = false;
+    lb.pointers.clear();
+    lb.pinchStartDist = 0;
+    lb.pinchStartScale = 1;
+    lb.lastTap = 0;
+    lb.swipeCloseArmed = false;
+
     lbImg.src = src;
     lbEl.classList.add('show');
     document.body.classList.add('lb-open');
@@ -1228,7 +1086,7 @@
 
   lbEl.addEventListener('click', (e)=>{ if(e.target === lbEl) closeLb(); });
 
-  function dist(a,b){ const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx*dx + dy*dy); }
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
   function center(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
 
   lbImg.addEventListener('pointerdown', (e)=>{
@@ -1316,10 +1174,7 @@
     if (lb.pointers.size === 0){
       lb.dragging = false;
       lb.swipeCloseArmed = false;
-      if (lb.scale <= 1.02){
-        lb.pos = { x:0, y:0 };
-        applyLbTransform();
-      }
+      if (lb.scale <= 1.02){ lb.pos = { x:0, y:0 }; applyLbTransform(); }
       lbImg.style.cursor = 'grab';
     }
   }
@@ -1342,16 +1197,23 @@
 
   function startScanner(){
     try{
-      if(html5QrCode){ html5QrCode.stop().then(()=> html5QrCode.clear()).catch(()=>{}); }
+      if(html5QrCode){
+        html5QrCode.stop().then(()=> html5QrCode.clear()).catch(()=>{});
+      }
       html5QrCode = new Html5Qrcode("reader");
-      html5QrCode.start({ facingMode:"environment" }, { fps:10, qrbox:250 }, (t) => {
-        const input = qs('sku-search');
-        input.value = String(t ?? "");
-        reiniciarYBuscar();
-        toggleScannerPanel(false);
-      });
+      html5QrCode.start(
+        { facingMode:"environment" },
+        { fps:10, qrbox:250 },
+        (t) => {
+          const input = qs('sku-search');
+          input.value = t;
+          reiniciarYBuscar();
+          toggleScannerPanel(false);
+        }
+      );
     }catch(e){ console.error(e); }
   }
+
   function stopScanner(){
     if(html5QrCode){
       html5QrCode.stop().then(()=>{ html5QrCode.clear(); }).catch(()=>{});
@@ -1377,49 +1239,60 @@
     limpiarBusquedaCatalogo();
     cargarCatalogoActual(false);
   }
+
   function marcarTab(){
     document.querySelectorAll('.tab').forEach(el=>{
-      el.classList.toggle('active', el.getAttribute('data-tabkey')===currentTab);
+      el.classList.toggle('active', el.getAttribute('data-tab')===currentTab);
     });
   }
+
   function limpiarBusquedaCatalogo(){
     catalogoFilter = '';
-    const inp = qs('cat-search'); if (inp) inp.value = '';
+    const inp = qs('cat-search');
+    if (inp) inp.value = '';
     renderCatalogo();
   }
+
   function filtrarCatalogo(){
     catalogoFilter = qs('cat-search').value.trim().toLowerCase();
     renderCatalogo();
   }
 
   async function cargarCatalogoActual(forceNetwork){
-    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){
-      renderCatalogo();
-      return;
-    }
+    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){ renderCatalogo(); return; }
     await cargarCatalogoCompleto(currentTab);
     renderCatalogo();
   }
 
   async function cargarCatalogoCompleto(tipo){
     const col = tipo;
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
     const pageSize = 1000;
     let desde = 0, total = null;
     const values = new Set();
 
     while (true){
-      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(col)}&${encodeURIComponent(col)}=not.is.null&distinct`;
-      const res = await sbFetch(url, { headers: { 'Prefer':'count=exact', 'Range': `${desde}-${desde+pageSize-1}` } });
+      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=${col}&${col}=not.is.null&distinct`;
+      const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
+
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        console.error("Error catálogo:", res.status, t);
+        break;
+      }
+
       const batch = await res.json();
       const range = res.headers.get('Content-Range');
       if (range){
         const parts = range.split('/');
         total = parseInt(parts[1] || "0", 10);
       }
+
       (batch||[]).forEach(o=>{
         const v = norm(o[col]);
         if (v) values.add(v);
       });
+
       desde += pageSize;
       if (total !== null && desde >= total) break;
       if (!Array.isArray(batch) || batch.length < pageSize) break;
@@ -1427,62 +1300,34 @@
 
     const arr = Array.from(values).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
     catalogoCache[tipo] = arr;
-    safeText(qs('cat-total-text'), `${arr.length} valores`);
+    qs('cat-total-text').innerText = `${arr.length} valores`;
     show(qs('cat-total'), true);
   }
 
-  // ✅ catálogo: elimina onclick string
   function renderCatalogo(){
     const list = qs('cat-list');
-    list.innerHTML = "";
-
     const all = catalogoCache[currentTab] || [];
     const filtered = catalogoFilter ? all.filter(v=>v.toLowerCase().includes(catalogoFilter)) : all;
 
     if (!all.length){
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.style.background = '#FFFBEA';
-      chip.style.borderColor = '#FDE68A';
-      chip.style.color = '#92400E';
-      chip.textContent = `Cargando ${currentTab}…`;
-      list.appendChild(chip);
+      list.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">Cargando ${escapeHtml(currentTab)}…</div>`;
       return;
     }
     if (!filtered.length){
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.style.background = '#FEE2E2';
-      chip.style.borderColor = '#FCA5A5';
-      chip.style.color = '#991B1B';
-      chip.textContent = `Sin resultados en “${currentTab}”.`;
-      list.appendChild(chip);
+      list.innerHTML = `<div class="chip" style="background:#FEE2E2; border-color:#FCA5A5; color:#991B1B">Sin resultados en “${escapeHtml(currentTab)}”.</div>`;
       return;
     }
 
-    filtered.forEach(v=>{
-      const row = document.createElement('div');
-      row.className = 'cat-row';
-
-      const label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = v;
-
-      const count = document.createElement('div');
-      count.className = 'count';
-      count.innerHTML = `<span class="material-symbols-rounded" style="font-size:18px">chevron_right</span>`;
-
-      row.appendChild(label);
-      row.appendChild(count);
-
-      row.addEventListener('click', ()=> aplicarCatalogoFiltro(currentTab, v));
-
-      list.appendChild(row);
-    });
+    list.innerHTML = filtered.map(v=>`
+      <div class="cat-row" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">
+        <div class="label">${escapeHtml(v)}</div>
+        <div class="count"><span class="material-symbols-rounded" style="font-size:18px">chevron_right</span></div>
+      </div>
+    `).join('');
   }
 
-  function aplicarCatalogoFiltro(tipo, valor){
-    skuExtraFiltro = { tipo, valor: String(valor ?? "") };
+  function aplicarCatalogoFiltro(tipo, valorEnc){
+    skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
     switchView('view-skus');
     paginaActual = 0;
     consultarSkus();
@@ -1490,67 +1335,19 @@
 
   function logout(){
     stopScanner();
-    sessionToken=""; userEmail=""; empresaSeleccionada=null; cacheSkus=[]; skuExtraFiltro=null;
+    sessionToken=""; userEmail=""; empresaSeleccionada=null;
+    cacheSkus=[]; skuExtraFiltro=null;
     qs('chip-empresa').classList.add('hidden');
+    setSkusMsg("");
     switchView('view-login');
   }
 
-  // =========================
-  // ✅ Bind de eventos (sin inline handlers)
-  // =========================
-  function bindEvents(){
-    qs('btn-login')?.addEventListener('click', ejecutarLogin);
-
-    qs('btn-logout-empresas')?.addEventListener('click', logout);
-    qs('btn-cambiar-empresa')?.addEventListener('click', ()=> switchView('view-empresas'));
-
-    qs('btn-modulo-skus')?.addEventListener('click', abrirModuloSkus);
-    qs('btn-abrir-catalogos-selector')?.addEventListener('click', abrirCatalogos);
-
-    qs('btn-open-scanner')?.addEventListener('click', ()=> toggleScannerPanel(true));
-    qs('btn-close-scanner')?.addEventListener('click', ()=> toggleScannerPanel(false));
-    qs('btn-start-scanner')?.addEventListener('click', startScanner);
-
-    qs('btn-abrir-catalogos-skus')?.addEventListener('click', abrirCatalogos);
-    qs('btn-volver-modos')?.addEventListener('click', ()=> switchView('view-selector'));
-
-    qs('chip-baja')?.addEventListener('click', toggleSoloBaja);
-    qs('select-orden')?.addEventListener('change', cambiarOrdenUI);
-
-    qs('sku-search')?.addEventListener('keyup', debouncedSearch);
-    qs('btn-buscar')?.addEventListener('click', reiniciarYBuscar);
-
-    qs('btn-quitar-filtro')?.addEventListener('click', limpiarFiltroExtra);
-
-    qs('btn-volver-skus')?.addEventListener('click', ()=> switchView('view-skus'));
-    qs('btn-abrir-catalogos-detalle')?.addEventListener('click', abrirCatalogos);
-
-    qs('btn-prev')?.addEventListener('click', ()=> navegarDetalle(-1));
-    qs('btn-next')?.addEventListener('click', ()=> navegarDetalle(1));
-
-    // Tabs catálogo
-    document.querySelectorAll('#tabs-catalogos .tab').forEach(btn=>{
-      btn.addEventListener('click', ()=> setTab(btn.getAttribute('data-tabkey')));
-    });
-
-    qs('cat-search')?.addEventListener('keyup', filtrarCatalogo);
-    qs('btn-limpiar-cat')?.addEventListener('click', limpiarBusquedaCatalogo);
-
-    qs('btn-modos-desde-catalogos')?.addEventListener('click', ()=> switchView('view-selector'));
-    qs('btn-ir-skus-desde-catalogos')?.addEventListener('click', ()=> switchView('view-skus'));
-
-    // Lightbox toolbar
-    qs('lb-zoom-out')?.addEventListener('click', zoomOutLb);
-    qs('lb-zoom-in')?.addEventListener('click', zoomInLb);
-    qs('lb-rot-left')?.addEventListener('click', rotateLeftLb);
-    qs('lb-rot-right')?.addEventListener('click', rotateRightLb);
-    qs('lb-reset')?.addEventListener('click', resetLb);
-    qs('lb-close')?.addEventListener('click', closeLb);
-    qs('lb-close2')?.addEventListener('click', closeLb);
-    qs('lb-open')?.addEventListener('click', ()=> window.open(lbImg.src,'_blank','noopener,noreferrer'));
-  }
-
-  document.addEventListener('DOMContentLoaded', bindEvents);
+  // ✅ Enter en login
+  window.addEventListener('keydown', (e)=>{
+    if(qs('view-login') && !qs('view-login').classList.contains('hidden') && e.key === 'Enter'){
+      ejecutarLogin();
+    }
+  });
 </script>
 </body>
 </html>
