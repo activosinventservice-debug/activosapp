@@ -754,28 +754,38 @@
   function abrirModuloSkus(){ switchView('view-skus'); paginaActual=0; const input=qs('sku-search'); if(input) input.value="0"; consultarSkus(); }
 
 function limpiarFiltroExtra(ev){
-  // ✅ evita comportamientos raros por propagación (móvil)
   if (ev) {
     ev.preventDefault?.();
     ev.stopPropagation?.();
   }
 
-  // ✅ limpia filtro
+  // limpia el estado del filtro
   skuExtraFiltro = null;
 
-  // ✅ oculta chip
-  show(qs('filtro-activo'), false);
+  // ✅ limpia el chip/título visual
+  resetChipFiltroUI();
 
-  // ✅ reinicia paginación
+  // ✅ resetea búsqueda ANTES de consultar
+  const input = qs('sku-search');
+  if (input) input.value = "0";
+
+  // reinicia paginación
   paginaActual = 0;
 
-  // ✅ asegura que sigues en Gestión de SKUs
+  // asegúrate de estar en SKUs
   switchView('view-skus');
 
-  // ✅ recarga ya sin filtro
+  // recarga sin filtro
   consultarSkus();
 }
 
+
+
+function resetChipFiltroUI(){
+  qs('filtro-text').innerText = '—';
+  qs('filtro-icon').innerText = 'filter_alt';
+  show(qs('filtro-activo'), false);
+}
 
   async function consultarSkus(){
     if(!empresaSeleccionada) return;
@@ -795,9 +805,10 @@ function limpiarFiltroExtra(ev){
       const col = skuExtraFiltro.tipo;
       const val = encodeURIComponent(skuExtraFiltro.valor);
       url += `&${col}=eq.${val}`;
-    } else {
-      show(qs('filtro-activo'), false);
-    }
+} else {
+  resetChipFiltroUI();
+}
+
 
     isLoading = true; skeletonTimer = setTimeout(()=>{ if(isLoading) qs('skeleton-list').classList.remove('hidden'); }, 160);
     try{
