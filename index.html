@@ -7,6 +7,27 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
   <!-- Iconos Material -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" />
+
+  <!-- ✅ Detector móvil/escritorio (agrega class is-mobile / is-desktop al <html>) -->
+  <script>
+    (function () {
+      function isMobileLike() {
+        const w = Math.min(window.innerWidth || 0, screen.width || 0);
+        const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+        const touch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+        return (w <= 820) || (coarse && touch);
+      }
+      function applyDeviceClass() {
+        const mobile = isMobileLike();
+        document.documentElement.classList.toggle("is-mobile", mobile);
+        document.documentElement.classList.toggle("is-desktop", !mobile);
+      }
+      window.addEventListener("resize", applyDeviceClass, { passive: true });
+      window.addEventListener("orientationchange", applyDeviceClass, { passive: true });
+      document.addEventListener("DOMContentLoaded", applyDeviceClass);
+    })();
+  </script>
+
   <style>
     :root{
       --primary:#0B6EF3; --primary-variant:#0654C9; --on-primary:#FFFFFF;
@@ -123,70 +144,114 @@
     .cat-row .count{font-size:.85rem; color:#64748B}
 
     /* =========================
-       RESPONSIVE (CELULAR)
+       ✅ MÓVIL: botones más intuitivos y ordenados
+       (en vez de hacer TODO width:100%)
        ========================= */
-    @media (max-width: 720px){
-      .container{padding:0 12px; margin:12px auto}
-      .card{padding:14px}
+    html.is-mobile .container{padding:0 12px; margin:12px auto}
+    html.is-mobile .card{padding:14px}
 
-      /* Appbar: permite que el chip no reviente */
-      .appbar-inner{padding:10px 12px}
-      .app-title{font-size:1rem}
-      #chip-empresa{max-width:52vw}
-      #chip-empresa-text{display:inline-block; max-width:40vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+    /* Appbar: chip no reviente */
+    html.is-mobile .appbar-inner{padding:10px 12px}
+    html.is-mobile .app-title{font-size:1rem}
+    html.is-mobile #chip-empresa{max-width:52vw}
+    html.is-mobile #chip-empresa-text{display:inline-block; max-width:40vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
-      /* Login en 1 columna */
-      .grid-2{grid-template-columns:1fr; max-width:100%}
+    /* Login 1 columna */
+    html.is-mobile .grid-2{grid-template-columns:1fr; max-width:100%}
 
-      /* Headers en columna */
-      .header-flex{flex-direction:column; align-items:stretch}
-      .header-flex > *{width:100%}
-      .btn-group{width:100%}
+    /* Header: NO apiles todo en columna (se siente raro),
+       solo deja que “quiebre” natural y con separación */
+    html.is-mobile .header-flex{flex-wrap:wrap; align-items:center}
+    html.is-mobile .btn-group{flex-wrap:wrap}
 
-      /* Botones: mejor toque */
-      .btn{width:100%}
-      .btn.icon{width:auto} /* icon dentro de pill se queda compacto */
+    /* ✅ Botones en móvil: compactos, consistentes */
+    html.is-mobile .btn{
+      padding:10px 12px;
+      border-radius:12px;
+      width:auto;              /* <- clave: ya NO 100% */
+      box-shadow:none;         /* menos “bloque grande” */
+    }
+    html.is-mobile .btn.full{width:100%} /* solo cuando tú quieras */
 
-      /* Toolbars: de grid a stack */
-      .toolbar-grid{grid-template-columns:1fr; gap:10px}
-      .searchgroup{width:100%}
-      .rcontrols{width:100%; justify-content:flex-start}
+    /* Toolbars: de grid a stack (pero con buen orden) */
+    html.is-mobile .toolbar-grid{grid-template-columns:1fr; gap:10px}
 
-      /* Pill: ocupa ancho y permite cortar */
-      .pill{width:100%}
-      .pill input{min-width:0}
-
-      /* Select ocupa ancho bonito */
-      .select{width:100%}
-
-      /* Filas del listado: vertical */
-      .row{
-        grid-template-columns:1fr;
-        gap:10px;
-        align-items:stretch;
-      }
-
-      /* Galería: imágenes más contenidas */
-      .gallery{min-height:140px}
-      .gallery img{height:220px}
-
-      /* Tabs catálogo: mejor en móvil */
-      .tabs{
-        flex-wrap:nowrap;
-        overflow-x:auto;
-        -webkit-overflow-scrolling:touch;
-        padding-bottom:6px;
-      }
-      .tab{white-space:nowrap}
-
-      /* Lightbox toolbar */
-      .lightbox-toolbar{max-width:92vw}
+    /* ===== SKUs: acciones en “fila de botones” tipo app ===== */
+    html.is-mobile .searchgroup{
+      display:grid;
+      grid-template-columns:1fr 1fr; /* 2 columnas para acciones */
+      gap:8px;
+      width:100%;
+      align-items:stretch;
     }
 
+    /* La barra de búsqueda ocupa toda la fila (2 columnas) */
+    html.is-mobile .searchgroup .pill{
+      grid-column:1 / -1;
+      width:100%;
+      min-width:0 !important;
+    }
+
+    /* Botones de acciones (Escáner / Catálogos / Modos) */
+    html.is-mobile .searchgroup > button.btn{
+      width:100%;
+      justify-content:center;
+    }
+
+    /* Controles derechos: también en 2 columnas, parejitos */
+    html.is-mobile .rcontrols{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      width:100%;
+      justify-content:stretch;
+    }
+    html.is-mobile .rcontrols > *{width:100%}
+
+    /* Pill: ocupa ancho y permite cortar */
+    html.is-mobile .pill{width:100%}
+    html.is-mobile .pill input{min-width:0}
+
+    /* Select: full */
+    html.is-mobile .select{width:100%}
+
+    /* Filas del listado: vertical y con botón “Ver” full (solo ese) */
+    html.is-mobile .row{
+      grid-template-columns:1fr;
+      gap:10px;
+      align-items:stretch;
+    }
+    html.is-mobile .row > div:last-child .btn{width:100%}
+
+    /* Scanner: botones en 2 columnas (más intuitivo) */
+    html.is-mobile #scanner-container > div:last-child{
+      display:grid !important;
+      grid-template-columns:1fr 1fr;
+      gap:8px !important;
+      justify-content:stretch !important;
+    }
+    html.is-mobile #scanner-container > div:last-child .btn{width:100%}
+
+    /* Tabs catálogo: scroll horizontal */
+    html.is-mobile .tabs{
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      padding-bottom:6px;
+    }
+    html.is-mobile .tab{white-space:nowrap}
+
+    /* Galería */
+    html.is-mobile .gallery{min-height:140px}
+    html.is-mobile .gallery img{height:220px}
+
+    /* Lightbox toolbar */
+    html.is-mobile .lightbox-toolbar{max-width:92vw}
+
     @media (max-width: 380px){
-      .btn{padding:11px 12px}
-      .app-title{font-size:.95rem}
-      .gallery img{height:200px}
+      html.is-mobile .btn{padding:10px 11px}
+      html.is-mobile .app-title{font-size:.95rem}
+      html.is-mobile .gallery img{height:200px}
     }
   </style>
 </head>
