@@ -854,7 +854,7 @@ async function consultarSkus(){
   }
 
   // Filtro de solo baja
-  if (soloBaja) url += `&baja=eq.true`;
+  if (soloBaja) url += `&dado_de_baja=eq.true`;
 
   // Filtros extra de catálogo
   if (skuExtraFiltro && skuExtraFiltro.valor) {
@@ -970,8 +970,8 @@ async function consultarSkus(){
     const fReg   = getv(i,'fecha_registro','fechaRegistro','created_at','createdAt');
 
     const bajaAt   = getv(i, 'baja_at','bajaAt','fecha_baja','fechaBaja');
-    const bajaFlag = isTrue(i?.dadoDeBaja) || isTrue(i?.baja);
-    const estatus  = (bajaFlag || !!bajaAt) ? 'Baja' : 'Activo';
+    const bajaFlag = isTrue(i?.dado_de_baja); // Usa directamente el nombre de la tabla
+    const estatus = bajaFlag ? 'Baja' : 'Activo';
 
     qs('chip-sku').innerText = sku || ''; show(qs('chip-sku-wrap'), !!sku);
     qs('chip-codbarras').innerText = cb || ''; show(qs('chip-cb-wrap'), !!cb);
