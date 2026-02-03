@@ -825,17 +825,21 @@ async function consultarSkus(){
 
   const qInput = norm(qs('sku-search')?.value ?? "");
   
-  // ✅ VALIDACIÓN: Si no hay texto de búsqueda Y no hay un filtro de catálogo, no hacer nada.
+  // Si no hay búsqueda ni filtros activos, mostramos mensaje de espera
   if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
     qs('rows').innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--muted)">
-        <p>Escribe al menos un carácter para buscar...</p>
+        <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
+        <p>Escribe algo en el buscador para ver los activos</p>
       </div>`;
     qs('pagination').innerHTML = "";
     return;
   }
 
-    const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
+  // ✅ Definimos 'q' para que los filtros de abajo no fallen
+  const q = qInput; 
+
+  const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
     let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
