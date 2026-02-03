@@ -825,7 +825,7 @@ async function consultarSkus(){
 
   const qInput = norm(qs('sku-search')?.value ?? "");
   
-  // Si no hay búsqueda ni filtros activos, mostramos mensaje de espera
+  // ✅ 1. Validación de entrada: Si no hay texto, ni filtros, ni modo 'baja', no cargar nada
   if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
     qs('rows').innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--muted)">
@@ -836,63 +836,68 @@ async function consultarSkus(){
     return;
   }
 
-  // ✅ Definimos 'q' para que los filtros de abajo no fallen
+  // ✅ 2. Definimos 'q' para usarlo en los filtros de abajo
   const q = qInput; 
 
   const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
-    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
-    if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
-    else url += `&order=updated_at.desc`;
+  let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
+  
+  // Ordenamiento
+  if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
+  else url += `&order=updated_at.desc`;
 
-    if (q !== "0" && q.length >= 2) {
-      const qenc = encodeURIComponent(q);
-      url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
-    }
-
-    if (soloBaja) url += `&baja=eq.true`;
-
-    if (skuExtraFiltro && skuExtraFiltro.valor) {
-      const col = skuExtraFiltro.tipo;
-      const val = encodeURIComponent(skuExtraFiltro.valor);
-      url += `&${col}=eq.${val}`;
-    } else {
-      resetChipFiltroUI();
-    }
-
-    isLoading = true;
-    try{
-      const res = await fetch(url, {
-        headers:{
-          'apikey':SB_KEY,
-          'Authorization':`Bearer ${sessionToken}`,
-          'Range': `${desde}-${hasta}`,
-          'Prefer':'count=exact'
-        }
-      });
-
-      if(!res.ok){
-        const t = await res.text().catch(()=> "");
-        throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
-      }
-
-      const range = res.headers.get('Content-Range');
-      if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
-
-      if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
-
-      cacheSkus = await res.json();
-      renderTabla();
-      renderPaginacion();
-    }catch(e){
-      console.error(e);
-      qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
-      qs('pagination').innerHTML = "";
-      setSkusMsg(e.message || "Error al consultar activos.");
-    }finally{
-      isLoading=false;
-    }
+  // ✅ 3. Filtro de búsqueda por texto (Corregido: ahora usa 'q' correctamente)
+  if (q.length > 0) {
+    const qenc = encodeURIComponent(q);
+    url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
   }
+
+  // Filtro de solo baja
+  if (soloBaja) url += `&baja=eq.true`;
+
+  // Filtros extra de catálogo
+  if (skuExtraFiltro && skuExtraFiltro.valor) {
+    const col = skuExtraFiltro.tipo;
+    const val = encodeURIComponent(skuExtraFiltro.valor);
+    url += `&${col}=eq.${val}`;
+  } else {
+    resetChipFiltroUI();
+  }
+
+  isLoading = true;
+  try{
+    const res = await fetch(url, {
+      headers:{
+        'apikey':SB_KEY,
+        'Authorization':`Bearer ${sessionToken}`,
+        'Range': `${desde}-${hasta}`,
+        'Prefer':'count=exact'
+      }
+    });
+
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+    }
+
+    const range = res.headers.get('Content-Range');
+    if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
+
+    if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
+
+    cacheSkus = await res.json();
+    renderTabla();
+    renderPaginacion();
+  }catch(e){
+    console.error(e);
+    qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
+    qs('pagination').innerHTML = "";
+    setSkusMsg(e.message || "Error al consultar activos.");
+  }finally{
+    isLoading=false;
+  }
+}
 
   function renderTabla(){
     const rows = cacheSkus.map((i, idx) => {
