@@ -203,6 +203,64 @@
     .cat-row .label{font-weight:800}
     .cat-row .count{font-size:.85rem; color:#64748B}
 
+    /* ===== Dashboard Resguardos ===== */
+    .dash-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0,1fr));
+      gap:10px;
+    }
+    .dash-card{
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px;
+      background:#fff;
+    }
+    .dash-card .t{font-weight:900}
+    .dash-kpis{display:flex; gap:12px; margin-top:10px; flex-wrap:wrap}
+    .dash-kpi{
+      display:flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius:12px;
+      background:#F4F7FF;
+      border:1px dashed #CAD7F1;
+      font-weight:900;
+    }
+    .dash-kpi small{display:block; font-weight:800; color:#64748B}
+    .dash-user{
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px;
+      background:#fff;
+    }
+    .dash-user-head{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+    .dash-user-name{font-weight:900}
+    .dash-user-email{color:#64748B; font-weight:800; font-size:.9rem}
+    .dash-table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border:1px solid var(--border);
+      border-radius:12px;
+    }
+    .dash-table th, .dash-table td{
+      padding:10px 10px;
+      border-bottom:1px solid var(--border);
+      text-align:center;
+      font-weight:800;
+    }
+    .dash-table th{
+      background:#F6F8FC;
+      color:#0F172A;
+    }
+    .dash-table td:first-child, .dash-table th:first-child{
+      text-align:left;
+    }
+    .dash-table tr:last-child td{border-bottom:none}
+
+    html.is-mobile .dash-grid{grid-template-columns:1fr}
+    html.is-mobile .dash-table th, html.is-mobile .dash-table td{padding:9px 8px; font-size:.92rem}
+
     /* =========================
         ✅ MÓVIL: compactar
         ========================= */
@@ -307,7 +365,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026-02-03-1.1</div>
+      <div class="version-tag">2026-02-03-1.1 + DASH</div>
     </div>
   </div>
 
@@ -349,6 +407,7 @@
       <div style="display:grid; gap:12px; margin-top:16px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
         <button class="btn" onclick="abrirModuloSkus()"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
         <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard Resguardos</button>
       </div>
     </div>
 
@@ -482,6 +541,36 @@
       </div>
 
       <div id="cat-list" class="cat-list" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ✅ NUEVO: Dashboard de Resguardos -->
+    <div id="view-resguardos-dashboard" class="card hidden">
+      <div class="header-flex" style="margin-bottom:10px">
+        <div>
+          <small style="color:#0B4CB3; font-weight:800;">Dashboard (Nube)</small>
+          <h2 id="dash-title" style="margin:4px 0 0">Resguardos · —</h2>
+        </div>
+        <div class="btn-group">
+          <button class="btn tonal" onclick="switchView('view-selector')">
+            <span class="material-symbols-rounded">arrow_back</span> Modos
+          </button>
+          <button class="btn" onclick="cargarDashboardResguardos(true)">
+            <span class="material-symbols-rounded">refresh</span> Recargar
+          </button>
+        </div>
+      </div>
+
+      <div id="dash-msg" class="error-msg hidden"></div>
+
+      <div style="margin-top:10px">
+        <div class="label" style="margin:0 0 8px"><span class="material-symbols-rounded">bar_chart</span> Resumen Global</div>
+        <div id="dash-global-grid" class="dash-grid"></div>
+      </div>
+
+      <div style="margin:14px 0 10px">
+        <div class="label" style="margin:0 0 8px"><span class="material-symbols-rounded">group</span> Desglose por Usuario</div>
+        <div id="dash-users" class="stack"></div>
+      </div>
     </div>
 
   </div>
@@ -725,6 +814,9 @@
     skuExtraFiltro = null;
     show(qs('filtro-activo'), false);
     setSkusMsg("");
+    setDashMsg("");
+    qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
+    qs('dash-users') && (qs('dash-users').innerHTML="");
     switchView('view-selector');
   }
 
@@ -768,26 +860,26 @@
     consultarSkus();
   }
 
-function abrirModuloSkus(){
-  switchView('view-skus');
-  paginaActual = 0;
-  
-  // Limpiamos el buscador y la lista actual para que se vea vacío
-  const input = qs('sku-search');
-  if(input) {
-    input.value = "";
-    input.focus(); // Opcional: pone el cursor listo para escribir
+  function abrirModuloSkus(){
+    switchView('view-skus');
+    paginaActual = 0;
+
+    // Limpiamos el buscador y la lista actual para que se vea vacío
+    const input = qs('sku-search');
+    if(input) {
+      input.value = "";
+      input.focus(); // Opcional: pone el cursor listo para escribir
+    }
+
+    qs('rows').innerHTML = `
+      <div style="text-align:center; padding:40px; color:var(--muted)">
+        <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
+        <p>Ingresa un dato en el buscador para ver los activos</p>
+      </div>`;
+
+    qs('pagination').innerHTML = ""; // Limpiamos paginación
+    setSkusMsg(""); // Limpiamos mensajes previos
   }
-  
-  qs('rows').innerHTML = `
-    <div style="text-align:center; padding:40px; color:var(--muted)">
-      <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
-      <p>Ingresa un dato en el buscador para ver los activos</p>
-    </div>`;
-  
-  qs('pagination').innerHTML = ""; // Limpiamos paginación
-  setSkusMsg(""); // Limpiamos mensajes previos
-}
 
   function limpiarFiltroExtra(ev){
     if (ev) { ev.preventDefault?.(); ev.stopPropagation?.(); }
@@ -806,85 +898,85 @@ function abrirModuloSkus(){
     show(qs('filtro-activo'), false);
   }
 
-async function consultarSkus(){
-  setSkusMsg("");
-  if(!empresaSeleccionada) return;
+  async function consultarSkus(){
+    setSkusMsg("");
+    if(!empresaSeleccionada) return;
 
-  const qInput = norm(qs('sku-search')?.value ?? "");
-  
-  // ✅ 1. Validación de entrada: Si no hay texto, ni filtros, ni modo 'baja', no cargar nada
-  if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
-    qs('rows').innerHTML = `
-      <div style="text-align:center; padding:40px; color:var(--muted)">
-        <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
-        <p>Escribe algo en el buscador para ver los activos</p>
-      </div>`;
-    qs('pagination').innerHTML = "";
-    return;
-  }
+    const qInput = norm(qs('sku-search')?.value ?? "");
 
-  // ✅ 2. Definimos 'q' para usarlo en los filtros de abajo
-  const q = qInput; 
-
-  const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
-
-  let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
-  
-  // Ordenamiento
-  if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
-  else url += `&order=updated_at.desc`;
-
-  // ✅ 3. Filtro de búsqueda por texto
-  if (q.length > 0) {
-    const qenc = encodeURIComponent(q);
-    url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
-  }
-
-  // Filtro de solo baja (corregido a dado_de_baja)
-  if (soloBaja) url += `&dado_de_baja=eq.true`;
-
-  // Filtros extra de catálogo
-  if (skuExtraFiltro && skuExtraFiltro.valor) {
-    const col = skuExtraFiltro.tipo;
-    const val = encodeURIComponent(skuExtraFiltro.valor);
-    url += `&${col}=eq.${val}`;
-  } else {
-    resetChipFiltroUI();
-  }
-
-  isLoading = true;
-  try{
-    const res = await fetch(url, {
-      headers:{
-        'apikey':SB_KEY,
-        'Authorization':`Bearer ${sessionToken}`,
-        'Range': `${desde}-${hasta}`,
-        'Prefer':'count=exact'
-      }
-    });
-
-    if(!res.ok){
-      const t = await res.text().catch(()=> "");
-      throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+    // ✅ 1. Validación de entrada: Si no hay texto, ni filtros, ni modo 'baja', no cargar nada
+    if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
+      qs('rows').innerHTML = `
+        <div style="text-align:center; padding:40px; color:var(--muted)">
+          <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
+          <p>Escribe algo en el buscador para ver los activos</p>
+        </div>`;
+      qs('pagination').innerHTML = "";
+      return;
     }
 
-    const range = res.headers.get('Content-Range');
-    if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
+    // ✅ 2. Definimos 'q' para usarlo en los filtros de abajo
+    const q = qInput;
 
-    if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
+    const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
-    cacheSkus = await res.json();
-    renderTabla();
-    renderPaginacion();
-  }catch(e){
-    console.error(e);
-    qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
-    qs('pagination').innerHTML = "";
-    setSkusMsg(e.message || "Error al consultar activos.");
-  }finally{
-    isLoading=false;
+    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
+
+    // Ordenamiento
+    if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
+    else url += `&order=updated_at.desc`;
+
+    // ✅ 3. Filtro de búsqueda por texto
+    if (q.length > 0) {
+      const qenc = encodeURIComponent(q);
+      url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
+    }
+
+    // Filtro de solo baja (corregido a dado_de_baja)
+    if (soloBaja) url += `&dado_de_baja=eq.true`;
+
+    // Filtros extra de catálogo
+    if (skuExtraFiltro && skuExtraFiltro.valor) {
+      const col = skuExtraFiltro.tipo;
+      const val = encodeURIComponent(skuExtraFiltro.valor);
+      url += `&${col}=eq.${val}`;
+    } else {
+      resetChipFiltroUI();
+    }
+
+    isLoading = true;
+    try{
+      const res = await fetch(url, {
+        headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`,
+          'Range': `${desde}-${hasta}`,
+          'Prefer':'count=exact'
+        }
+      });
+
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+      }
+
+      const range = res.headers.get('Content-Range');
+      if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
+
+      if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
+
+      cacheSkus = await res.json();
+      renderTabla();
+      renderPaginacion();
+    }catch(e){
+      console.error(e);
+      qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
+      qs('pagination').innerHTML = "";
+      setSkusMsg(e.message || "Error al consultar activos.");
+    }finally{
+      isLoading=false;
+    }
   }
-}
 
   function renderTabla(){
     const rows = cacheSkus.map((i, idx) => {
@@ -1364,7 +1456,280 @@ async function consultarSkus(){
     cacheSkus=[]; skuExtraFiltro=null;
     qs('chip-empresa').classList.add('hidden');
     setSkusMsg("");
+    setDashMsg("");
+    qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
+    qs('dash-users') && (qs('dash-users').innerHTML="");
     switchView('view-login');
+  }
+
+  // =========================
+  // ✅ DASHBOARD RESGUARDOS
+  // =========================
+  function setDashMsg(text){
+    const el = qs('dash-msg');
+    if(!el) return;
+    if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
+    el.innerText = text;
+    el.classList.remove('hidden');
+  }
+
+  function abrirDashboardResguardos(){
+    if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    qs('dash-title').innerText = `Resguardos · ${empresaSeleccionada.nombre}`;
+    switchView('view-resguardos-dashboard');
+    cargarDashboardResguardos(false);
+  }
+
+  async function cargarDashboardResguardos(forceRefresh){
+    setDashMsg("");
+    if(!empresaSeleccionada?.id) return;
+
+    const grid = qs('dash-global-grid');
+    const users = qs('dash-users');
+    grid.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
+    users.innerHTML = "";
+
+    try{
+      const nombresMap = await cargarNombresUsuariosPorEmpresa();
+
+      const raw = await fetchResguardoDashboardRaw(empresaSeleccionada.id);
+
+      const now = new Date();
+
+      // Global + per user accumulators
+      let gHoyS=0,gHoyK=0,gSemS=0,gSemK=0,gMesS=0,gMesK=0,gTotS=0,gTotK=0;
+
+      const userMap = new Map();
+      function addToUser(email, period, s, k){
+        const safe = (email || "").trim() || "Sin Asignar";
+        if(!userMap.has(safe)){
+          userMap.set(safe, { HOY:{s:0,k:0}, SEMANA:{s:0,k:0}, MES:{s:0,k:0}, TOTAL:{s:0,k:0} });
+        }
+        const o = userMap.get(safe);
+        o[period].s += s;
+        o[period].k += k;
+      }
+
+      for(const it of raw){
+        const dt = toDate(it.createdAt);
+        const skus = Number(it.skuCount||0);
+
+        gTotS++; gTotK += skus;
+        addToUser(it.email, "TOTAL", 1, skus);
+
+        if(isSameDay(dt, now)){ gHoyS++; gHoyK += skus; addToUser(it.email, "HOY", 1, skus); }
+        if(isSameWeekLocal(dt, now)){ gSemS++; gSemK += skus; addToUser(it.email, "SEMANA", 1, skus); }
+        if(isSameMonth(dt, now)){ gMesS++; gMesK += skus; addToUser(it.email, "MES", 1, skus); }
+      }
+
+      grid.innerHTML = [
+        dashStatCard("Hoy", gHoyS, gHoyK, "today"),
+        dashStatCard("Esta Semana", gSemS, gSemK, "date_range"),
+        dashStatCard("Este Mes", gMesS, gMesK, "calendar_month"),
+        dashStatCard("Total Histórico", gTotS, gTotK, "all_inclusive"),
+      ].join("");
+
+      const list = [...userMap.entries()]
+        .map(([email, p])=>{
+          const nombre = nombresMap.get(String(email).toLowerCase()) || "";
+          return { email, nombre, hoy:p.HOY, sem:p.SEMANA, mes:p.MES, total:p.TOTAL };
+        })
+        .sort((a,b)=> (b.total.k - a.total.k));
+
+      users.innerHTML = list.length
+        ? list.map(u=>dashUserCard(u)).join("")
+        : `<div class="chip" style="justify-content:center; width:100%;">Sin datos de resguardos.</div>`;
+
+    }catch(e){
+      console.error(e);
+      qs('dash-global-grid').innerHTML = "";
+      qs('dash-users').innerHTML = "";
+      setDashMsg(e.message || "Error cargando dashboard.");
+    }
+  }
+
+  function toDate(raw){
+    if(raw === null || raw === undefined) return new Date(0);
+    if(typeof raw === "number"){
+      const ms = raw < 1e12 ? raw*1000 : raw;
+      return new Date(ms);
+    }
+    const s = String(raw).trim();
+    const asNum = Number(s);
+    if(!Number.isNaN(asNum) && asNum > 1000000000){
+      const ms = asNum < 1e12 ? asNum*1000 : asNum;
+      return new Date(ms);
+    }
+    const d = new Date(s);
+    if(!isNaN(d.getTime())) return d;
+    return new Date(0);
+  }
+
+  function isSameDay(d, now){
+    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate();
+  }
+  function isSameMonth(d, now){
+    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  }
+  // Semana “local” lunes-domingo
+  function isSameWeekLocal(d, now){
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const day = (x)=> (x.getDay()+6)%7; // lunes=0
+    const startA = new Date(a); startA.setDate(a.getDate()-day(a));
+    const startB = new Date(b); startB.setDate(b.getDate()-day(b));
+    return startA.getTime() === startB.getTime();
+  }
+
+  async function fetchResguardoDashboardRaw(empresaId){
+    const batchSize = 1000;
+    let offset = 0;
+    const out = [];
+
+    const select = "created_at,creada_por_email,resguardo_entries(count)";
+    while(true){
+      const url =
+        `${SB_URL}/rest/v1/resguardo_sessions` +
+        `?select=${encodeURIComponent(select)}` +
+        `&empresa_id=eq.${encodeURIComponent(empresaId)}` +
+        `&order=created_at.desc` +
+        `&limit=${batchSize}` +
+        `&offset=${offset}` +
+        `&resguardo_entries.limit=5000`;
+
+      const res = await fetch(url, {
+        headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`
+        }
+      });
+
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        throw new Error(`Dashboard data error (offset ${offset}) HTTP ${res.status}. ${t||""}`);
+      }
+
+      const arr = await res.json();
+      if(!Array.isArray(arr) || arr.length === 0) break;
+
+      for(const o of arr){
+        const entries = o?.resguardo_entries;
+        const countObj = Array.isArray(entries) ? entries[0] : null;
+        const c = Number(countObj?.count || 0);
+
+        out.push({
+          createdAt: o?.created_at,
+          email: (o?.creada_por_email || "").trim(),
+          skuCount: c
+        });
+      }
+
+      offset += arr.length;
+      if(arr.length < batchSize) break;
+    }
+
+    return out;
+  }
+
+  async function cargarNombresUsuariosPorEmpresa(){
+    const map = new Map();
+    try{
+      // 1) Primero intentamos desde permisos (usuarioNombre suele venir aquí)
+      const url = `${SB_URL}/rest/v1/empresa_user_permissions?empresaNombre=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&select=email,usuarioNombre`;
+      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      const arr = res.ok ? await res.json() : [];
+
+      const faltantes = [];
+      (arr||[]).forEach(p=>{
+        const email = norm(p?.email).toLowerCase();
+        const nombre = norm(p?.usuarioNombre);
+        if(email){
+          if(nombre) map.set(email, nombre);
+          else faltantes.push(email);
+        }
+      });
+
+      // 2) Si algún permiso no tiene usuarioNombre, hacemos fallback a la tabla users (nombre)
+      if(faltantes.length){
+        // de-dupe
+        const uniq = Array.from(new Set(faltantes));
+        // PostgREST: email=in.(...)
+        const inList = uniq.map(e=>`"${String(e).replace(/"/g,'\"')}"`).join(',');
+        const url2 = `${SB_URL}/rest/v1/users?email=in.(${inList})&select=email,nombre`;
+        const r2 = await fetch(url2, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+        if(r2.ok){
+          const u = await r2.json();
+          (u||[]).forEach(x=>{
+            const em = norm(x?.email).toLowerCase();
+            const nom = norm(x?.nombre);
+            if(em && nom && !map.has(em)) map.set(em, nom);
+          });
+        }
+      }
+    }catch(e){
+      console.warn("No se pudieron cargar nombres de usuarios:", e);
+    }
+    return map;
+  }
+
+
+  function dashStatCard(title, ses, skus, icon){
+    return `
+      <div class="dash-card">
+        <div class="t"><span class="material-symbols-rounded" style="vertical-align:-4px; margin-right:6px; color:#0B4CB3">${icon}</span>${escapeHtml(title)}</div>
+        <div class="dash-kpis">
+          <div class="dash-kpi">
+            <span class="material-symbols-rounded" style="color:#0B4CB3">event</span>
+            <div><small>Sesiones</small>${Number(ses||0)}</div>
+          </div>
+          <div class="dash-kpi">
+            <span class="material-symbols-rounded" style="color:#0F172A">inventory_2</span>
+            <div><small>SKUs</small>${Number(skus||0)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function dashUserCard(u){
+    const hasNombre = (u.nombre||"").trim().length>0;
+    const head = hasNombre
+      ? `<div class="dash-user-name">${escapeHtml(u.nombre)}</div><div class="dash-user-email">${escapeHtml(u.email)}</div>`
+      : `<div class="dash-user-name">${escapeHtml(u.email)}</div>`;
+
+    return `
+      <div class="dash-user">
+        <div class="dash-user-head">
+          <span class="material-symbols-rounded" style="color:#0B4CB3">person</span>
+          <div style="min-width:0">${head}</div>
+        </div>
+
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th>Ses</th>
+              <th>SKUs</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dashRow("Hoy", u.hoy)}
+            ${dashRow("Semana", u.sem)}
+            ${dashRow("Mes", u.mes)}
+            ${dashRow("Total", u.total, true)}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function dashRow(label, st, bold){
+    const fw = bold ? "font-weight:900" : "";
+    return `<tr style="${fw}">
+      <td style="text-align:left">${escapeHtml(label)}</td>
+      <td>${Number(st?.s||0)}</td>
+      <td>${Number(st?.k||0)}</td>
+    </tr>`;
   }
 
   window.addEventListener('keydown', (e)=>{
