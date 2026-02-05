@@ -630,12 +630,19 @@ html.is-mobile .detail-row{padding:10px 12px}
       <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscarHistorial()"><span class="material-symbols-rounded">manage_search</span></button>
       <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaHistorial()"><span class="material-symbols-rounded">close</span></button>
     </div>
-    <div class="hist-chips" style="justify-content:flex-end">
-      <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
-      <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
-      <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
-      <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
-    </div>
+<div class="hist-chips" style="justify-content:flex-end">
+  <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
+  <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
+  <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
+  <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
+
+  <span class="divider"></span>
+
+  <button id="hist-chip-pend" class="hist-chip" onclick="toggleHistPendientes()">
+    <span class="material-symbols-rounded">gpp_maybe</span> Pendientes
+  </button>
+</div>
+
   </div>
 
   <div id="hist-list" class="stack" style="margin-top:12px"></div>
@@ -1915,6 +1922,14 @@ let histAll = [];            // sesiones cargadas (sin filtro)
 let histFiltered = [];       // sesiones post-filtro
 let histPage = 0;
 const HIST_PAGE_SIZE = 25;
+let histSoloPendientes = false; // Pendiente = NO aplicada (como app)
+function toggleHistPendientes(){
+  histSoloPendientes = !histSoloPendientes;
+  const btn = qs('hist-chip-pend');
+  if(btn) btn.classList.toggle('active', histSoloPendientes);
+  histPage = 0;
+  aplicarFiltrosHistorial();
+}
 let histRango = 'todo';      // hoy|semana|mes|todo
 let histSearchDebounce = null;
 let histNamesMap = new Map();
@@ -2059,15 +2074,20 @@ function aplicarFiltrosHistorial(){
   const term = norm(qs('hist-search')?.value ?? "").toLowerCase();
   const bounds = getBoundsMs(histRango);
 
-  histFiltered = (histAll || []).filter(s=>{
-    const created = Number(getRaw(s,'createdAt') ?? 0);
-    if(bounds && (created < bounds.start || created > bounds.end)) return false;
-    if(term){
-      const blob = sessionSearchBlob(s);
-      if(!blob.includes(term)) return false;
-    }
-    return true;
-  });
+histFiltered = (histAll || []).filter(s=>{
+  const created = Number(getRaw(s,'createdAt') ?? 0);
+  if(bounds && (created < bounds.start || created > bounds.end)) return false;
+
+  // ✅ Filtro Pendientes: pendiente si NO está autorizada (ni aplicada)
+  if(histSoloPendientes && isSessionAutorizada(s)) return false;
+
+  if(term){
+    const blob = sessionSearchBlob(s);
+    if(!blob.includes(term)) return false;
+  }
+  return true;
+});
+
 
   // Si nos quedamos sin páginas, corregir
   const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
@@ -2131,20 +2151,32 @@ function renderHistRow(s){
   const authBy = resolveUserDisplay(s.autorizadaPor, histNamesMap);
   const pdfBy  = resolveUserDisplay(s.pdfGeneradoPor, histNamesMap);
 
-  const idShort = String(s.id||"").slice(0,8);
+const idFull = String(s.id || "");
+const autorizado = isSessionAutorizada(s);
+const estatusLabel = autorizado ? "Autorizado" : "Pendiente";
+const estatusIcon  = autorizado ? "verified_user" : "gpp_maybe";
+const estatusClass = autorizado ? "good" : "warn";
+
 
   const syncWarn  = norm(s.syncError);
   const applyWarn = norm(s.applyError);
 
-  const badges = [
-    `<span class="badge primary"><span class="material-symbols-rounded" style="font-size:18px">inventory_2</span> ${Number(s.skuCount||0)} SKU${Number(s.skuCount||0)===1?'':'s'}</span>`,
-    `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">tag</span> #${escapeHtml(idShort)}</span>`,
-    `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px; color:#0B4CB3">person</span> Creó: ${escapeHtml(createdBy)}</span>`,
-    (norm(s.autorizada) ? `<span class="badge good"><span class="material-symbols-rounded" style="font-size:18px">verified_user</span> Autorizó: ${escapeHtml(authBy)}</span>` : `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">gpp_maybe</span> No autorizada</span>`),
-    (norm(s.pdfGeneradoPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">picture_as_pdf</span> PDF: ${escapeHtml(pdfBy)}</span>` : ``),
-    statusBadge("Sincronizado", !!s.sincronizado, syncWarn),
-    statusBadge("Aplicada", !!s.aplicada, applyWarn),
-  ].filter(Boolean).join('');
+const badges = [
+  `<span class="badge primary"><span class="material-symbols-rounded" style="font-size:18px">inventory_2</span> ${Number(s.skuCount||0)} SKU${Number(s.skuCount||0)===1?'':'s'}</span>`,
+
+  // ✅ ID completo (scroll)
+  `<span class="badge mono scroll" title="${escapeHtml(idFull)}">#${escapeHtml(idFull)}</span>`,
+
+  `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px; color:#0B4CB3">person</span> Creó: ${escapeHtml(createdBy)}</span>`,
+
+  // ✅ Estatus como app: Pendiente/Autorizado (según aplicada)
+  `<span class="badge ${estatusClass}"><span class="material-symbols-rounded" style="font-size:18px">${estatusIcon}</span> ${escapeHtml(estatusLabel)}</span>`,
+
+  // (Opcional) si quieres seguir mostrando quién autorizó SOLO si existe
+  (norm(s.autorizadaPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">person_check</span> Autorizó: ${escapeHtml(authBy)}</span>` : ``),
+
+  (norm(s.pdfGeneradoPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">picture_as_pdf</span> PDF: ${escapeHtml(pdfBy)}</span>` : ``),
+].filter(Boolean).join('');
 
   const destinoBits = [
     norm(s.nuevoResponsable) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">shield_person</span> Resp: ${escapeHtml(s.nuevoResponsable)}</span>` : '',
@@ -2324,9 +2356,10 @@ async function cargarDetalleSesionResguardo(id, force){
     const authBy = resolveUserDisplay(sessionInfo.autorizadaPor, nombresMap);
     const pdfBy  = resolveUserDisplay(sessionInfo.pdfGeneradoPor, nombresMap);
 
-    safeSetText('session-actor', `Creó: ${createdBy}`);
-    safeSetText('session-auth',  `Autorizó: ${authBy}`);
-    safeSetText('session-pdf',   `PDF: ${pdfBy}`);
+safeSetText('session-creada', `Creó: ${createdBy}`);
+safeSetText('session-autorizada', `Autorizó: ${authBy || '—'}`);
+safeSetText('session-pdf', `PDF: ${pdfBy || '—'}`);
+
 
     // 2) Entradas (snapshot original)
     const selectE = "id,session_id,codigo,descripcion,responsable_original,ubicacion_original,localizacion_original,foto_uri,codigo_barras,genero";
@@ -2431,6 +2464,12 @@ async function fetchActivosPorCodigos(empresaId, codes){
   }
   return map;
 }
+
+function isSessionAutorizada(s){
+  // Consideramos autorizada si ya la autorizaron O si ya fue aplicada
+  return isTrue(s?.autorizada) || isTrue(s?.aplicada);
+}
+
 
 function limpiarBusquedaDetalleSesion(){
   const inp = qs('session-search'); if(inp) inp.value="";
