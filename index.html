@@ -258,33 +258,31 @@
     }
     .dash-table tr:last-child td{border-bottom:none}
 
-    
-/* ===== Historial Resguardos + Detalle ===== */
-.hist-toolbar{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center}
-.hist-chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
-.hist-chip{border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:800; display:inline-flex; gap:6px; align-items:center}
-.hist-chip.active{background:var(--chip); border-color:#CFE2FF; color:#0B4CB3}
-.hist-row{display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px}
-.hist-row:hover{border-color:#D6E3FF}
-.hist-title{font-weight:900}
-.hist-sub{color:#64748B; font-weight:800; font-size:.9rem; margin-top:2px; display:flex; gap:10px; flex-wrap:wrap}
-.badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:900; border:1px solid var(--border); background:#F6F8FC}
+    /* ===== Historial Resguardos + Detalle ===== */
+    .hist-toolbar{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center}
+    .hist-chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+    .hist-chip{border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:800; display:inline-flex; gap:6px; align-items:center}
+    .hist-chip.active{background:var(--chip); border-color:#CFE2FF; color:#0B4CB3}
+    .hist-row{display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px}
+    .hist-row:hover{border-color:#D6E3FF}
+    .hist-title{font-weight:900}
+    .hist-sub{color:#64748B; font-weight:800; font-size:.9rem; margin-top:2px; display:flex; gap:10px; flex-wrap:wrap}
+    .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:900; border:1px solid var(--border); background:#F6F8FC}
     .badge.mono{font-family:'Courier New',monospace}
     .badge.scroll{max-width:70vw; overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch}
-
-.badge.primary{background:#E6F0FF; border-color:#CFE2FF; color:#0B4CB3}
-.badge.good{background:#ECFDF3; border-color:#A7F3D0; color:#065F46}
-.badge.warn{background:#FFF7ED; border-color:#FDBA74; color:#9A3412}
-.detail-list{display:grid; gap:8px}
-.detail-row{display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px}
-.detail-row:hover{border-color:#D6E3FF}
-.detail-sku{font-weight:900}
-.detail-desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; margin-top:2px}
-.detail-meta{color:#6B7280; font-size:.82rem; font-weight:800; display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
-.mini{font-size:.75rem; font-weight:900; letter-spacing:.2px; opacity:.85}
-html.is-mobile .hist-toolbar{grid-template-columns:1fr}
-html.is-mobile .hist-row{padding:10px 12px}
-html.is-mobile .detail-row{padding:10px 12px}
+    .badge.primary{background:#E6F0FF; border-color:#CFE2FF; color:#0B4CB3}
+    .badge.good{background:#ECFDF3; border-color:#A7F3D0; color:#065F46}
+    .badge.warn{background:#FFF7ED; border-color:#FDBA74; color:#9A3412}
+    .detail-list{display:grid; gap:8px}
+    .detail-row{display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px}
+    .detail-row:hover{border-color:#D6E3FF}
+    .detail-sku{font-weight:900}
+    .detail-desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; margin-top:2px}
+    .detail-meta{color:#6B7280; font-size:.82rem; font-weight:800; display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
+    .mini{font-size:.75rem; font-weight:900; letter-spacing:.2px; opacity:.85}
+    html.is-mobile .hist-toolbar{grid-template-columns:1fr}
+    html.is-mobile .hist-row{padding:10px 12px}
+    html.is-mobile .detail-row{padding:10px 12px}
     html.is-mobile .dash-grid{grid-template-columns:1fr}
     html.is-mobile .dash-table th, html.is-mobile .dash-table td{padding:9px 8px; font-size:.92rem}
 
@@ -392,11 +390,13 @@ html.is-mobile .detail-row{padding:10px 12px}
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.04-1.2</div>
+      <div class="version-tag">2026.02.05-1.3</div>
     </div>
   </div>
 
   <div class="container">
+
+    <!-- LOGIN -->
     <div id="view-login" class="card">
       <h2 style="margin:4px 0 12px">Acceso</h2>
       <div class="grid-2">
@@ -415,6 +415,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       <div id="login-msg" class="error-msg hidden"></div>
     </div>
 
+    <!-- EMPRESAS -->
     <div id="view-empresas" class="card hidden">
       <div class="header-flex">
         <h2 style="margin:0">Mis Empresas</h2>
@@ -423,6 +424,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       <div id="lista-empresas" style="margin-top:12px; display:grid; gap:10px"></div>
     </div>
 
+    <!-- SELECTOR -->
     <div id="view-selector" class="card hidden">
       <div class="header-flex">
         <div>
@@ -439,6 +441,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       </div>
     </div>
 
+    <!-- SKUS -->
     <div id="view-skus" class="card hidden">
       <div class="header-flex" style="margin-bottom:10px">
         <h2 style="margin:0">Activos</h2>
@@ -492,6 +495,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       <div id="pagination" class="pagination"></div>
     </div>
 
+    <!-- DETALLE SKU -->
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
@@ -543,6 +547,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       </div>
     </div>
 
+    <!-- CATALOGOS -->
     <div id="view-catalogos" class="card hidden">
       <div class="header-flex" style="margin-bottom:8px">
         <h2 style="margin:0">Catálogos</h2>
@@ -571,7 +576,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       <div id="cat-list" class="cat-list" style="margin-top:10px"></div>
     </div>
 
-    <!-- ✅ NUEVO: Dashboard de Resguardos -->
+    <!-- DASHBOARD RESGUARDOS -->
     <div id="view-resguardos-dashboard" class="card hidden">
       <div class="header-flex" style="margin-bottom:10px">
         <div>
@@ -601,96 +606,102 @@ html.is-mobile .detail-row{padding:10px 12px}
       </div>
     </div>
 
-  </div>
+    <!-- HISTORIAL RESGUARDOS -->
+    <div id="view-resguardos-historial" class="card hidden">
+      <div class="header-flex" style="margin-bottom:10px">
+        <div>
+          <small style="color:#0B4CB3; font-weight:800;">Historial (Nube)</small>
+          <h2 id="hist-title" style="margin:4px 0 0">Resguardos · —</h2>
+        </div>
+        <div class="btn-group">
+          <button class="btn tonal" onclick="volverDeHistorial()">
+            <span class="material-symbols-rounded">arrow_back</span> Volver
+          </button>
+          <button class="btn" onclick="cargarHistorialResguardos(true)">
+            <span class="material-symbols-rounded">refresh</span> Recargar
+          </button>
+        </div>
+      </div>
 
-  
-<!-- ✅ NUEVO: Historial de Resguardos -->
-<div id="view-resguardos-historial" class="card hidden">
-  <div class="header-flex" style="margin-bottom:10px">
-    <div>
-      <small style="color:#0B4CB3; font-weight:800;">Historial (Nube)</small>
-      <h2 id="hist-title" style="margin:4px 0 0">Resguardos · —</h2>
+      <div id="hist-msg" class="error-msg hidden"></div>
+
+      <div class="hist-toolbar" style="margin-top:10px">
+        <div class="pill" style="flex:1; min-width:280px;">
+          <div class="leading"><span class="material-symbols-rounded">search</span></div>
+          <input type="text" id="hist-search" placeholder="Filtrar por usuario (nombre o email)…" onkeyup="onHistSearchKey(event)">
+          <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscarHistorial()"><span class="material-symbols-rounded">manage_search</span></button>
+          <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaHistorial()"><span class="material-symbols-rounded">close</span></button>
+        </div>
+
+        <div class="hist-chips" style="justify-content:flex-end">
+          <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
+          <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
+          <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
+          <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
+
+          <span class="divider"></span>
+
+          <button id="hist-chip-pend" class="hist-chip" onclick="toggleHistPendientes()">
+            <span class="material-symbols-rounded">gpp_maybe</span> Pendientes
+          </button>
+        </div>
+      </div>
+
+      <div id="hist-list" class="stack" style="margin-top:12px"></div>
+      <div id="hist-pagination" class="pagination"></div>
     </div>
-    <div class="btn-group">
-      <button class="btn tonal" onclick="volverDeHistorial()">
-        <span class="material-symbols-rounded">arrow_back</span> Volver
-      </button>
-      <button class="btn" onclick="cargarHistorialResguardos(true)">
-        <span class="material-symbols-rounded">refresh</span> Recargar
-      </button>
-    </div>
-  </div>
 
-  <div id="hist-msg" class="error-msg hidden"></div>
+    <!-- DETALLE SESION RESGUARDO -->
+    <div id="view-resguardo-session-detail" class="card hidden">
+      <div class="topmenu" style="margin-bottom:10px">
+        <button class="btn tonal" onclick="volverAListaHistorial()"><span class="material-symbols-rounded">arrow_back</span> Historial</button>
+        <button class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard</button>
+        <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">home</span> Modos</button>
+        <span class="divider"></span>
+        <button class="btn" onclick="cargarDetalleSesionResguardo(currentSessionId, true)"><span class="material-symbols-rounded">refresh</span> Recargar</button>
+      </div>
 
-  <div class="hist-toolbar" style="margin-top:10px">
-    <div class="pill" style="flex:1; min-width:280px;">
-      <div class="leading"><span class="material-symbols-rounded">search</span></div>
-      <input type="text" id="hist-search" placeholder="Filtrar por usuario (nombre o email)…" onkeyup="onHistSearchKey(event)">
-      <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscarHistorial()"><span class="material-symbols-rounded">manage_search</span></button>
-      <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaHistorial()"><span class="material-symbols-rounded">close</span></button>
-    </div>
-<div class="hist-chips" style="justify-content:flex-end">
-  <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
-  <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
-  <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
-  <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
+      <div id="session-msg" class="error-msg hidden"></div>
 
-  <span class="divider"></span>
-
-  <button id="hist-chip-pend" class="hist-chip" onclick="toggleHistPendientes()">
-    <span class="material-symbols-rounded">gpp_maybe</span> Pendientes
-  </button>
-</div>
-
-  </div>
-
-  <div id="hist-list" class="stack" style="margin-top:12px"></div>
-  <div id="hist-pagination" class="pagination"></div>
-</div>
-
-<!-- ✅ NUEVO: Detalle de Sesión de Resguardo -->
-<div id="view-resguardo-session-detail" class="card hidden">
-  <div class="topmenu" style="margin-bottom:10px">
-    <button class="btn tonal" onclick="volverAListaHistorial()"><span class="material-symbols-rounded">arrow_back</span> Historial</button>
-    <button class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard</button>
-    <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">home</span> Modos</button>
-    <span class="divider"></span>
-    <button class="btn" onclick="cargarDetalleSesionResguardo(currentSessionId, true)"><span class="material-symbols-rounded">refresh</span> Recargar</button>
-  </div>
-
-  <div id="session-msg" class="error-msg hidden"></div>
-
-  <div class="section full">
-    <div class="item">
-      <div class="label"><span class="material-symbols-rounded">event</span> Sesión</div>
-      <div class="value" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
-                    <span id="session-id" class="badge primary scroll mono" title="—">—</span>
+      <div class="section full">
+        <div class="item">
+          <div class="label"><span class="material-symbols-rounded">event</span> Sesión</div>
+          <div class="value" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+            <span id="session-id" class="badge primary scroll mono" title="—">—</span>
             <span id="session-date" class="badge">—</span>
             <span id="session-creada" class="badge">Creó: —</span>
             <span id="session-autorizada" class="badge">Autorizó: —</span>
             <span id="session-pdf" class="badge">PDF: —</span>
-            <span id="session-resp-prev" class="badge">Resp: —</span>
-            <span id="session-resp-new" class="badge">Nuevo: —</span>
-            <span id="session-ubic-new" class="badge">Ubic: —</span>
-            <span id="session-loc-new" class="badge">Loc: —</span>
+
+            <!-- ✅ antes (snapshot) -->
+            <span id="session-resp-prev" class="badge">Resp (antes): —</span>
+            <span id="session-ubic-prev" class="badge">Ubic (antes): —</span>
+            <span id="session-loc-prev" class="badge">Loc (antes): —</span>
+
+            <!-- ✅ destino -->
+            <span id="session-resp-new" class="badge">Resp (dest): —</span>
+            <span id="session-ubic-new" class="badge">Ubic (dest): —</span>
+            <span id="session-loc-new" class="badge">Loc (dest): —</span>
+          </div>
+        </div>
       </div>
+
+      <div class="section full">
+        <div class="pill" style="flex:1; min-width:280px;">
+          <div class="leading"><span class="material-symbols-rounded">search</span></div>
+          <input type="text" id="session-search" placeholder="Buscar dentro de la sesión (SKU / descripción)..." onkeyup="filtrarDetalleSesion()">
+          <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaDetalleSesion()"><span class="material-symbols-rounded">close</span></button>
+        </div>
+      </div>
+
+      <div id="session-summary" class="chips-wrap" style="margin:10px 0 8px"></div>
+
+      <div id="session-entries" class="detail-list"></div>
     </div>
-  </div>
 
-  <div class="section full">
-    <div class="pill" style="flex:1; min-width:280px;">
-      <div class="leading"><span class="material-symbols-rounded">search</span></div>
-      <input type="text" id="session-search" placeholder="Buscar dentro de la sesión (SKU / descripción)..." onkeyup="filtrarDetalleSesion()">
-      <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaDetalleSesion()"><span class="material-symbols-rounded">close</span></button>
-    </div>
-  </div>
+  </div><!-- /container -->
 
-  <div id="session-summary" class="chips-wrap" style="margin:10px 0 8px"></div>
-
-  <div id="session-entries" class="detail-list"></div>
-</div>
-
+  <!-- LIGHTBOX -->
   <div id="lightbox" class="lightbox" role="dialog" aria-modal="true">
     <div class="lightbox-content">
       <img id="lightbox-img" class="lightbox-img" alt="Vista previa"/>
@@ -799,7 +810,8 @@ html.is-mobile .detail-row{padding:10px 12px}
 
   function switchView(id){
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
-    qs(id).classList.remove('hidden');
+    const el = qs(id);
+    if(el) el.classList.remove('hidden');
   }
 
   function setSkusMsg(text){
@@ -988,25 +1000,22 @@ html.is-mobile .detail-row{padding:10px 12px}
     consultarSkus();
   }
 
+  // ✅ MEJORA CLAVE: al entrar a "Gestión de SKUs" NO cargamos nada
   function abrirModuloSkus(){
+    if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     switchView('view-skus');
     paginaActual = 0;
 
-    // Limpiamos el buscador y la lista actual para que se vea vacío
     const input = qs('sku-search');
-    if(input) {
-      input.value = "";
-      input.focus(); // Opcional: pone el cursor listo para escribir
-    }
+    if(input) { input.value = ""; input.focus(); }
 
     qs('rows').innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--muted)">
         <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
-        <p>Ingresa un dato en el buscador para ver los activos</p>
+        <p>Escribe algo en el buscador para ver los activos</p>
       </div>`;
-
-    qs('pagination').innerHTML = ""; // Limpiamos paginación
-    setSkusMsg(""); // Limpiamos mensajes previos
+    qs('pagination').innerHTML = "";
+    setSkusMsg("");
   }
 
   function limpiarFiltroExtra(ev){
@@ -1032,7 +1041,7 @@ html.is-mobile .detail-row{padding:10px 12px}
 
     const qInput = norm(qs('sku-search')?.value ?? "");
 
-    // ✅ 1. Validación de entrada: Si no hay texto, ni filtros, ni modo 'baja', no cargar nada
+    // ✅ Si no hay texto, ni filtros, ni solo-baja: no cargar nada
     if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
       qs('rows').innerHTML = `
         <div style="text-align:center; padding:40px; color:var(--muted)">
@@ -1043,9 +1052,7 @@ html.is-mobile .detail-row{padding:10px 12px}
       return;
     }
 
-    // ✅ 2. Definimos 'q' para usarlo en los filtros de abajo
     const q = qInput;
-
     const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
     let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
@@ -1054,16 +1061,16 @@ html.is-mobile .detail-row{padding:10px 12px}
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
     else url += `&order=updated_at.desc`;
 
-    // ✅ 3. Filtro de búsqueda por texto
+    // Búsqueda
     if (q.length > 0) {
       const qenc = encodeURIComponent(q);
       url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
     }
 
-    // Filtro de solo baja (corregido a dado_de_baja)
+    // Solo baja
     if (soloBaja) url += `&dado_de_baja=eq.true`;
 
-    // Filtros extra de catálogo
+    // Filtro extra catálogo
     if (skuExtraFiltro && skuExtraFiltro.valor) {
       const col = skuExtraFiltro.tipo;
       const val = encodeURIComponent(skuExtraFiltro.valor);
@@ -1176,7 +1183,6 @@ html.is-mobile .detail-row{padding:10px 12px}
     const fAdq   = getv(i,'fecha_adquisicion','fechaAdquisicion');
     const fReg   = getv(i,'fecha_registro','fechaRegistro','created_at','createdAt');
 
-    // Detección unificada de baja
     const bajaFlag = isTrue(i?.dado_de_baja);
     const estatus = bajaFlag ? 'Baja' : 'Activo';
 
@@ -1465,6 +1471,9 @@ html.is-mobile .detail-row{padding:10px 12px}
     }
   }
 
+  // =========================
+  // ✅ CATÁLOGOS (MEJORA): sin "distinct" (PostgREST), paginado + Set
+  // =========================
   function abrirCatalogos(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     switchView('view-catalogos');
@@ -1511,14 +1520,18 @@ html.is-mobile .detail-row{padding:10px 12px}
 
   async function cargarCatalogoCompleto(tipo){
     const col = tipo;
-    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
+    const baseHeaders = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
     const pageSize = 1000;
-    let desde = 0, total = null;
+    let desde = 0;
+    let total = null;
     const values = new Set();
 
+    // Traemos SOLO la columna y hacemos dedupe client-side (con Range)
     while (true){
-      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=${col}&${col}=not.is.null&distinct`;
-      const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
+      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(col)}&${encodeURIComponent(col)}=not.is.null&order=${encodeURIComponent(col)}.asc`;
+      const res = await fetch(url, {
+        headers: { ...baseHeaders, 'Range': `${desde}-${desde+pageSize-1}` }
+      });
 
       if(!res.ok){
         const t = await res.text().catch(()=> "");
@@ -1534,13 +1547,13 @@ html.is-mobile .detail-row{padding:10px 12px}
       }
 
       (batch||[]).forEach(o=>{
-        const v = norm(o[col]);
+        const v = norm(o?.[col]);
         if (v) values.add(v);
       });
 
-      desde += pageSize;
-      if (total !== null && desde >= total) break;
+      desde += Array.isArray(batch) ? batch.length : pageSize;
       if (!Array.isArray(batch) || batch.length < pageSize) break;
+      if (total !== null && desde >= total) break;
     }
 
     const arr = Array.from(values).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
@@ -1590,7 +1603,6 @@ html.is-mobile .detail-row{padding:10px 12px}
     switchView('view-login');
   }
 
-  
   // =========================
   // ✅ Helpers: resolver usuarios por email o por id (UUID)
   // =========================
@@ -1598,7 +1610,7 @@ html.is-mobile .detail-row{padding:10px 12px}
   const isUuid = (v)=> UUID_RE.test(String(v||"").trim());
 
   async function cargarUsuariosPorIds(ids){
-    const map = new Map(); // id -> {email,nombre}
+    const map = new Map();
     try{
       const uniq = Array.from(new Set((ids||[]).map(x=>String(x||"").trim()).filter(Boolean))).filter(isUuid);
       if(!uniq.length) return map;
@@ -1634,8 +1646,7 @@ html.is-mobile .detail-row{padding:10px 12px}
     return v;
   };
 
-
-// =========================
+  // =========================
   // ✅ DASHBOARD RESGUARDOS
   // =========================
   function setDashMsg(text){
@@ -1669,7 +1680,6 @@ html.is-mobile .detail-row{padding:10px 12px}
 
       const now = new Date();
 
-      // Global + per user accumulators
       let gHoyS=0,gHoyK=0,gSemS=0,gSemK=0,gMesS=0,gMesK=0,gTotS=0,gTotK=0;
 
       const userMap = new Map();
@@ -1744,11 +1754,10 @@ html.is-mobile .detail-row{padding:10px 12px}
   function isSameMonth(d, now){
     return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
   }
-  // Semana “local” lunes-domingo
   function isSameWeekLocal(d, now){
     const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const day = (x)=> (x.getDay()+6)%7; // lunes=0
+    const day = (x)=> (x.getDay()+6)%7;
     const startA = new Date(a); startA.setDate(a.getDate()-day(a));
     const startB = new Date(b); startB.setDate(b.getDate()-day(b));
     return startA.getTime() === startB.getTime();
@@ -1807,7 +1816,6 @@ html.is-mobile .detail-row{padding:10px 12px}
   async function cargarNombresUsuariosPorEmpresa(){
     const map = new Map();
     try{
-      // 1) Primero intentamos desde permisos (usuarioNombre suele venir aquí)
       const url = `${SB_URL}/rest/v1/empresa_user_permissions?empresaNombre=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&select=email,usuarioNombre`;
       const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
       const arr = res.ok ? await res.json() : [];
@@ -1822,12 +1830,9 @@ html.is-mobile .detail-row{padding:10px 12px}
         }
       });
 
-      // 2) Si algún permiso no tiene usuarioNombre, hacemos fallback a la tabla users (nombre)
       if(faltantes.length){
-        // de-dupe
         const uniq = Array.from(new Set(faltantes));
-        // PostgREST: email=in.(...)
-        const inList = uniq.map(e=>`"${String(e).replace(/"/g,'\"')}"`).join(',');
+        const inList = uniq.map(e=>`"${String(e).replace(/"/g,'\\"')}"`).join(',');
         const url2 = `${SB_URL}/rest/v1/users?email=in.(${inList})&select=email,nombre`;
         const r2 = await fetch(url2, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
         if(r2.ok){
@@ -1844,7 +1849,6 @@ html.is-mobile .detail-row{padding:10px 12px}
     }
     return map;
   }
-
 
   function dashStatCard(title, ses, skus, icon){
     return `
@@ -1877,7 +1881,7 @@ html.is-mobile .detail-row{padding:10px 12px}
           <div style="min-width:0">${head}</div>
         </div>
 
-        <button class="btn tonal full" style="margin:8px 0 10px" onclick="openHistorialForEmail('${escapeHtml(u.email)}')"><span class=\"material-symbols-rounded\">history</span> Ver historial</button>
+        <button class="btn tonal full" style="margin:8px 0 10px" onclick="openHistorialForEmail('${escapeHtml(u.email)}')"><span class="material-symbols-rounded">history</span> Ver historial</button>
 
         <table class="dash-table">
           <thead>
@@ -1913,680 +1917,631 @@ html.is-mobile .detail-row{padding:10px 12px}
     }
   });
 
-  
-// =========================
-// ✅ HISTORIAL + DETALLE RESGUARDOS  (apegado a la app)
-// =========================
-let histPrevView = 'view-selector';
-let histAll = [];            // sesiones cargadas (sin filtro)
-let histFiltered = [];       // sesiones post-filtro
-let histPage = 0;
-const HIST_PAGE_SIZE = 25;
-let histSoloPendientes = false; // Pendiente = NO aplicada (como app)
-function toggleHistPendientes(){
-  histSoloPendientes = !histSoloPendientes;
-  const btn = qs('hist-chip-pend');
-  if(btn) btn.classList.toggle('active', histSoloPendientes);
-  histPage = 0;
-  aplicarFiltrosHistorial();
-}
-let histRango = 'todo';      // hoy|semana|mes|todo
-let histSearchDebounce = null;
-let histNamesMap = new Map();
-
-// Detalle
-let currentSessionId = null;
-let sessionInfo = null;
-let sessionEntries = [];
-let sessionActivosMap = new Map(); // key=codigo (sku o barcode) -> activo
-let sessionShowOriginal = true;
-let sessionShowActual = true;
-let sessionShowDestino = true;
-let sessionShowOnlyReview = false;
-
-// Similar a resolveUserDisplay() de la app (Kotlin)
-function resolveUserDisplay(raw, emailToNameMap){
-  const v = norm(raw);
-  if(!v) return "—";
-  if(v.includes("@")){
-    const email = v.toLowerCase();
-    const name = emailToNameMap?.get?.(email) || "";
-    return name ? `${name} · ${v}` : v;
-  }
-  return v;
-}
-
-function setHistMsg(text){
-  const el = qs('hist-msg');
-  if(!el) return;
-  if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
-  el.innerText = text;
-  el.classList.remove('hidden');
-}
-function setSessionMsg(text){
-  const el = qs('session-msg');
-  if(!el) return;
-  if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
-  el.innerText = text;
-  el.classList.remove('hidden');
-}
-
-function abrirHistorialResguardos(emailPref){
-  if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
-  histPrevView = getCurrentVisibleViewId() || 'view-selector';
-
-  safeSetText('hist-title', `Resguardos · ${empresaSeleccionada.nombre}`);
-  switchView('view-resguardos-historial');
-
-  const inp = qs('hist-search');
-  if(inp) inp.value = emailPref ? String(emailPref) : "";
-
-  histRango = 'todo';
-  marcarChipsHist();
-  histPage = 0;
-  cargarHistorialResguardos(false);
-}
-
-function volverDeHistorial(){
-  switchView(histPrevView || 'view-selector');
-}
-function volverAListaHistorial(){
-  switchView('view-resguardos-historial');
-}
-
-function getCurrentVisibleViewId(){
-  const cards = Array.from(document.querySelectorAll('.card'));
-  const visible = cards.find(c=>!c.classList.contains('hidden'));
-  return visible ? visible.id : null;
-}
-
-function setHistRango(r){
-  histRango = r || 'todo';
-  histPage = 0;
-  marcarChipsHist();
-  aplicarFiltrosHistorial(); // filtro en memoria (como la app)
-}
-
-function marcarChipsHist(){
-  const map = { hoy:'hist-chip-hoy', semana:'hist-chip-semana', mes:'hist-chip-mes', todo:'hist-chip-todo' };
-  Object.entries(map).forEach(([k,id])=>{
-    const el = qs(id);
-    if(el) el.classList.toggle('active', k===histRango);
-  });
-}
-
-function onHistSearchKey(ev){
-  if(ev.key === 'Enter'){ reiniciarYBuscarHistorial(); return; }
-  if(ev.key === 'Escape'){ limpiarBusquedaHistorial(); return; }
-  if(histSearchDebounce) clearTimeout(histSearchDebounce);
-  histSearchDebounce = setTimeout(()=>{ histPage=0; aplicarFiltrosHistorial(); }, 280);
-}
-function reiniciarYBuscarHistorial(){ histPage=0; aplicarFiltrosHistorial(); }
-function limpiarBusquedaHistorial(){
-  const inp = qs('hist-search'); if(inp) inp.value="";
-  histPage=0; aplicarFiltrosHistorial();
-}
-
-// Rango en MS (created_at es bigint/epoch ms)
-function getBoundsMs(rango){
-  const now = new Date();
-  const startOfDayMs = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
-  if(rango === 'hoy'){
-    const s = startOfDayMs(now);
-    return { start:s, end:s + 86400000 - 1 };
-  }
-  if(rango === 'mes'){
-    const s = new Date(now.getFullYear(), now.getMonth(), 1, 0,0,0,0).getTime();
-    const e = new Date(now.getFullYear(), now.getMonth()+1, 1, 0,0,0,0).getTime() - 1;
-    return { start:s, end:e };
-  }
-  if(rango === 'semana'){
-    // lunes-domingo
-    const day = (x)=> (x.getDay()+6)%7; // lunes=0
-    const s = startOfDayMs(now) - day(now)*86400000;
-    return { start:s, end:s + 7*86400000 - 1 };
-  }
-  return null; // todo
-}
-
-function sessionSearchBlob(s){
-  // Campos relevantes (parecido a la app)
-  const createdBy = resolveUserDisplay(s?.creadaPorEmail, histNamesMap);
-  const authBy    = resolveUserDisplay(s?.autorizadaPor, histNamesMap);
-  const pdfBy     = resolveUserDisplay(s?.pdfGeneradoPor, histNamesMap);
-
-  const parts = [
-    s?.id,
-    createdBy,
-    authBy,
-    pdfBy,
-    s?.nuevoResponsable,
-    s?.nuevaUbicacion,
-    s?.nuevaLocalizacion,
-    s?.syncError,
-    s?.applyError
-  ].map(x=>norm(x).toLowerCase()).filter(Boolean);
-
-  return parts.join(" | ");
-}
-
-function aplicarFiltrosHistorial(){
-  const term = norm(qs('hist-search')?.value ?? "").toLowerCase();
-  const bounds = getBoundsMs(histRango);
-
-histFiltered = (histAll || []).filter(s=>{
-  const created = Number(getRaw(s,'createdAt') ?? 0);
-  if(bounds && (created < bounds.start || created > bounds.end)) return false;
-
-  // ✅ Filtro Pendientes: pendiente si NO está autorizada (ni aplicada)
-  if(histSoloPendientes && isSessionAutorizada(s)) return false;
-
-  if(term){
-    const blob = sessionSearchBlob(s);
-    if(!blob.includes(term)) return false;
-  }
-  return true;
-});
-
-
-  // Si nos quedamos sin páginas, corregir
-  const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
-  if(histPage >= totalPages) histPage = totalPages - 1;
-  if(histPage < 0) histPage = 0;
-
-  renderHistorial();
-}
-
-function renderHistorial(){
-  const list = qs('hist-list');
-  const pag  = qs('hist-pagination');
-  if(!list || !pag) return;
-
-  if(!histAll.length){
-    list.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Sin datos. Pulsa “Recargar”.</div>`;
-    pag.innerHTML = "";
-    return;
-  }
-
-  const start = histPage * HIST_PAGE_SIZE;
-  const pageItems = histFiltered.slice(start, start + HIST_PAGE_SIZE);
-
-  list.innerHTML = pageItems.length
-    ? pageItems.map(s=>renderHistRow(s)).join("")
-    : `<div class="chip" style="justify-content:center; width:100%;">Sin sesiones para este filtro.</div>`;
-
-  renderHistPagination();
-}
-
-function renderHistPagination(){
-  const pag = qs('hist-pagination');
-  const totalPages = Math.ceil((histFiltered.length || 0) / HIST_PAGE_SIZE);
-  if(totalPages <= 1){ pag.innerHTML = ""; return; }
-
-  let h = "";
-  for(let i=0;i<totalPages;i++){
-    const visible = (i<2 || i>totalPages-3 || (i>=histPage-1 && i<=histPage+1));
-    if(visible) h += `<button class="page-btn ${i===histPage?'active':''}" onclick="irAPaginaHist(${i})">${i+1}</button>`;
-    else if(i===2 || i===totalPages-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
-  }
-  pag.innerHTML = h;
-}
-
-function irAPaginaHist(p){ histPage = p; renderHistorial(); }
-
-function statusBadge(label, ok, warnText){
-  if(warnText){
-    return `<span class="badge warn"><span class="material-symbols-rounded" style="font-size:18px">error</span> ${escapeHtml(label)}</span>`;
-  }
-  if(ok){
-    return `<span class="badge good"><span class="material-symbols-rounded" style="font-size:18px">check_circle</span> ${escapeHtml(label)}</span>`;
-  }
-  return `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">schedule</span> ${escapeHtml(label)}</span>`;
-}
-
-function renderHistRow(s){
-  const when = fmtDate(s.createdAt) || "—";
-
-  const createdBy = resolveUserDisplay(s.creadaPorEmail, histNamesMap);
-  const authBy = resolveUserDisplay(s.autorizadaPor, histNamesMap);
-  const pdfBy  = resolveUserDisplay(s.pdfGeneradoPor, histNamesMap);
-
-const idFull = String(s.id || "");
-const autorizado = isSessionAutorizada(s);
-const estatusLabel = autorizado ? "Autorizado" : "Pendiente";
-const estatusIcon  = autorizado ? "verified_user" : "gpp_maybe";
-const estatusClass = autorizado ? "good" : "warn";
-
-
-  const syncWarn  = norm(s.syncError);
-  const applyWarn = norm(s.applyError);
-
-const badges = [
-  `<span class="badge primary"><span class="material-symbols-rounded" style="font-size:18px">inventory_2</span> ${Number(s.skuCount||0)} SKU${Number(s.skuCount||0)===1?'':'s'}</span>`,
-
-  // ✅ ID completo (scroll)
-  `<span class="badge mono scroll" title="${escapeHtml(idFull)}">#${escapeHtml(idFull)}</span>`,
-
-  `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px; color:#0B4CB3">person</span> Creó: ${escapeHtml(createdBy)}</span>`,
-
-  // ✅ Estatus como app: Pendiente/Autorizado (según aplicada)
-  `<span class="badge ${estatusClass}"><span class="material-symbols-rounded" style="font-size:18px">${estatusIcon}</span> ${escapeHtml(estatusLabel)}</span>`,
-
-  // (Opcional) si quieres seguir mostrando quién autorizó SOLO si existe
-  (norm(s.autorizadaPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">person_check</span> Autorizó: ${escapeHtml(authBy)}</span>` : ``),
-
-  (norm(s.pdfGeneradoPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">picture_as_pdf</span> PDF: ${escapeHtml(pdfBy)}</span>` : ``),
-].filter(Boolean).join('');
-
-  const destinoBits = [
-    norm(s.nuevoResponsable) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">shield_person</span> Resp: ${escapeHtml(s.nuevoResponsable)}</span>` : '',
-    norm(s.nuevaUbicacion) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">location_on</span> Ubic: ${escapeHtml(s.nuevaUbicacion)}</span>` : '',
-    norm(s.nuevaLocalizacion) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">map</span> Loc: ${escapeHtml(s.nuevaLocalizacion)}</span>` : ''
-  ].filter(Boolean).join('');
-
-  return `
-    <div class="hist-row" onclick="abrirDetalleSesionResguardo('${escapeHtml(String(s.id||''))}')">
-      <div style="min-width:0">
-        <div class="hist-title">${escapeHtml(when)}</div>
-        <div class="hist-sub">${badges}</div>
-        ${destinoBits ? `<div class="hist-sub" style="margin-top:6px">${destinoBits}</div>` : ``}
-      </div>
-      <div class="btn-group" onclick="event.stopPropagation()">
-        <button class="btn tonal" onclick="abrirDetalleSesionResguardo('${escapeHtml(String(s.id||''))}')">
-          <span class="material-symbols-rounded">visibility</span> Ver
-        </button>
-      </div>
-    </div>
-  `;
-}
-
-async function fetchResguardoSessionsRemote(empresaId, limit=500){
-  const select =
-    "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
-    "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
-    "sincronizado,sincronizado_at,sync_error," +
-    "autorizada,autorizada_at," +
-    "aplicada,aplicada_at,apply_error," +
-    "resguardo_entries(count)";
-  const url =
-    `${SB_URL}/rest/v1/resguardo_sessions` +
-    `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
-    `&select=${encodeURIComponent(select)}` +
-    `&order=created_at.desc` +
-    `&limit=${limit}` +
-    `&resguardo_entries.limit=1`;
-
-  const res = await fetch(url, {
-    headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
-  });
-  if(!res.ok){
-    const t = await res.text().catch(()=> "");
-    throw new Error(`Error historial (HTTP ${res.status}). ${t||""}`);
-  }
-  const arr = await res.json();
-  return Array.isArray(arr) ? arr : [];
-}
-
-function normalizeSessionRow(o){
-  const entries = o?.resguardo_entries;
-  const countObj = Array.isArray(entries) ? entries[0] : null;
-  const skuCount = Number(countObj?.count || 0);
-
-  return {
-    id: norm(o?.id),
-    createdAt: getRaw(o,'created_at') ?? 0,
-    creadaPorEmail: norm(o?.creada_por_email),
-    autorizadaPor: norm(o?.autorizada_por),
-    pdfGeneradoPor: norm(o?.pdf_generado_por),
-
-    nuevoResponsable: norm(o?.nuevo_responsable),
-    nuevaLocalizacion: norm(o?.nueva_localizacion),
-    nuevaUbicacion: norm(o?.nueva_ubicacion),
-
-    sincronizado: isTrue(o?.sincronizado),
-    sincronizadoAt: getRaw(o,'sincronizado_at'),
-    syncError: norm(o?.sync_error),
-
-    autorizada: isTrue(o?.autorizada),
-    autorizadaAt: getRaw(o,'autorizada_at'),
-
-    aplicada: isTrue(o?.aplicada),
-    aplicadaAt: getRaw(o,'aplicada_at'),
-    applyError: norm(o?.apply_error),
-
-    skuCount
-  };
-}
-
-async function cargarHistorialResguardos(forceRefresh){
-  setHistMsg("");
-  if(!empresaSeleccionada?.id) return;
-
-  const list = qs('hist-list');
-  const pag  = qs('hist-pagination');
-  if(list) list.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
-  if(pag) pag.innerHTML = "";
-
-  try{
-    histNamesMap = await cargarNombresUsuariosPorEmpresa();
-    const raw = await fetchResguardoSessionsRemote(empresaSeleccionada.id, 500);
-    histAll = raw.map(normalizeSessionRow).filter(s=>s.id);
-
+  // =========================
+  // ✅ HISTORIAL + DETALLE RESGUARDOS
+  // =========================
+  let histPrevView = 'view-selector';
+  let histAll = [];
+  let histFiltered = [];
+  let histPage = 0;
+  const HIST_PAGE_SIZE = 25;
+  let histSoloPendientes = false;
+  function toggleHistPendientes(){
+    histSoloPendientes = !histSoloPendientes;
+    const btn = qs('hist-chip-pend');
+    if(btn) btn.classList.toggle('active', histSoloPendientes);
     histPage = 0;
     aplicarFiltrosHistorial();
-  }catch(e){
-    console.error(e);
-    if(list) list.innerHTML = "";
-    if(pag) pag.innerHTML = "";
-    setHistMsg(e.message || "Error cargando historial.");
   }
-}
 
-function abrirDetalleSesionResguardo(id){
-  currentSessionId = id;
-  switchView('view-resguardo-session-detail');
-  cargarDetalleSesionResguardo(id, false);
-}
+  let histRango = 'todo';
+  let histSearchDebounce = null;
+  let histNamesMap = new Map();
 
-function toggleSessionLine(which){
-  if(which === 'orig') sessionShowOriginal = !sessionShowOriginal;
-  if(which === 'act') sessionShowActual = !sessionShowActual;
-  if(which === 'dst') sessionShowDestino = !sessionShowDestino;
-  if(which === 'rev') sessionShowOnlyReview = !sessionShowOnlyReview;
-  renderSessionSummary();
-  renderDetalleSesion();
-}
+  let currentSessionId = null;
+  let sessionInfo = null;
+  let sessionEntries = [];
+  let sessionActivosMap = new Map();
+  let sessionShowOriginal = true;
+  let sessionShowActual = true;
+  let sessionShowDestino = true;
+  let sessionShowOnlyReview = false;
 
-function renderSessionSummary(){
-  const sum = qs('session-summary');
-  if(!sum) return;
+  function resolveUserDisplay(raw, emailToNameMap){
+    const v = norm(raw);
+    if(!v) return "—";
+    if(v.includes("@")){
+      const email = v.toLowerCase();
+      const name = emailToNameMap?.get?.(email) || "";
+      return name ? `${name} · ${v}` : v;
+    }
+    return v;
+  }
 
-  const totalItems = sessionEntries.length;
-  const okItems = sessionEntries.filter(e=>e.__ok===true).length;
-  const reviewItems = totalItems - okItems;
+  function setHistMsg(text){
+    const el = qs('hist-msg');
+    if(!el) return;
+    if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
+    el.innerText = text;
+    el.classList.remove('hidden');
+  }
+  function setSessionMsg(text){
+    const el = qs('session-msg');
+    if(!el) return;
+    if(!text){ el.classList.add('hidden'); el.innerText=""; return; }
+    el.innerText = text;
+    el.classList.remove('hidden');
+  }
 
-  sum.innerHTML = `
-    <span class="chip"><span class="material-symbols-rounded">inventory_2</span><span>${totalItems} item${totalItems===1?'':'s'}</span></span>
-    <span class="chip" style="background:#ECFDF3; border-color:#A7F3D0; color:#065F46"><span class="material-symbols-rounded">check_circle</span><span>OK: ${okItems}</span></span>
-    <span class="chip" style="background:#FFF7ED; border-color:#FDBA74; color:#9A3412"><span class="material-symbols-rounded">warning</span><span>Revisar: ${reviewItems}</span></span>
+  function abrirHistorialResguardos(emailPref){
+    if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    histPrevView = getCurrentVisibleViewId() || 'view-selector';
 
-    <button class="chip-filter ${sessionShowOriginal?'active':''}" onclick="toggleSessionLine('orig')" type="button"><span class="material-symbols-rounded">history</span> Original</button>
-    <button class="chip-filter ${sessionShowActual?'active':''}" onclick="toggleSessionLine('act')" type="button"><span class="material-symbols-rounded">visibility</span> Actual</button>
-    <button class="chip-filter ${sessionShowDestino?'active':''}" onclick="toggleSessionLine('dst')" type="button"><span class="material-symbols-rounded">my_location</span> Destino</button>
-    <button class="chip-filter ${sessionShowOnlyReview?'active':''}" onclick="toggleSessionLine('rev')" type="button"><span class="material-symbols-rounded">filter_alt</span> Sólo revisar</button>
-  `;
-}
+    safeSetText('hist-title', `Resguardos · ${empresaSeleccionada.nombre}`);
+    switchView('view-resguardos-historial');
 
-async function cargarDetalleSesionResguardo(id, force){
-  setSessionMsg("");
-  if(!empresaSeleccionada?.id || !id) return;
+    const inp = qs('hist-search');
+    if(inp) inp.value = emailPref ? String(emailPref) : "";
 
-  const cont = qs('session-entries');
-  const sum  = qs('session-summary');
-  if(cont) cont.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Cargando sesión…</div>`;
-  if(sum) sum.innerHTML = "";
+    histRango = 'todo';
+    marcarChipsHist();
+    histPage = 0;
+    cargarHistorialResguardos(false);
+  }
 
-  try{
-    const nombresMap = await cargarNombresUsuariosPorEmpresa();
+  function volverDeHistorial(){
+    switchView(histPrevView || 'view-selector');
+  }
+  function volverAListaHistorial(){
+    switchView('view-resguardos-historial');
+  }
 
-    // 1) Sesión
-    const selectS =
+  function getCurrentVisibleViewId(){
+    const cards = Array.from(document.querySelectorAll('.card'));
+    const visible = cards.find(c=>!c.classList.contains('hidden'));
+    return visible ? visible.id : null;
+  }
+
+  function setHistRango(r){
+    histRango = r || 'todo';
+    histPage = 0;
+    marcarChipsHist();
+    aplicarFiltrosHistorial();
+  }
+
+  function marcarChipsHist(){
+    const map = { hoy:'hist-chip-hoy', semana:'hist-chip-semana', mes:'hist-chip-mes', todo:'hist-chip-todo' };
+    Object.entries(map).forEach(([k,id])=>{
+      const el = qs(id);
+      if(el) el.classList.toggle('active', k===histRango);
+    });
+  }
+
+  function onHistSearchKey(ev){
+    if(ev.key === 'Enter'){ reiniciarYBuscarHistorial(); return; }
+    if(ev.key === 'Escape'){ limpiarBusquedaHistorial(); return; }
+    if(histSearchDebounce) clearTimeout(histSearchDebounce);
+    histSearchDebounce = setTimeout(()=>{ histPage=0; aplicarFiltrosHistorial(); }, 280);
+  }
+  function reiniciarYBuscarHistorial(){ histPage=0; aplicarFiltrosHistorial(); }
+  function limpiarBusquedaHistorial(){
+    const inp = qs('hist-search'); if(inp) inp.value="";
+    histPage=0; aplicarFiltrosHistorial();
+  }
+
+  function getBoundsMs(rango){
+    const now = new Date();
+    const startOfDayMs = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
+    if(rango === 'hoy'){
+      const s = startOfDayMs(now);
+      return { start:s, end:s + 86400000 - 1 };
+    }
+    if(rango === 'mes'){
+      const s = new Date(now.getFullYear(), now.getMonth(), 1, 0,0,0,0).getTime();
+      const e = new Date(now.getFullYear(), now.getMonth()+1, 1, 0,0,0,0).getTime() - 1;
+      return { start:s, end:e };
+    }
+    if(rango === 'semana'){
+      const day = (x)=> (x.getDay()+6)%7;
+      const s = startOfDayMs(now) - day(now)*86400000;
+      return { start:s, end:s + 7*86400000 - 1 };
+    }
+    return null;
+  }
+
+  function sessionSearchBlob(s){
+    const createdBy = resolveUserDisplay(s?.creadaPorEmail, histNamesMap);
+    const authBy    = resolveUserDisplay(s?.autorizadaPor, histNamesMap);
+    const pdfBy     = resolveUserDisplay(s?.pdfGeneradoPor, histNamesMap);
+
+    const parts = [
+      s?.id,
+      createdBy,
+      authBy,
+      pdfBy,
+      s?.nuevoResponsable,
+      s?.nuevaUbicacion,
+      s?.nuevaLocalizacion,
+      s?.syncError,
+      s?.applyError
+    ].map(x=>norm(x).toLowerCase()).filter(Boolean);
+
+    return parts.join(" | ");
+  }
+
+  function aplicarFiltrosHistorial(){
+    const term = norm(qs('hist-search')?.value ?? "").toLowerCase();
+    const bounds = getBoundsMs(histRango);
+
+    histFiltered = (histAll || []).filter(s=>{
+      const created = Number(getRaw(s,'createdAt') ?? 0);
+      if(bounds && (created < bounds.start || created > bounds.end)) return false;
+
+      if(histSoloPendientes && isSessionAutorizada(s)) return false;
+
+      if(term){
+        const blob = sessionSearchBlob(s);
+        if(!blob.includes(term)) return false;
+      }
+      return true;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
+    if(histPage >= totalPages) histPage = totalPages - 1;
+    if(histPage < 0) histPage = 0;
+
+    renderHistorial();
+  }
+
+  function renderHistorial(){
+    const list = qs('hist-list');
+    const pag  = qs('hist-pagination');
+    if(!list || !pag) return;
+
+    if(!histAll.length){
+      list.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Sin datos. Pulsa “Recargar”.</div>`;
+      pag.innerHTML = "";
+      return;
+    }
+
+    const start = histPage * HIST_PAGE_SIZE;
+    const pageItems = histFiltered.slice(start, start + HIST_PAGE_SIZE);
+
+    list.innerHTML = pageItems.length
+      ? pageItems.map(s=>renderHistRow(s)).join("")
+      : `<div class="chip" style="justify-content:center; width:100%;">Sin sesiones para este filtro.</div>`;
+
+    renderHistPagination();
+  }
+
+  function renderHistPagination(){
+    const pag = qs('hist-pagination');
+    const totalPages = Math.ceil((histFiltered.length || 0) / HIST_PAGE_SIZE);
+    if(totalPages <= 1){ pag.innerHTML = ""; return; }
+
+    let h = "";
+    for(let i=0;i<totalPages;i++){
+      const visible = (i<2 || i>totalPages-3 || (i>=histPage-1 && i<=histPage+1));
+      if(visible) h += `<button class="page-btn ${i===histPage?'active':''}" onclick="irAPaginaHist(${i})">${i+1}</button>`;
+      else if(i===2 || i===totalPages-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
+    }
+    pag.innerHTML = h;
+  }
+
+  function irAPaginaHist(p){ histPage = p; renderHistorial(); }
+
+  function renderHistRow(s){
+    const when = fmtDate(s.createdAt) || "—";
+
+    const createdBy = resolveUserDisplay(s.creadaPorEmail, histNamesMap);
+    const authBy = resolveUserDisplay(s.autorizadaPor, histNamesMap);
+    const pdfBy  = resolveUserDisplay(s.pdfGeneradoPor, histNamesMap);
+
+    const idFull = String(s.id || "");
+    const autorizado = isSessionAutorizada(s);
+    const estatusLabel = autorizado ? "Autorizado" : "Pendiente";
+    const estatusIcon  = autorizado ? "verified_user" : "gpp_maybe";
+    const estatusClass = autorizado ? "good" : "warn";
+
+    const badges = [
+      `<span class="badge primary"><span class="material-symbols-rounded" style="font-size:18px">inventory_2</span> ${Number(s.skuCount||0)} SKU${Number(s.skuCount||0)===1?'':'s'}</span>`,
+      `<span class="badge mono scroll" title="${escapeHtml(idFull)}">#${escapeHtml(idFull)}</span>`,
+      `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px; color:#0B4CB3">person</span> Creó: ${escapeHtml(createdBy)}</span>`,
+      `<span class="badge ${estatusClass}"><span class="material-symbols-rounded" style="font-size:18px">${estatusIcon}</span> ${escapeHtml(estatusLabel)}</span>`,
+      (norm(s.autorizadaPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">person_check</span> Autorizó: ${escapeHtml(authBy)}</span>` : ``),
+      (norm(s.pdfGeneradoPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">picture_as_pdf</span> PDF: ${escapeHtml(pdfBy)}</span>` : ``),
+    ].filter(Boolean).join('');
+
+    const destinoBits = [
+      norm(s.nuevoResponsable) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">shield_person</span> Resp: ${escapeHtml(s.nuevoResponsable)}</span>` : '',
+      norm(s.nuevaUbicacion) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">location_on</span> Ubic: ${escapeHtml(s.nuevaUbicacion)}</span>` : '',
+      norm(s.nuevaLocalizacion) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">map</span> Loc: ${escapeHtml(s.nuevaLocalizacion)}</span>` : ''
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="hist-row" onclick="abrirDetalleSesionResguardo('${escapeHtml(String(s.id||''))}')">
+        <div style="min-width:0">
+          <div class="hist-title">${escapeHtml(when)}</div>
+          <div class="hist-sub">${badges}</div>
+          ${destinoBits ? `<div class="hist-sub" style="margin-top:6px">${destinoBits}</div>` : ``}
+        </div>
+        <div class="btn-group" onclick="event.stopPropagation()">
+          <button class="btn tonal" onclick="abrirDetalleSesionResguardo('${escapeHtml(String(s.id||''))}')">
+            <span class="material-symbols-rounded">visibility</span> Ver
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function fetchResguardoSessionsRemote(empresaId, limit=500){
+    const select =
       "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
       "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
       "sincronizado,sincronizado_at,sync_error," +
-      "autorizada,autorizada_at,aplicada,aplicada_at,apply_error";
+      "autorizada,autorizada_at," +
+      "aplicada,aplicada_at,apply_error," +
+      "resguardo_entries(count)";
+    const url =
+      `${SB_URL}/rest/v1/resguardo_sessions` +
+      `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
+      `&select=${encodeURIComponent(select)}` +
+      `&order=created_at.desc` +
+      `&limit=${limit}` +
+      `&resguardo_entries.limit=1`;
 
-    const urlS = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(id)}&select=${encodeURIComponent(selectS)}`;
-    const rs = await fetch(urlS, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-    if(!rs.ok){
-      const t = await rs.text().catch(()=> "");
-      throw new Error(`Error sesión (HTTP ${rs.status}). ${t||""}`);
-    }
-    const arrS = await rs.json();
-    const rawS = Array.isArray(arrS) ? arrS[0] : null;
-    if(!rawS) throw new Error("No se encontró la sesión.");
-
-    sessionInfo = normalizeSessionRow({ ...rawS, resguardo_entries: [] });
-
-    // Header
-    safeSetText('session-id', `#${String(id)}`); // completo
-    safeSetText('session-date', fmtDate(sessionInfo.createdAt) || "—");
-
-    const createdBy = resolveUserDisplay(sessionInfo.creadaPorEmail, nombresMap);
-    const authBy = resolveUserDisplay(sessionInfo.autorizadaPor, nombresMap);
-    const pdfBy  = resolveUserDisplay(sessionInfo.pdfGeneradoPor, nombresMap);
-
-safeSetText('session-creada', `Creó: ${createdBy}`);
-safeSetText('session-autorizada', `Autorizó: ${authBy || '—'}`);
-safeSetText('session-pdf', `PDF: ${pdfBy || '—'}`);
-
-
-    // 2) Entradas (snapshot original)
-    const selectE = "id,session_id,codigo,descripcion,responsable_original,ubicacion_original,localizacion_original,foto_uri,codigo_barras,genero";
-    const urlE = `${SB_URL}/rest/v1/resguardo_entries?session_id=eq.${encodeURIComponent(id)}&select=${encodeURIComponent(selectE)}&order=id.asc`;
-    const re = await fetch(urlE, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-    if(!re.ok){
-      const t = await re.text().catch(()=> "");
-      throw new Error(`Error entradas (HTTP ${re.status}). ${t||""}`);
-    }
-    sessionEntries = await re.json();
-    if(!Array.isArray(sessionEntries)) sessionEntries = [];
-
-    // "Anterior" (tomamos el primer snapshot como referencia visual)
-    const first = sessionEntries[0] || {};
-    safeSetText('session-resp-prev', norm(first?.responsable_original) || "—");
-    safeSetText('session-loc-prev',  norm(first?.localizacion_original) || "—");
-    safeSetText('session-ubi-prev',  norm(first?.ubicacion_original) || "—");
-
-    // "Destino"
-    safeSetText('session-resp-new', norm(rawS?.nuevo_responsable) || "—");
-    safeSetText('session-loc-new',  norm(rawS?.nueva_localizacion) || "—");
-    safeSetText('session-ubi-new',  norm(rawS?.nueva_ubicacion) || "—");
-
-    // 3) Activos actuales para comparar (batch, sku OR codigo_barras)
-    const codes = Array.from(new Set(sessionEntries.map(e=>norm(e?.codigo)).filter(Boolean)));
-    sessionActivosMap = await fetchActivosPorCodigos(empresaSeleccionada.id, codes);
-
-    // 4) Calcular OK/Revisar por entry
-    const targetResp = norm(rawS?.nuevo_responsable);
-    const targetLoc  = norm(rawS?.nueva_localizacion);
-    const targetUbi  = norm(rawS?.nueva_ubicacion);
-
-    sessionEntries = sessionEntries.map(e=>{
-      const code = norm(e?.codigo);
-      const act = code ? sessionActivosMap.get(code) : null;
-      const ok = calcularOkVsDestino(act, targetResp, targetUbi, targetLoc);
-      return { ...e, __ok: ok, __activo: act };
+    const res = await fetch(url, {
+      headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
     });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(`Error historial (HTTP ${res.status}). ${t||""}`);
+    }
+    const arr = await res.json();
+    return Array.isArray(arr) ? arr : [];
+  }
 
-    // Defaults (como app: mostrar todo)
-    sessionShowOriginal = true;
-    sessionShowActual = true;
-    sessionShowDestino = true;
-    sessionShowOnlyReview = false;
+  function normalizeSessionRow(o){
+    const entries = o?.resguardo_entries;
+    const countObj = Array.isArray(entries) ? entries[0] : null;
+    const skuCount = Number(countObj?.count || 0);
 
+    return {
+      id: norm(o?.id),
+      createdAt: getRaw(o,'created_at') ?? 0,
+      creadaPorEmail: norm(o?.creada_por_email),
+      autorizadaPor: norm(o?.autorizada_por),
+      pdfGeneradoPor: norm(o?.pdf_generado_por),
+
+      nuevoResponsable: norm(o?.nuevo_responsable),
+      nuevaLocalizacion: norm(o?.nueva_localizacion),
+      nuevaUbicacion: norm(o?.nueva_ubicacion),
+
+      sincronizado: isTrue(o?.sincronizado),
+      sincronizadoAt: getRaw(o,'sincronizado_at'),
+      syncError: norm(o?.sync_error),
+
+      autorizada: isTrue(o?.autorizada),
+      autorizadaAt: getRaw(o,'autorizada_at'),
+
+      aplicada: isTrue(o?.aplicada),
+      aplicadaAt: getRaw(o,'aplicada_at'),
+      applyError: norm(o?.apply_error),
+
+      skuCount
+    };
+  }
+
+  async function cargarHistorialResguardos(forceRefresh){
+    setHistMsg("");
+    if(!empresaSeleccionada?.id) return;
+
+    const list = qs('hist-list');
+    const pag  = qs('hist-pagination');
+    if(list) list.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
+    if(pag) pag.innerHTML = "";
+
+    try{
+      histNamesMap = await cargarNombresUsuariosPorEmpresa();
+      const raw = await fetchResguardoSessionsRemote(empresaSeleccionada.id, 500);
+      histAll = raw.map(normalizeSessionRow).filter(s=>s.id);
+
+      histPage = 0;
+      aplicarFiltrosHistorial();
+    }catch(e){
+      console.error(e);
+      if(list) list.innerHTML = "";
+      if(pag) pag.innerHTML = "";
+      setHistMsg(e.message || "Error cargando historial.");
+    }
+  }
+
+  function abrirDetalleSesionResguardo(id){
+    currentSessionId = id;
+    switchView('view-resguardo-session-detail');
+    cargarDetalleSesionResguardo(id, false);
+  }
+
+  function toggleSessionLine(which){
+    if(which === 'orig') sessionShowOriginal = !sessionShowOriginal;
+    if(which === 'act') sessionShowActual = !sessionShowActual;
+    if(which === 'dst') sessionShowDestino = !sessionShowDestino;
+    if(which === 'rev') sessionShowOnlyReview = !sessionShowOnlyReview;
     renderSessionSummary();
     renderDetalleSesion();
-  }catch(e){
-    console.error(e);
-    if(qs('session-entries')) qs('session-entries').innerHTML = "";
-    if(qs('session-summary')) qs('session-summary').innerHTML = "";
-    setSessionMsg(e.message || "Error cargando sesión.");
   }
-}
 
-function calcularOkVsDestino(activo, targetResp, targetUbi, targetLoc){
-  // Si no hay activo actual, forzar revisar
-  if(!activo) return false;
+  function renderSessionSummary(){
+    const sum = qs('session-summary');
+    if(!sum) return;
 
-  const eqi = (a,b)=> norm(a).toLowerCase() === norm(b).toLowerCase();
+    const totalItems = sessionEntries.length;
+    const okItems = sessionEntries.filter(e=>e.__ok===true).length;
+    const reviewItems = totalItems - okItems;
 
-  // Si el destino viene vacío, no lo exigimos
-  if(targetResp && !eqi(activo?.responsable, targetResp)) return false;
-  if(targetUbi  && !eqi(activo?.ubicacion,  targetUbi )) return false;
-  if(targetLoc  && !eqi(activo?.localizacion, targetLoc)) return false;
-  return true;
-}
+    sum.innerHTML = `
+      <span class="chip"><span class="material-symbols-rounded">inventory_2</span><span>${totalItems} item${totalItems===1?'':'s'}</span></span>
+      <span class="chip" style="background:#ECFDF3; border-color:#A7F3D0; color:#065F46"><span class="material-symbols-rounded">check_circle</span><span>OK: ${okItems}</span></span>
+      <span class="chip" style="background:#FFF7ED; border-color:#FDBA74; color:#9A3412"><span class="material-symbols-rounded">warning</span><span>Revisar: ${reviewItems}</span></span>
 
-async function fetchActivosPorCodigos(empresaId, codes){
-  const map = new Map();
-  const uniq = Array.from(new Set((codes||[]).map(norm).filter(Boolean)));
-  if(!uniq.length) return map;
+      <button class="chip-filter ${sessionShowOriginal?'active':''}" onclick="toggleSessionLine('orig')" type="button"><span class="material-symbols-rounded">history</span> Original</button>
+      <button class="chip-filter ${sessionShowActual?'active':''}" onclick="toggleSessionLine('act')" type="button"><span class="material-symbols-rounded">visibility</span> Actual</button>
+      <button class="chip-filter ${sessionShowDestino?'active':''}" onclick="toggleSessionLine('dst')" type="button"><span class="material-symbols-rounded">my_location</span> Destino</button>
+      <button class="chip-filter ${sessionShowOnlyReview?'active':''}" onclick="toggleSessionLine('rev')" type="button"><span class="material-symbols-rounded">filter_alt</span> Sólo revisar</button>
+    `;
+  }
 
-  // chunks para no romper URL
-  const CHUNK = 120;
-  for(let i=0;i<uniq.length;i+=CHUNK){
-    const chunk = uniq.slice(i, i+CHUNK);
-    const inList = chunk.map(s=>`"${String(s).replace(/\"/g,'\\\"')}"`).join(',');
-    const orValue = `(sku.in.(${inList}),codigo_barras.in.(${inList}))`;
+  async function cargarDetalleSesionResguardo(id, force){
+    setSessionMsg("");
+    if(!empresaSeleccionada?.id || !id) return;
 
-    const select = "sku,descripcion,codigo_barras,responsable,ubicacion,localizacion,genero,costo,dado_de_baja";
-    const urlA =
-      `${SB_URL}/rest/v1/activos` +
-      `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
-      `&or=${encodeURIComponent(orValue)}` +
-      `&select=${encodeURIComponent(select)}` +
-      `&limit=5000`;
+    const cont = qs('session-entries');
+    const sum  = qs('session-summary');
+    if(cont) cont.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Cargando sesión…</div>`;
+    if(sum) sum.innerHTML = "";
 
-    const ra = await fetch(urlA, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-    if(!ra.ok){
-      // no tiramos todo: solo warning
-      console.warn("No se pudieron cargar activos para comparar:", ra.status, await ra.text().catch(()=> ""));
-      continue;
+    try{
+      const nombresMap = await cargarNombresUsuariosPorEmpresa();
+
+      const selectS =
+        "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
+        "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
+        "sincronizado,sincronizado_at,sync_error," +
+        "autorizada,autorizada_at,aplicada,aplicada_at,apply_error";
+
+      const urlS = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(id)}&select=${encodeURIComponent(selectS)}`;
+      const rs = await fetch(urlS, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      if(!rs.ok){
+        const t = await rs.text().catch(()=> "");
+        throw new Error(`Error sesión (HTTP ${rs.status}). ${t||""}`);
+      }
+      const arrS = await rs.json();
+      const rawS = Array.isArray(arrS) ? arrS[0] : null;
+      if(!rawS) throw new Error("No se encontró la sesión.");
+
+      sessionInfo = normalizeSessionRow({ ...rawS, resguardo_entries: [] });
+
+      safeSetText('session-id', `#${String(id)}`);
+      safeSetText('session-date', fmtDate(sessionInfo.createdAt) || "—");
+
+      const createdBy = resolveUserDisplay(sessionInfo.creadaPorEmail, nombresMap);
+      const authBy = resolveUserDisplay(sessionInfo.autorizadaPor, nombresMap);
+      const pdfBy  = resolveUserDisplay(sessionInfo.pdfGeneradoPor, nombresMap);
+
+      safeSetText('session-creada', `Creó: ${createdBy}`);
+      safeSetText('session-autorizada', `Autorizó: ${authBy || '—'}`);
+      safeSetText('session-pdf', `PDF: ${pdfBy || '—'}`);
+
+      const selectE = "id,session_id,codigo,descripcion,responsable_original,ubicacion_original,localizacion_original,foto_uri,codigo_barras,genero";
+      const urlE = `${SB_URL}/rest/v1/resguardo_entries?session_id=eq.${encodeURIComponent(id)}&select=${encodeURIComponent(selectE)}&order=id.asc`;
+      const re = await fetch(urlE, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      if(!re.ok){
+        const t = await re.text().catch(()=> "");
+        throw new Error(`Error entradas (HTTP ${re.status}). ${t||""}`);
+      }
+      sessionEntries = await re.json();
+      if(!Array.isArray(sessionEntries)) sessionEntries = [];
+
+      const first = sessionEntries[0] || {};
+      safeSetText('session-resp-prev', `Resp (antes): ${norm(first?.responsable_original) || "—"}`);
+      safeSetText('session-ubic-prev', `Ubic (antes): ${norm(first?.ubicacion_original) || "—"}`);
+      safeSetText('session-loc-prev',  `Loc (antes): ${norm(first?.localizacion_original) || "—"}`);
+
+      safeSetText('session-resp-new', `Resp (dest): ${norm(rawS?.nuevo_responsable) || "—"}`);
+      safeSetText('session-ubic-new', `Ubic (dest): ${norm(rawS?.nueva_ubicacion) || "—"}`);
+      safeSetText('session-loc-new',  `Loc (dest): ${norm(rawS?.nueva_localizacion) || "—"}`);
+
+      const codes = Array.from(new Set(sessionEntries.map(e=>norm(e?.codigo)).filter(Boolean)));
+      sessionActivosMap = await fetchActivosPorCodigos(empresaSeleccionada.id, codes);
+
+      const targetResp = norm(rawS?.nuevo_responsable);
+      const targetLoc  = norm(rawS?.nueva_localizacion);
+      const targetUbi  = norm(rawS?.nueva_ubicacion);
+
+      sessionEntries = sessionEntries.map(e=>{
+        const code = norm(e?.codigo);
+        const act = code ? sessionActivosMap.get(code) : null;
+        const ok = calcularOkVsDestino(act, targetResp, targetUbi, targetLoc);
+        return { ...e, __ok: ok, __activo: act };
+      });
+
+      sessionShowOriginal = true;
+      sessionShowActual = true;
+      sessionShowDestino = true;
+      sessionShowOnlyReview = false;
+
+      renderSessionSummary();
+      renderDetalleSesion();
+    }catch(e){
+      console.error(e);
+      if(qs('session-entries')) qs('session-entries').innerHTML = "";
+      if(qs('session-summary')) qs('session-summary').innerHTML = "";
+      setSessionMsg(e.message || "Error cargando sesión.");
     }
-    const aa = await ra.json();
-    (aa||[]).forEach(a=>{
-      const sku = norm(a?.sku);
-      const cb  = norm(a?.codigo_barras);
-      if(sku) map.set(sku, a);
-      if(cb)  map.set(cb, a);
-    });
-  }
-  return map;
-}
-
-function isSessionAutorizada(s){
-  // Consideramos autorizada si ya la autorizaron O si ya fue aplicada
-  return isTrue(s?.autorizada) || isTrue(s?.aplicada);
-}
-
-
-function limpiarBusquedaDetalleSesion(){
-  const inp = qs('session-search'); if(inp) inp.value="";
-  renderDetalleSesion();
-}
-function filtrarDetalleSesion(){ renderDetalleSesion(); }
-
-function renderDetalleSesion(){
-  const cont = qs('session-entries');
-  if(!cont) return;
-
-  const term = norm(qs('session-search')?.value ?? "").toLowerCase();
-
-  let list = sessionEntries || [];
-  if(term){
-    list = list.filter(e=>{
-      const code = norm(e?.codigo).toLowerCase();
-      const desc = norm(e?.descripcion || e?.__activo?.descripcion).toLowerCase();
-      return code.includes(term) || desc.includes(term);
-    });
   }
 
-  if(sessionShowOnlyReview){
-    list = list.filter(e=>e.__ok !== true);
+  function calcularOkVsDestino(activo, targetResp, targetUbi, targetLoc){
+    if(!activo) return false;
+    const eqi = (a,b)=> norm(a).toLowerCase() === norm(b).toLowerCase();
+    if(targetResp && !eqi(activo?.responsable, targetResp)) return false;
+    if(targetUbi  && !eqi(activo?.ubicacion,  targetUbi )) return false;
+    if(targetLoc  && !eqi(activo?.localizacion, targetLoc)) return false;
+    return true;
   }
 
-  cont.innerHTML = list.length
-    ? list.map(e=>renderEntryRow(e)).join("")
-    : `<div class="chip" style="justify-content:center; width:100%;">Sin entradas para este filtro.</div>`;
-}
+  async function fetchActivosPorCodigos(empresaId, codes){
+    const map = new Map();
+    const uniq = Array.from(new Set((codes||[]).map(norm).filter(Boolean)));
+    if(!uniq.length) return map;
 
-function renderEntryRow(e){
-  const code = norm(e?.codigo);
-  const act  = e?.__activo || null;
+    const CHUNK = 120;
+    for(let i=0;i<uniq.length;i+=CHUNK){
+      const chunk = uniq.slice(i, i+CHUNK);
+      const inList = chunk.map(s=>`"${String(s).replace(/\"/g,'\\\"')}"`).join(',');
+      const orValue = `(sku.in.(${inList}),codigo_barras.in.(${inList}))`;
 
-  const desc = norm(e?.descripcion) || norm(act?.descripcion) || "";
+      const select = "sku,descripcion,codigo_barras,responsable,ubicacion,localizacion,genero,costo,dado_de_baja";
+      const urlA =
+        `${SB_URL}/rest/v1/activos` +
+        `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
+        `&or=${encodeURIComponent(orValue)}` +
+        `&select=${encodeURIComponent(select)}` +
+        `&limit=5000`;
 
-  const ok = e?.__ok === true;
-  const badgeClass = ok ? "good" : "warn";
-  const badgeIcon  = ok ? "check_circle" : "warning";
-  const badgeText  = ok ? "OK" : (act ? "Revisar" : "No encontrado");
+      const ra = await fetch(urlA, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      if(!ra.ok){
+        console.warn("No se pudieron cargar activos para comparar:", ra.status, await ra.text().catch(()=> ""));
+        continue;
+      }
+      const aa = await ra.json();
+      (aa||[]).forEach(a=>{
+        const sku = norm(a?.sku);
+        const cb  = norm(a?.codigo_barras);
+        if(sku) map.set(sku, a);
+        if(cb)  map.set(cb, a);
+      });
+    }
+    return map;
+  }
 
-  const orig = {
-    resp: norm(e?.responsable_original),
-    ubic: norm(e?.ubicacion_original),
-    loc:  norm(e?.localizacion_original),
-  };
-  const actual = {
-    resp: norm(act?.responsable),
-    ubic: norm(act?.ubicacion),
-    loc:  norm(act?.localizacion),
-  };
-  const destino = {
-    resp: norm(sessionInfo?.nuevoResponsable),
-    ubic: norm(sessionInfo?.nuevaUbicacion),
-    loc:  norm(sessionInfo?.nuevaLocalizacion),
-  };
+  function isSessionAutorizada(s){
+    return isTrue(s?.autorizada) || isTrue(s?.aplicada);
+  }
 
-  const origLine = `Original · Resp: ${escapeHtml(orig.resp||'—')} · Ubic: ${escapeHtml(orig.ubic||'—')} · Loc: ${escapeHtml(orig.loc||'—')}`;
-  const actualLine = act
-    ? `Actual · Resp: ${escapeHtml(actual.resp||'—')} · Ubic: ${escapeHtml(actual.ubic||'—')} · Loc: ${escapeHtml(actual.loc||'—')}`
-    : `Actual · (no encontrado en activos)`;
-  const destinoLine = `Destino · Resp: ${escapeHtml(destino.resp||'—')} · Ubic: ${escapeHtml(destino.ubic||'—')} · Loc: ${escapeHtml(destino.loc||'—')}`;
+  function limpiarBusquedaDetalleSesion(){
+    const inp = qs('session-search'); if(inp) inp.value="";
+    renderDetalleSesion();
+  }
+  function filtrarDetalleSesion(){ renderDetalleSesion(); }
 
-  const metaBits = [
-    norm(e?.codigo_barras) ? `CB: ${escapeHtml(e.codigo_barras)}` : (norm(act?.codigo_barras) ? `CB: ${escapeHtml(act.codigo_barras)}` : ""),
-    norm(e?.genero) ? `Género: ${escapeHtml(e.genero)}` : (norm(act?.genero) ? `Género: ${escapeHtml(act.genero)}` : ""),
-  ].filter(Boolean).join(" · ");
+  function renderDetalleSesion(){
+    const cont = qs('session-entries');
+    if(!cont) return;
 
-  return `
-    <div class="detail-row">
-      <div style="min-width:0">
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <div class="detail-sku">${escapeHtml(code||"—")}</div>
-          <span class="badge ${badgeClass}">
-            <span class="material-symbols-rounded" style="font-size:18px">${badgeIcon}</span>
-            <span class="mini">${escapeHtml(badgeText)}</span>
-          </span>
+    const term = norm(qs('session-search')?.value ?? "").toLowerCase();
+
+    let list = sessionEntries || [];
+    if(term){
+      list = list.filter(e=>{
+        const code = norm(e?.codigo).toLowerCase();
+        const desc = norm(e?.descripcion || e?.__activo?.descripcion).toLowerCase();
+        return code.includes(term) || desc.includes(term);
+      });
+    }
+
+    if(sessionShowOnlyReview){
+      list = list.filter(e=>e.__ok !== true);
+    }
+
+    cont.innerHTML = list.length
+      ? list.map(e=>renderEntryRow(e)).join("")
+      : `<div class="chip" style="justify-content:center; width:100%;">Sin entradas para este filtro.</div>`;
+  }
+
+  function renderEntryRow(e){
+    const code = norm(e?.codigo);
+    const act  = e?.__activo || null;
+
+    const desc = norm(e?.descripcion) || norm(act?.descripcion) || "";
+
+    const ok = e?.__ok === true;
+    const badgeClass = ok ? "good" : "warn";
+    const badgeIcon  = ok ? "check_circle" : "warning";
+    const badgeText  = ok ? "OK" : (act ? "Revisar" : "No encontrado");
+
+    const orig = {
+      resp: norm(e?.responsable_original),
+      ubic: norm(e?.ubicacion_original),
+      loc:  norm(e?.localizacion_original),
+    };
+    const actual = {
+      resp: norm(act?.responsable),
+      ubic: norm(act?.ubicacion),
+      loc:  norm(act?.localizacion),
+    };
+    const destino = {
+      resp: norm(sessionInfo?.nuevoResponsable),
+      ubic: norm(sessionInfo?.nuevaUbicacion),
+      loc:  norm(sessionInfo?.nuevaLocalizacion),
+    };
+
+    const origLine = `Original · Resp: ${escapeHtml(orig.resp||'—')} · Ubic: ${escapeHtml(orig.ubic||'—')} · Loc: ${escapeHtml(orig.loc||'—')}`;
+    const actualLine = act
+      ? `Actual · Resp: ${escapeHtml(actual.resp||'—')} · Ubic: ${escapeHtml(actual.ubic||'—')} · Loc: ${escapeHtml(actual.loc||'—')}`
+      : `Actual · (no encontrado en activos)`;
+    const destinoLine = `Destino · Resp: ${escapeHtml(destino.resp||'—')} · Ubic: ${escapeHtml(destino.ubic||'—')} · Loc: ${escapeHtml(destino.loc||'—')}`;
+
+    const metaBits = [
+      norm(e?.codigo_barras) ? `CB: ${escapeHtml(e.codigo_barras)}` : (norm(act?.codigo_barras) ? `CB: ${escapeHtml(act.codigo_barras)}` : ""),
+      norm(e?.genero) ? `Género: ${escapeHtml(e.genero)}` : (norm(act?.genero) ? `Género: ${escapeHtml(act.genero)}` : ""),
+    ].filter(Boolean).join(" · ");
+
+    return `
+      <div class="detail-row">
+        <div style="min-width:0">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <div class="detail-sku">${escapeHtml(code||"—")}</div>
+            <span class="badge ${badgeClass}">
+              <span class="material-symbols-rounded" style="font-size:18px">${badgeIcon}</span>
+              <span class="mini">${escapeHtml(badgeText)}</span>
+            </span>
+          </div>
+
+          ${desc ? `<div class="detail-desc">${escapeHtml(desc)}</div>` : ``}
+          ${metaBits ? `<div class="detail-meta">${metaBits}</div>` : ``}
+
+          ${(sessionShowOriginal && origLine) ? `<div class="detail-meta">${origLine}</div>` : ``}
+          ${(sessionShowActual && actualLine) ? `<div class="detail-meta">${actualLine}</div>` : ``}
+          ${(sessionShowDestino && destinoLine) ? `<div class="detail-meta">${destinoLine}</div>` : ``}
         </div>
 
-        ${desc ? `<div class="detail-desc">${escapeHtml(desc)}</div>` : ``}
-        ${metaBits ? `<div class="detail-meta">${metaBits}</div>` : ``}
-
-        ${(sessionShowOriginal && origLine) ? `<div class="detail-meta">${origLine}</div>` : ``}
-        ${(sessionShowActual && actualLine) ? `<div class="detail-meta">${actualLine}</div>` : ``}
-        ${(sessionShowDestino && destinoLine) ? `<div class="detail-meta">${destinoLine}</div>` : ``}
+        <div class="btn-group">
+          <button class="btn tonal" onclick="abrirSkuDesdeResguardo('${escapeHtml(code)}')">
+            <span class="material-symbols-rounded">open_in_new</span> SKU
+          </button>
+        </div>
       </div>
+    `;
+  }
 
-      <div class="btn-group">
-        <button class="btn tonal" onclick="abrirSkuDesdeResguardo('${escapeHtml(code)}')">
-          <span class="material-symbols-rounded">open_in_new</span> SKU
-        </button>
-      </div>
-    </div>
-  `;
-}
+  function abrirSkuDesdeResguardo(codigo){
+    if(!codigo) return;
+    switchView('view-skus');
+    const input = qs('sku-search');
+    if(input){ input.value = codigo; }
+    skuExtraFiltro = null;
+    resetChipFiltroUI();
+    soloBaja = false;
+    qs('chip-baja')?.classList.remove('active');
+    paginaActual = 0;
+    consultarSkus();
+  }
 
-function abrirSkuDesdeResguardo(codigo){
-  if(!codigo) return;
-  switchView('view-skus');
-  const input = qs('sku-search');
-  if(input){ input.value = codigo; }
-  skuExtraFiltro = null;
-  resetChipFiltroUI();
-  soloBaja = false;
-  qs('chip-baja')?.classList.remove('active');
-  paginaActual = 0;
-  consultarSkus();
-}
+  function openHistorialForEmail(email){
+    abrirHistorialResguardos(email);
+  }
 
-// Re-uso desde Dashboard -> Historial
-function openHistorialForEmail(email){
-  abrirHistorialResguardos(email);
-}
-
-
-// asegurar delegación lista empresas desde el inicio
+  // ✅ asegurar delegación lista empresas desde el inicio
   document.addEventListener('DOMContentLoaded', setupEmpresaDelegation);
 </script>
 </body>
