@@ -390,7 +390,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.4.4</div>
+      <div class="version-tag">2026.02.05-1.3</div>
     </div>
   </div>
 
@@ -728,11 +728,7 @@
   const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
   const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
 
-  // Al inicio del script en index.html, asegúrate de que sean accesibles
-let sessionToken = "", userEmail = "";
-window.empresaSeleccionada = null; // Cambiar a window
-window.skuExtraFiltro = null;     // Cambiar a window
-  
+  let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
@@ -1590,23 +1586,28 @@ window.skuExtraFiltro = null;     // Cambiar a window
     `).join('');
   }
 
-function aplicarCatalogoFiltro(tipo, valorEnc) {
-  skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
-  
-  // ✅ Agregamos esta línea para notificar al script del PDF
-  if (typeof window.__resguardoPdfWebOnStateChange === 'function') {
-    window.__resguardoPdfWebOnStateChange();
-  }
+  function aplicarCatalogoFiltro(tipo, valorEnc){
+    // Filtro extra desde Catálogos -> debe reflejarse también en window para módulos externos (PDF)
+    skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
+    try{ window.skuExtraFiltro = skuExtraFiltro; }catch(e){}
+    try{ window.sessionToken = sessionToken; }catch(e){}
+    try{ window.empresaSeleccionada = empresaSeleccionada; }catch(e){}
 
-  switchView('view-skus');
-  paginaActual = 0;
-  consultarSkus();
-}
+    switchView('view-skus');
+    paginaActual = 0;
+    consultarSkus();
+
+    // Notificar a listeners (ej. resguardo-pdf-web.v2.js) después de navegar/renderizar
+    try{ setTimeout(()=>{ if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange(); }, 0); }catch(e){}
+  }
 
   function logout(){
     stopScanner();
     sessionToken=""; userEmail=""; empresaSeleccionada=null;
     cacheSkus=[]; skuExtraFiltro=null;
+    try{ window.sessionToken = sessionToken; }catch(e){}
+    try{ window.empresaSeleccionada = empresaSeleccionada; }catch(e){}
+    try{ window.skuExtraFiltro = skuExtraFiltro; }catch(e){}
     qs('chip-empresa').classList.add('hidden');
     setSkusMsg("");
     setDashMsg("");
@@ -2557,7 +2558,6 @@ function aplicarCatalogoFiltro(tipo, valorEnc) {
   // ✅ asegurar delegación lista empresas desde el inicio
   document.addEventListener('DOMContentLoaded', setupEmpresaDelegation);
 </script>
-  <!-- Cache-bust (GitHub Pages suele cachear scripts) -->
-  <script src="resguardo-pdf-web.js?v=2"></script>
+  <script src="resguardo-pdf-web.v2.js?v=2"></script>
 </body>
 </html>
