@@ -6,14 +6,8 @@
    - El PDF replica el layout de la app (tabla 4 columnas, zebra, cajas, legal, notas, firmas).
 */
 (function(){
-  // ✅ En index.html SB_URL / SB_KEY están declarados como `const` globales,
-  // pero NO como propiedades de window. Un script externo puede leerlos por
-  // identificador (SB_URL / SB_KEY), pero NO por window.SB_URL.
-  //
-  // Para evitar falsos "0 resultados" (por pegarle a /undefined/rest/... en GitHub Pages),
-  // leemos de forma tolerante:
-  const SUPABASE_URL = (typeof SB_URL === "string" && SB_URL) || (typeof window.SB_URL === "string" && window.SB_URL) || "";
-  const SUPABASE_KEY = (typeof SB_KEY === "string" && SB_KEY) || (typeof window.SB_KEY === "string" && window.SB_KEY) || "";
+  const SB_URL = (typeof globalThis.SB_URL !== 'undefined' && globalThis.SB_URL) ? globalThis.SB_URL : (window.SB_URL || '');
+  const SB_KEY = (typeof globalThis.SB_KEY !== 'undefined' && globalThis.SB_KEY) ? globalThis.SB_KEY : (window.SB_KEY || '');
 
   const LEGAL_TEXT =
     "El suscrito, en mi carácter de Servidor Público del Poder Judicial del Estado de Querétaro, por medio del presente ME OBLIGO y acepto de conformidad, la custodia del mobiliario y equipo de cómputo descritos en el presente, asimismo, me comprometo a usarlos diligentemente para el fin institucional encomendado y a comunicar al departamento de activo fijo, de cualquier modificación, cambio, deterioro, pérdida, destrucción o tema de interés relacionado con los mismos, que soy sabedor de las sanciones aplicables para el caso de no hacerlo así. Lo anterior, de conformidad con lo dispuesto en los Artículos 7 fracción I de la Ley General de Responsabilidades Administrativas, 76 fracción XI, 114 fracción XX, 123 fracción I y XI de la Ley Orgánica del Poder Judicial del Estado de Querétaro, 2 de la Ley de Responsabilidades de los Servidores Públicos del Estado de Querétaro, 34 fracciones I y II del Reglamento de la Oficialía Mayor y D.1.1 párrafos tercero y cuarto del Acuerdo por el que se emiten los Lineamientos Dirigidos a Asegurar que el Sistema de Contabilidad Gubernamental facilite el Registro y Control de los Inventarios de los Bienes Muebles e Inmuebles de los Entes Públicos.";
@@ -53,7 +47,10 @@
 
   function getResponsableFiltro(){
     const f = window.skuExtraFiltro;
-    if(!f || f.tipo !== "responsable") return "";
+    const tipo = norm(f?.tipo).toLowerCase();
+    if(!f) return "";
+    // aceptar variantes como 'responsable', 'responsables'
+    if(!(tipo === "responsable" || tipo === "responsables")) return "";
     return norm(f.valor);
   }
 
@@ -121,6 +118,7 @@
     btn.disabled = !ok;
     btn.style.opacity = ok ? "1" : ".55";
     btn.title = ok ? `Imprimir resguardo de ${resp}` : "Selecciona un Responsable en Catálogos para habilitar";
+    try{ console.debug("[PDF] state", {viewSkus:isViewSkusVisible(), resp, hasEmpresa:!!window.empresaSeleccionada, hasToken:!!window.sessionToken, filtro:window.skuExtraFiltro}); }catch(e){}
   }
 
   // Exponemos un hook para que index.html lo llame cuando cambie estado/filtros
@@ -137,8 +135,9 @@
     const token = window.sessionToken;
     if(!empresaId || !token) return [];
 
-    if(!SUPABASE_URL){
-      throw new Error("No se detectó SB_URL / SUPABASE_URL. Asegúrate de cargar resguardo-pdf-web.js después de declarar SB_URL en index.html.");
+    // Config base de Supabase (tomada del index.html). Si esto falla, no es '0 resultados': es configuración/caché.
+    if(!SB_URL || !SB_KEY){
+      throw new Error("No se detectó SB_URL/SB_KEY para Supabase. Asegúrate de estar usando index.updated.v2.html y resguardo-pdf-web.v2.js (hard refresh).");
     }
 
     // Respetar "Solo baja" del UI (si existe)
@@ -146,7 +145,7 @@
     const soloBaja = !!(soloBajaBtn && soloBajaBtn.classList.contains("active"));
 
     const headers = {
-      "apikey": SUPABASE_KEY,
+      "apikey": SB_KEY,
       "Authorization": `Bearer ${token}`,
       "Prefer": "count=exact"
     };
@@ -166,15 +165,12 @@
       // Orden cercano al app: por sku asc (en PDF es tabla)
       params.push(`order=sku.asc`);
 
-      const url = `${SUPABASE_URL}/rest/v1/activos?${params.join("&")}`;
+      const url = `${SB_URL}/rest/v1/activos?${params.join("&")}`;
       const res = await fetch(url, { headers: { ...headers, "Range": `${desde}-${desde+pageSize-1}` } });
-
-      // 416 = no hay más resultados en este rango
-      if(res.status === 416) break;
-
       if(!res.ok){
         const t = await res.text().catch(()=> "");
-        throw new Error(`Error al descargar activos para PDF (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+        console.error("Error fetchActivosForPdf:", res.status, t);
+        break;
       }
       const batch = await res.json();
       const range = res.headers.get("Content-Range");
