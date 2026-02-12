@@ -1,4 +1,4 @@
-/* resguardo-pdf-web.js
+/* resguardo-pdf-web.v3.js
    Generación de PDF de Resguardo (WEB) para un RESPONSABLE seleccionado desde Catálogos.
    - Se habilita el botón "Imprimir resguardo" SOLO cuando:
      1) Estás en vista SKUs (view-skus)
@@ -126,6 +126,28 @@
 
   // Ejecutar al cargar
   document.addEventListener("DOMContentLoaded", updateButtonState);
+
+  // ✅ Re-evaluar cuando cambie el DOM (cambio de vistas, render de toolbar, etc.)
+  try{
+    const mo = new MutationObserver(()=>{ updateButtonState(); });
+    mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["class"]});
+  }catch(e){}
+
+  // ✅ Asegurar handler aunque el HTML cambie (además del onclick inline)
+  document.addEventListener("click", (ev)=>{
+    const t = ev.target;
+    const btn = t && (t.closest ? t.closest("#btn-print-resguardo") : null);
+    if(btn){
+      // si está disabled, el navegador no dispara click; este handler solo ayuda si el disabled se manipula por CSS
+      // o si el click viene de un hijo del botón en algún navegador raro.
+      if(btn.disabled) return;
+      // Si el HTML aún trae onclick inline, esto será redundante pero inofensivo.
+      if(typeof window.imprimirResguardoResponsable === "function"){
+        ev.preventDefault();
+        window.imprimirResguardoResponsable();
+      }
+    }
+  }, true);
 
   // =========================
   // ✅ Fetch: traer TODOS los activos del responsable (resp) para PDF
