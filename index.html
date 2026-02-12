@@ -390,7 +390,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.4.1</div>
+      <div class="version-tag">2026.02.05-1.4.2</div>
     </div>
   </div>
 
@@ -733,7 +733,7 @@
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 
-  let skuExtraFiltro = null;
+  let skuExtraFiltro = null; window.skuExtraFiltro = skuExtraFiltro;
   let html5QrCode = null, searchDebounce = null;
   let isLoading = false;
 
@@ -848,6 +848,7 @@
       if(!res.ok) throw new Error((data && (data.error_description||data.error||data.message)) || raw || `HTTP ${res.status}`);
       if(!data?.access_token) throw new Error('Respuesta inesperada de Auth: sin access_token');
       sessionToken = data.access_token; userEmail = emailInput;
+      window.sessionToken = sessionToken; window.userEmail = userEmail;
       await cargarEmpresasAutorizadas();
     }catch(e){
       console.error('Auth error:', e);
@@ -947,13 +948,14 @@
 
   function seleccionarEmpresa(id,nombre){
     empresaSeleccionada = { id, nombre };
+    window.empresaSeleccionada = empresaSeleccionada;
     qs('chip-empresa-text').innerText = nombre;
     qs('chip-empresa').classList.remove('hidden');
     qs('txt-empresa-actual').innerText = nombre;
 
     cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1;
     qs('rows').innerHTML="";
-    skuExtraFiltro = null;
+    skuExtraFiltro = null; window.skuExtraFiltro = skuExtraFiltro;
     show(qs('filtro-activo'), false);
     setSkusMsg("");
     setDashMsg("");
@@ -1022,7 +1024,7 @@
 
   function limpiarFiltroExtra(ev){
     if (ev) { ev.preventDefault?.(); ev.stopPropagation?.(); }
-    skuExtraFiltro = null;
+    skuExtraFiltro = null; window.skuExtraFiltro = skuExtraFiltro;
     resetChipFiltroUI();
     const input = qs('sku-search');
     if (input) input.value = "";
@@ -1588,6 +1590,7 @@
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
     skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
+    window.skuExtraFiltro = skuExtraFiltro;
     switchView('view-skus');
     paginaActual = 0;
     consultarSkus();
@@ -1598,6 +1601,7 @@
   function logout(){
     stopScanner();
     sessionToken=""; userEmail=""; empresaSeleccionada=null;
+    window.sessionToken=sessionToken; window.userEmail=userEmail; window.empresaSeleccionada=empresaSeleccionada;
     cacheSkus=[]; skuExtraFiltro=null;
     qs('chip-empresa').classList.add('hidden');
     setSkusMsg("");
@@ -2534,7 +2538,7 @@
     switchView('view-skus');
     const input = qs('sku-search');
     if(input){ input.value = codigo; }
-    skuExtraFiltro = null;
+    skuExtraFiltro = null; window.skuExtraFiltro = skuExtraFiltro;
     resetChipFiltroUI();
     soloBaja = false;
     qs('chip-baja')?.classList.remove('active');
