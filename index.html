@@ -390,7 +390,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.5</div>
+      <div class="version-tag">2026.02.12-1.4</div>
     </div>
   </div>
 
@@ -730,12 +730,17 @@
   const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
   const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
 
-  let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+  
+  // Exponer credenciales a scripts internos (PDF)
+  window.SB_URL = SB_URL;
+  window.SB_KEY = SB_KEY;
+let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 
   let skuExtraFiltro = null;
+    window.skuExtraFiltro = null;
 
 // ✅ Sincroniza estado clave al scope global (para integraciones como PDF)
 function syncGlobals(){
@@ -876,6 +881,9 @@ function updatePrintButtonState(){
       if(!res.ok) throw new Error((data && (data.error_description||data.error||data.message)) || raw || `HTTP ${res.status}`);
       if(!data?.access_token) throw new Error('Respuesta inesperada de Auth: sin access_token');
       sessionToken = data.access_token; userEmail = emailInput;
+      window.sessionToken = sessionToken || null;
+      window.userEmail = userEmail || null;
+      window.sessionToken = sessionToken;
       syncGlobals();
       updatePrintButtonState();
       await cargarEmpresasAutorizadas();
@@ -977,6 +985,7 @@ function updatePrintButtonState(){
 
   function seleccionarEmpresa(id,nombre){
     empresaSeleccionada = { id, nombre };
+    window.empresaSeleccionada = empresaSeleccionada || null;
     syncGlobals();
     updatePrintButtonState();
     qs('chip-empresa-text').innerText = nombre;
@@ -1624,6 +1633,10 @@ function updatePrintButtonState(){
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
     skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
+      syncGlobals();
+      updatePrintButtonState();
+
+    window.skuExtraFiltro = skuExtraFiltro || null;
     syncGlobals();
     updatePrintButtonState();
     switchView('view-skus');
@@ -1634,6 +1647,12 @@ function updatePrintButtonState(){
   function logout(){
     stopScanner();
     sessionToken=""; userEmail=""; empresaSeleccionada=null;
+    window.sessionToken = null;
+    window.userEmail = null;
+    window.empresaSeleccionada = null;
+    window.skuExtraFiltro = null;
+    window.sessionToken = null;
+    window.empresaSeleccionada = null;
     cacheSkus=[]; skuExtraFiltro=null;
     syncGlobals();
     updatePrintButtonState();
@@ -2638,10 +2657,10 @@ function updatePrintButtonState(){
   }
 
   async function fetchActivosPorResponsable(resp){
-    const SB_URL = window.SB_URL;
-    const SB_KEY = window.SB_KEY;
-    const empresa = window.empresaSeleccionada;
-    const token = window.sessionToken;
+    const SB_URL = (window.SB_URL || (typeof SB_URL !== "undefined" ? SB_URL : null));
+    const SB_KEY = (window.SB_KEY || (typeof SB_KEY !== "undefined" ? SB_KEY : null));
+  const empresa = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada) ? empresaSeleccionada : window.empresaSeleccionada;
+  const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
     if(!SB_URL || !SB_KEY || !empresa?.id || !token) throw new Error("Sesión/empresa no válidas.");
     const params = [
       `empresa_id=eq.${encodeURIComponent(empresa.id)}`,
