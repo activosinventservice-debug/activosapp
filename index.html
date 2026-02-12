@@ -1586,12 +1586,18 @@
     `).join('');
   }
 
-  function aplicarCatalogoFiltro(tipo, valorEnc){
-    skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
-    switchView('view-skus');
-    paginaActual = 0;
-    consultarSkus();
+function aplicarCatalogoFiltro(tipo, valorEnc) {
+  skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
+  
+  // ✅ Agregamos esta línea para notificar al script del PDF
+  if (typeof window.__resguardoPdfWebOnStateChange === 'function') {
+    window.__resguardoPdfWebOnStateChange();
   }
+
+  switchView('view-skus');
+  paginaActual = 0;
+  consultarSkus();
+}
 
   function logout(){
     stopScanner();
