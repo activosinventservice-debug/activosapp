@@ -47,7 +47,8 @@
 
   function getResponsableFiltro(){
     const f = window.skuExtraFiltro;
-    if(!f || f.tipo !== "responsable") return "";
+    const tipo = norm(f?.tipo).toLowerCase();
+    if(!f || tipo !== "responsable") return "";
     return norm(f.valor);
   }
 
