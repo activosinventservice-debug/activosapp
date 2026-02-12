@@ -728,7 +728,11 @@
   const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
   const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
 
-  let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+  // Al inicio del script en index.html, asegúrate de que sean accesibles
+let sessionToken = "", userEmail = "";
+window.empresaSeleccionada = null; // Cambiar a window
+window.skuExtraFiltro = null;     // Cambiar a window
+  
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
