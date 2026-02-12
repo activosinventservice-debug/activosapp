@@ -390,7 +390,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.5</div>
+      <div class="version-tag">2026.02.12-1.4</div>
     </div>
   </div>
 
@@ -814,6 +814,7 @@
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
     const el = qs(id);
     if(el) el.classList.remove('hidden');
+    try{ if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange(); }catch(e){}
   }
 
   function setSkusMsg(text){
@@ -1005,6 +1006,12 @@
   // ✅ MEJORA CLAVE: al entrar a "Gestión de SKUs" NO cargamos nada
   function abrirModuloSkus(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+
+    // ✅ Al entrar directo a Gestión (desde Modos), limpiar filtro extra previo
+    skuExtraFiltro = null;
+    try{ window.skuExtraFiltro = null; }catch(e){}
+    resetChipFiltroUI();
+
     switchView('view-skus');
     paginaActual = 0;
 
@@ -1018,17 +1025,21 @@
       </div>`;
     qs('pagination').innerHTML = "";
     setSkusMsg("");
+
+    try{ if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange(); }catch(e){}
   }
 
   function limpiarFiltroExtra(ev){
     if (ev) { ev.preventDefault?.(); ev.stopPropagation?.(); }
     skuExtraFiltro = null;
+    try{ window.skuExtraFiltro = null; }catch(e){}
     resetChipFiltroUI();
     const input = qs('sku-search');
     if (input) input.value = "";
     paginaActual = 0;
     switchView('view-skus');
     consultarSkus();
+    try{ if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange(); }catch(e){}
   }
 
   function resetChipFiltroUI(){
@@ -1597,7 +1608,7 @@
     paginaActual = 0;
     consultarSkus();
 
-    // Notificar a listeners (ej. resguardo-pdf-web.v2.js) después de navegar/renderizar
+    // Notificar a listeners (ej. resguardo-pdf-web.v3.js) después de navegar/renderizar
     try{ setTimeout(()=>{ if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange(); }, 0); }catch(e){}
   }
 
@@ -2558,6 +2569,6 @@
   // ✅ asegurar delegación lista empresas desde el inicio
   document.addEventListener('DOMContentLoaded', setupEmpresaDelegation);
 </script>
-  <script src="resguardo-pdf-web.v2.js?v=2"></script>
+  <script src="resguardo-pdf-web.v3.js?v=3"></script>
 </body>
 </html>
