@@ -390,7 +390,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.4</div>
+      <div class="version-tag">2026.02.12-1.4.1</div>
     </div>
   </div>
 
@@ -1591,6 +1591,8 @@
     switchView('view-skus');
     paginaActual = 0;
     consultarSkus();
+    // ✅ habilitar/deshabilitar botón de resguardo según el nuevo estado
+    if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange();
   }
 
   function logout(){
