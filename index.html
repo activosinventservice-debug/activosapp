@@ -70,6 +70,18 @@
     /* Buttons */
     .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 14px; border:none; cursor:pointer; border-radius:12px; font-weight:700; background:var(--primary); color:var(--on-primary); box-shadow:0 8px 18px rgba(11,110,243,.25); transition:.15s transform,.15s background}
     .btn:hover{background:var(--primary-variant)} .btn:active{transform:translateY(1px)}
+    /* ✅ Estado deshabilitado (gris, sin hover/click/animación) */
+    .btn:disabled, .btn[disabled]{
+      background:#E5E7EB !important;
+      color:#9CA3AF !important;
+      border:1px solid #D1D5DB !important;
+      box-shadow:none !important;
+      cursor:not-allowed !important;
+      transform:none !important;
+      pointer-events:none;
+    }
+    .btn:disabled:hover, .btn[disabled]:hover{ background:#E5E7EB !important; }
+    .btn:disabled:active, .btn[disabled]:active{ transform:none !important; }
     .btn.tonal{background:#E6F0FF; color:#0B4CB3; border:1px solid #CFE2FF; box-shadow:none}
     .btn.secondary{background:#0F172A; color:#fff}
     .btn.danger{background:var(--danger)}
@@ -390,7 +402,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.4</div>
+      <div class="version-tag">2026.02.12-1.5</div>
     </div>
   </div>
 
@@ -743,6 +755,8 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
     window.skuExtraFiltro = null;
 
 // ✅ Sincroniza estado clave al scope global (para integraciones como PDF)
+window.__fromCatalogos = window.__fromCatalogos || false;
+
 function syncGlobals(){
   window.sessionToken = sessionToken || null;
   window.empresaSeleccionada = empresaSeleccionada || null;
@@ -754,8 +768,11 @@ function getResponsableFiltroActual(){
   const f = skuExtraFiltro;
   const tipo = String(f?.tipo||"").trim().toLowerCase();
   const val  = String(f?.valor||"").trim();
+  const origen = String(f?.origen||"").trim().toLowerCase();
   if(!val) return "";
   if(tipo !== "responsable" && tipo !== "responsables") return "";
+  // Solo habilitar si viene del flujo Catálogos → Responsable
+  if(origen !== "catalogos") return "";
   return val;
 }
 
@@ -847,6 +864,20 @@ function updatePrintButtonState(){
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
     const el = qs(id);
     if(el) el.classList.remove('hidden');
+
+    // Si entras a SKUs desde otro lado (no desde Catálogos→Responsable), limpia el filtro extra
+    if(id === 'view-skus'){
+      if(!window.__fromCatalogos){
+        skuExtraFiltro = null;
+      }
+      // una vez mostrado, resetea el flag para que el siguiente cambio sea explícito
+      window.__fromCatalogos = false;
+      syncGlobals();
+      updatePrintButtonState();
+    } else {
+      // al salir de SKUs, el siguiente ingreso será considerado "directo" a menos que Catálogos lo marque
+      window.__fromCatalogos = false;
+    }
   }
 
   function setSkusMsg(text){
@@ -1046,6 +1077,12 @@ function updatePrintButtonState(){
   // ✅ MEJORA CLAVE: al entrar a "Gestión de SKUs" NO cargamos nada
   function abrirModuloSkus(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    // ✅ Entrada directa a Gestión: no debe quedarse ningún filtro/estado de Catálogos
+    // (esto también mantiene el botón de resguardo bloqueado y en gris).
+    skuExtraFiltro = null;
+    syncGlobals();
+    resetChipFiltroUI();
+    updatePrintButtonState();
     switchView('view-skus');
     paginaActual = 0;
 
@@ -1632,11 +1669,9 @@ function updatePrintButtonState(){
   }
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
-    skuExtraFiltro = { tipo, valor: decodeURIComponent(valorEnc) };
-      syncGlobals();
-      updatePrintButtonState();
-
-    window.skuExtraFiltro = skuExtraFiltro || null;
+    const valor = decodeURIComponent(valorEnc);
+    skuExtraFiltro = { tipo, valor, origen: 'catalogos' };
+    window.__fromCatalogos = true;
     syncGlobals();
     updatePrintButtonState();
     switchView('view-skus');
