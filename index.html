@@ -454,6 +454,8 @@
 
         <span class="divider"></span>
 
+        <button id="btn-print-resguardo" class="btn tonal" disabled onclick="imprimirResguardoResponsable()"><span class="material-symbols-rounded">picture_as_pdf</span> Imprimir resguardo</button>
+
         <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
         <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
           <option value="reciente.desc" selected>Más reciente</option>
@@ -1601,6 +1603,7 @@
     qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
     qs('dash-users') && (qs('dash-users').innerHTML="");
     switchView('view-login');
+    if (window.__resguardoPdfWebOnStateChange) window.__resguardoPdfWebOnStateChange();
   }
 
   // =========================
@@ -2544,5 +2547,6 @@
   // ✅ asegurar delegación lista empresas desde el inicio
   document.addEventListener('DOMContentLoaded', setupEmpresaDelegation);
 </script>
+  <script src="resguardo-pdf-web.js"></script>
 </body>
 </html>
