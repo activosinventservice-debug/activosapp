@@ -126,6 +126,15 @@
     .list{display:grid; gap:8px}
     .row{display:grid; grid-template-columns:160px 1fr auto; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; transition:.15s border-color,.15s transform}
     .row:hover{border-color:#D6E3FF; transform:translateY(-1px)}
+
+    /* Branding logos (discreto y bonito) */
+    .logo-mini{width:44px; height:44px; border-radius:12px; object-fit:contain; background:#fff; border:1px solid var(--border); padding:6px; box-shadow:0 6px 14px rgba(10,40,100,.06)}
+    .logo-mini.skeleton{background:linear-gradient(90deg,#F2F6FF,#FFFFFF,#F2F6FF); background-size:200% 100%; animation:shimmer 1.2s infinite; border-color:#E6EAF2}
+    .logo-mini.hidden{display:none !important}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    .empresa-card{grid-template-columns:auto 1fr auto !important}
+    .empresa-card .empresa-logo-wrap{display:flex; align-items:center; justify-content:center; width:52px}
     .sku{font-weight:900}
     .barcode{font-family:'Courier New',monospace; background:#F4F7FF; padding:4px 8px; border-radius:8px; border:1px dashed #CAD7F1; display:inline-block; color:#0B4CB3; max-width:100%; overflow:hidden; text-overflow:ellipsis}
     .desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; word-break:break-word}
@@ -402,7 +411,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-1.5</div>
+      <div class="version-tag">2026.02.12-2.0</div>
     </div>
   </div>
 
@@ -439,9 +448,12 @@
     <!-- SELECTOR -->
     <div id="view-selector" class="card hidden">
       <div class="header-flex">
-        <div>
+        <div style="display:flex; gap:12px; align-items:center; min-width:0;">
+          <img id="empresa-logo-top" class="logo-mini hidden" alt="Logo" />
+          <div style="min-width:0;">
           <small style="color:#0B4CB3; font-weight:800;">Empresa Activa</small>
           <h2 id="txt-empresa-actual" style="margin:4px 0 0">—</h2>
+          </div>
         </div>
         <button class="btn tonal" onclick="switchView('view-empresas')"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
       </div>
@@ -784,6 +796,62 @@ function updatePrintButtonState(){
   btn.disabled = !ok;
   btn.title = ok ? `Imprimir resguardo de ${resp}` : 'Selecciona un Responsable desde Catálogos para habilitar';
 }
+
+  // =========================
+  // ✅ HARD RESET (evita que se queden datos de otro usuario)
+  // =========================
+  function hardResetAppState(opts){
+    const o = opts || {};
+    const keepView = !!o.keepView;
+
+    // Detener escáner y cerrar lightbox
+    try{ stopScanner(); }catch{}
+    try{ closeLb(); }catch{}
+
+    // Auth / sesión
+    sessionToken = "";
+    userEmail = "";
+    empresaSeleccionada = null;
+
+    // Datos / filtros
+    cacheSkus = [];
+    paginaActual = 0;
+    totalActivos = 0;
+    indiceActual = -1;
+
+    sortField = "reciente";
+    sortAsc = false;
+    soloBaja = false;
+
+    skuExtraFiltro = null;
+    window.__fromCatalogos = false;
+
+    // UI: mensajes / chips / listas (si existen)
+    try{ qs('chip-empresa')?.classList.add('hidden'); }catch{}
+    try{ const l = qs('empresa-logo-top'); if(l){ l.classList.add('hidden'); l.removeAttribute('src'); } }catch{}
+    try{ show(qs('filtro-activo'), false); }catch{}
+    try{ setSkusMsg(""); }catch{}
+    try{ setDashMsg(""); }catch{}
+    try{ qs('dash-global-grid') && (qs('dash-global-grid').innerHTML=""); }catch{}
+    try{ qs('dash-users') && (qs('dash-users').innerHTML=""); }catch{}
+    try{ qs('lista-skus') && (qs('lista-skus').innerHTML=""); }catch{}
+    try{ qs('sku-detail') && (qs('sku-detail').innerHTML=""); }catch{}
+
+    // Inputs comunes de SKUs (NO tocamos email/password)
+    try{ const inp = qs('sku-search'); if(inp) inp.value = ""; }catch{}
+    try{ const chk = qs('solo-baja'); if(chk) chk.checked = false; }catch{}
+
+    // ✅ Catálogos: borrar caché por usuario/empresa
+    try{ resetCatalogosState(); }catch{}
+
+    // Sincronizar globals + deshabilitar PDF
+    syncGlobals();
+    updatePrintButtonState();
+
+    if(!keepView){
+      try{ switchView('view-login'); }catch{}
+    }
+  }
   let html5QrCode = null, searchDebounce = null;
   let isLoading = false;
 
@@ -900,6 +968,8 @@ function updatePrintButtonState(){
   }
 
   async function ejecutarLogin(){
+    // Limpia cualquier estado residual antes de autenticar (cambio de usuario)
+    hardResetAppState({ keepView:true });
     const emailInput = qs('email').value.trim(), pass = qs('password').value, btn = qs('btn-login'), msg = qs('login-msg');
     btn.disabled = true; msg.classList.add('hidden'); msg.innerText="";
     try{
@@ -946,9 +1016,106 @@ function updatePrintButtonState(){
       if(!card) return;
       const id = card.getAttribute('data-id') || "";
       const nombre = card.getAttribute('data-nombre') || "";
+      const razon = card.getAttribute('data-razon') || "";
+      const legal = card.getAttribute('data-legal') || "";
       if(!id || !nombre) return;
-      seleccionarEmpresa(id, nombre);
+      seleccionarEmpresa(id, nombre, razon, legal);
     });
+  }
+
+  // ---------------- Branding (UI) ----------------
+  // Carga discreta del logo por empresa desde Supabase Storage (mismo path que PDF)
+  const __empresaLogoCache = new Map(); // key: slug -> { url, ts }
+
+  // ✅ Helper (UI): convierte nombre de empresa a slug de storage
+  // Debe coincidir con la lógica del PDF (lowercase + _ + sin caracteres raros)
+  function empresaSafe(nombre){
+    return String(nombre || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g,'_')
+      .replace(/[^a-z0-9._-]/g,'') || 'emp';
+  }
+
+  function makeEmpresaSlug(nombre){
+    return empresaSafe(nombre);
+  }
+
+  function __revokeIfNeeded(entry){
+    try{ if(entry?.url && entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url); }catch{}
+  }
+
+  async function fetchEmpresaLogoUrl(empresaNombre){
+    const SB_URL = window.SB_URL;
+    const SB_KEY = window.SB_KEY;
+    const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
+    if(!SB_URL || !SB_KEY || !token) return null;
+
+    const slug = makeEmpresaSlug(empresaNombre);
+    const cached = __empresaLogoCache.get(slug);
+    // Cache 10 minutos
+    if(cached && (Date.now() - cached.ts) < 10*60*1000) return cached.url;
+
+    const bucket = 'activo';
+    const path = `${slug}/branding/logo.png`;
+    const url = `${SB_URL}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`;
+
+    const res = await fetch(url, { headers:{ 'apikey': SB_KEY, 'Authorization': `Bearer ${token}` } });
+    if(res.status === 404) return null;
+    if(!res.ok) return null;
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    if(cached) __revokeIfNeeded(cached);
+    __empresaLogoCache.set(slug, { url: blobUrl, ts: Date.now() });
+    return blobUrl;
+  }
+
+  function queueEmpresaLogoHydration(empresas){
+    // Deja que el DOM pinte primero
+    setTimeout(()=>{ hydrateEmpresaLogos(empresas).catch(()=>{}); }, 30);
+  }
+
+  async function hydrateEmpresaLogos(empresas){
+    if(!Array.isArray(empresas) || !empresas.length) return;
+    for(const e of empresas){
+      const id = norm(e?.id);
+      const nombre = norm(e?.nombre);
+      if(!id || !nombre) continue;
+      const img = document.querySelector(`img[data-empresa-logo="${CSS.escape(id)}"]`);
+      if(!img) continue;
+      const blobUrl = await fetchEmpresaLogoUrl(nombre);
+      if(blobUrl){
+        img.src = blobUrl;
+        img.classList.remove('skeleton');
+      } else {
+        // Si no hay logo, lo escondemos para que se vea limpio
+        img.classList.add('hidden');
+      }
+    }
+  }
+
+  async function updateTopEmpresaLogo(){
+    const img = qs('empresa-logo-top');
+    if(!img) return;
+    const nombre = norm(empresaSeleccionada?.nombre);
+    if(!nombre){
+      img.classList.add('hidden');
+      img.removeAttribute('src');
+      return;
+    }
+    img.classList.remove('hidden');
+    img.classList.add('skeleton');
+    const blobUrl = await fetchEmpresaLogoUrl(nombre);
+    if(blobUrl){
+      img.src = blobUrl;
+      img.classList.remove('skeleton');
+    } else {
+      img.classList.add('hidden');
+      img.classList.remove('skeleton');
+      img.removeAttribute('src');
+    }
   }
 
   async function cargarEmpresasAutorizadas(){
@@ -963,10 +1130,11 @@ function updatePrintButtonState(){
       const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
 
       if(await esSuperAdmin()){
-        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre&order=nombre.asc`, headers);
+        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre,razon_social,resguardo_legal_text&order=nombre.asc`, headers);
         if(!resEmp.ok) throw new Error("Error al cargar empresas");
         const empresas = await resEmp.json();
         lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>No hay empresas registradas.</p>";
+        queueEmpresaLogoHydration(empresas);
         return;
       }
 
@@ -984,10 +1152,11 @@ function updatePrintButtonState(){
       if(!set.size){ lista.innerHTML = "<p>No tienes empresas asignadas.</p>"; return; }
 
       const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\\"')}"`).join(',');
-      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre&order=nombre.asc`, headers);
+      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,razon_social,resguardo_legal_text&order=nombre.asc`, headers);
       if(!resEmp.ok){ console.error(await resEmp.text()); throw new Error("Error al cargar empresas autorizadas"); }
       const empresas = await resEmp.json();
       lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>Error: Tienes permisos, pero las empresas no existen.</p>";
+      queueEmpresaLogoHydration(empresas);
     }catch(e){
       console.error(e);
       lista.innerHTML = `<p class='error-msg'>${escapeHtml(e.message)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
@@ -998,12 +1167,18 @@ function updatePrintButtonState(){
   function empresaCard(e){
     const id = norm(e.id);
     const nombre = norm(e.nombre);
+    const razon = norm(e.razon_social || e.razonSocial || "");
+    const legal = norm(e.resguardo_legal_text || e.resguardoLegalText || "");
+    const safeSlug = makeEmpresaSlug(nombre);
     return `
-      <div class="row empresa-card" data-id="${escapeHtml(id)}" data-nombre="${escapeHtml(nombre)}"
-           style="grid-template-columns:1fr auto; cursor:pointer">
+      <div class="row empresa-card" data-id="${escapeHtml(id)}" data-nombre="${escapeHtml(nombre)}" data-razon="${escapeHtml(razon)}" data-legal="${escapeHtml(legal)}" data-slug="${escapeHtml(safeSlug)}"
+           style="cursor:pointer">
+        <div class="empresa-logo-wrap">
+          <img class="logo-mini skeleton" data-empresa-logo="${escapeHtml(id)}" alt="Logo" />
+        </div>
         <div>
-          <div style="font-weight:900">${escapeHtml(nombre)}</div>
-          <div class="meta"><span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa</div>
+          <div style="font-weight:900; line-height:1.15">${escapeHtml(nombre)}</div>
+          ${razon ? `<div class="meta" style="margin-top:4px"><span class="material-symbols-rounded" style="font-size:16px">badge</span> ${escapeHtml(razon)}</div>` : `<div class="meta"><span class="material-symbols-rounded" style="font-size:16px">apartment</span> Empresa</div>`}
         </div>
         <div>
           <button class="btn tonal" type="button">
@@ -1014,14 +1189,16 @@ function updatePrintButtonState(){
     `;
   }
 
-  function seleccionarEmpresa(id,nombre){
-    empresaSeleccionada = { id, nombre };
+  function seleccionarEmpresa(id,nombre,razonSocial,legalText){
+    empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim() };
     window.empresaSeleccionada = empresaSeleccionada || null;
     syncGlobals();
     updatePrintButtonState();
     qs('chip-empresa-text').innerText = nombre;
     qs('chip-empresa').classList.remove('hidden');
     qs('txt-empresa-actual').innerText = nombre;
+    // Logo discreto en encabezado
+    updateTopEmpresaLogo().catch(()=>{});
 
     cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1;
     qs('rows').innerHTML="";
@@ -1031,6 +1208,7 @@ function updatePrintButtonState(){
     setDashMsg("");
     qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
     qs('dash-users') && (qs('dash-users').innerHTML="");
+    resetCatalogosState();
     switchView('view-selector');
   }
 
@@ -1570,6 +1748,18 @@ function updatePrintButtonState(){
   let catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] };
   let catalogoFilter = '';
 
+
+  function resetCatalogosState(){
+    try{ currentTab = 'genero'; }catch{}
+    try{ catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] }; }catch{}
+    try{ catalogoFilter = ''; }catch{}
+    try{ const inp = qs('cat-search'); if(inp) inp.value=''; }catch{}
+    try{ qs('cat-list') && (qs('cat-list').innerHTML=''); }catch{}
+    try{ qs('cat-total-text') && (qs('cat-total-text').innerText=''); }catch{}
+    try{ show(qs('cat-total'), false); }catch{}
+    try{ marcarTab(); }catch{}
+  }
+
   function setTab(t){
     if(currentTab===t) return;
     currentTab = t;
@@ -1680,23 +1870,7 @@ function updatePrintButtonState(){
   }
 
   function logout(){
-    stopScanner();
-    sessionToken=""; userEmail=""; empresaSeleccionada=null;
-    window.sessionToken = null;
-    window.userEmail = null;
-    window.empresaSeleccionada = null;
-    window.skuExtraFiltro = null;
-    window.sessionToken = null;
-    window.empresaSeleccionada = null;
-    cacheSkus=[]; skuExtraFiltro=null;
-    syncGlobals();
-    updatePrintButtonState();
-    qs('chip-empresa').classList.add('hidden');
-    setSkusMsg("");
-    setDashMsg("");
-    qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
-    qs('dash-users') && (qs('dash-users').innerHTML="");
-    switchView('view-login');
+    hardResetAppState();
   }
 
   // =========================
@@ -2643,12 +2817,15 @@ function updatePrintButtonState(){
 
 <script>
 /* =========================
-   ✅ Resguardo PDF (Single-file)
-   - Solo habilitado si el filtro extra es RESPONSABLE (viene de Catálogos)
-   - Replica el layout de la app (tabla 4 columnas + legal + firmas)
+   ✅ Resguardo PDF (Single-file) v10
+   - Replica el layout de la app Android (header + tabla 4 cols + legal + notas + firmas + logo footer + paginado)
+   - Branding (logo + footer) por empresa desde Supabase Storage:
+       bucket: "activo"
+       paths: <empresa_safe>/branding/logo.png  y  <empresa_safe>/branding/footer.png
+   - Solo habilitado si el filtro extra es RESPONSABLE y viene de Catálogos (origen=catalogos)
    ========================= */
 (async function(){
-  // Carga jsPDF bajo demanda
+  // ---------- jsPDF on-demand ----------
   async function ensureJsPdf(){
     if(window.jspdf && window.jspdf.jsPDF) return;
     await new Promise((resolve,reject)=>{
@@ -2659,20 +2836,121 @@ function updatePrintButtonState(){
     });
   }
 
-  const LEGAL_TEXT =
-    "El suscrito, en mi carácter de Servidor Público del Poder Judicial del Estado de Querétaro, por medio del presente ME OBLIGO y acepto de conformidad, la custodia del mobiliario y equipo de cómputo descritos en el presente, asimismo, me comprometo a usarlos diligentemente para el fin institucional encomendado y a comunicar al departamento de activo fijo, de cualquier modificación, cambio, deterioro, pérdida, destrucción o tema de interés relacionado con los mismos, que soy sabedor de las sanciones aplicables para el caso de no hacerlo así. Lo anterior, de conformidad con lo dispuesto en los Artículos 7 fracción I de la Ley General de Responsabilidades Administrativas, 76 fracción XI, 114 fracción XX, 123 fracción I y XI de la Ley Orgánica del Poder Judicial del Estado de Querétaro, 2 de la Ley de Responsabilidades de los Servidores Públicos del Estado de Querétaro, 34 fracciones I y II del Reglamento de la Oficialía Mayor y D.1.1 párrafos tercero y cuarto del Acuerdo por el que se emiten los Lineamientos Dirigidos a Asegurar que el Sistema de Contabilidad Gubernamental facilite el Registro y Control de los Inventarios de los Bienes Muebles e Inmuebles de los Entes Públicos.";
+  // ---------- Helpers ----------
+  // ✅ Igual que en Android (ResguardoPdfGenerator.kt): texto legal breve
+  const DEFAULT_LEGAL_TEXT = "Quien firma el presente recibe en resguardo los bienes aquí descritos y se obliga a su custodia, uso exclusivo para fines laborales/institucionales, conservación y reporte inmediato de cualquier daño, pérdida, robo, deterioro o cambio de ubicación. Los bienes deberán ser devueltos cuando sean requeridos o al término de la relación laboral o reasignación. El incumplimiento podrá derivar en medidas administrativas y/o legales conforme a políticas internas y normatividad aplicable.";
 
-  function norm(v){ const s=(v??"").toString().trim(); return (!s || s.toLowerCase()==="null") ? "" : s; }
+  function getEmpresaLegalTextResolved(){
+    try{
+      const t = (empresaSeleccionada && typeof empresaSeleccionada.legalText === 'string') ? empresaSeleccionada.legalText.trim() : '';
+      return t ? t : DEFAULT_LEGAL_TEXT;
+    }catch(_){
+      return DEFAULT_LEGAL_TEXT;
+    }
+  }
+
+
+  const FONT_SIZE_MAIN_TITLE = 16;
+  const FONT_SIZE_SUB_TITLE  = 12;
+  const FONT_SIZE_BOX_TEXT   = 11;
+  const FONT_SIZE_HEADER     = 8;
+  const FONT_SIZE_BODY       = 8;
+  const FONT_SIZE_SMALL      = 7;
+
+  const LEADING_BODY = 9;
+  const PADDING_ROW_TOP = 10;
+
+  const MARGIN = 30;
+  const Y_START = 750; // coordenada tipo PDFBox (origen abajo)
+  const FOOTER_HEIGHT = 160;
+  const Y_BOTTOM_LIMIT = MARGIN + FOOTER_HEIGHT + 20;
+
+  const COLOR_ZEBRA_ROW = [240,240,240];
+  const COLOR_BOX_BG = [230,230,230];
+  const COLOR_SHADOW = [153,153,153];
+
+  function norm(v){ const s=(v??"").toString().trim(); return (!s || s.toLowerCase()==="null" || s.toLowerCase()==="undefined") ? "" : s; }
   function upperEs(s){ return norm(s).toUpperCase(); }
 
-  function fmtFechaPdf(date){
+  function fmtFechaPdf(d){
     try{
-      const d = date instanceof Date ? date : new Date();
-      const dd = String(d.getDate()).padStart(2,'0');
-      const yyyy = String(d.getFullYear());
-      const m = d.toLocaleString('es-MX',{month:'short'}).replace('.','');
+      const date = d instanceof Date ? d : new Date();
+      const dd = String(date.getDate()).padStart(2,'0');
+      const yyyy = String(date.getFullYear());
+      const m = date.toLocaleString('es-MX',{month:'short'}).replace('.','');
       return `${dd}/${m}/${yyyy}`.toUpperCase();
     }catch{ return ""; }
+  }
+
+  function safeFileName(s){
+    return norm(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim() || "resguardo";
+  }
+
+  function empresaSafe(nombre){
+    return norm(nombre).toLowerCase()
+      .replace(/\s+/g,'_')
+      .replace(/[^a-z0-9._-]/g,'') || "emp";
+  }
+
+  async function blobToDataUrl(blob){
+    return await new Promise((resolve,reject)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>resolve(String(fr.result||""));
+      fr.onerror = ()=>reject(new Error("No se pudo leer imagen"));
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  async function loadImageInfo(dataUrl){
+    return await new Promise((resolve,reject)=>{
+      const img = new Image();
+      img.onload = ()=>resolve({ dataUrl, w: img.naturalWidth || img.width || 1, h: img.naturalHeight || img.height || 1 });
+      img.onerror = ()=>reject(new Error("No se pudo cargar imagen"));
+      img.src = dataUrl;
+    });
+  }
+
+  // Branding desde Storage (privado) con Authorization Bearer
+  async function fetchBrandingImages(empresaNombre){
+    const SB_URL = window.SB_URL;
+    const SB_KEY = window.SB_KEY;
+    const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
+    if(!SB_URL || !SB_KEY || !token) return { header:null, footer:null };
+
+    const base = empresaSafe(empresaNombre);
+    const bucket = "activo";
+    const targets = [
+      { key:"header", path:`${base}/branding/logo.png` },
+      { key:"footer", path:`${base}/branding/footer.png` }
+    ];
+
+    const out = { header:null, footer:null };
+
+    for(const t of targets){
+      const url = `${SB_URL}/storage/v1/object/${bucket}/${t.path.split('/').map(encodeURIComponent).join('/')}`;
+      const res = await fetch(url, { headers:{ "apikey": SB_KEY, "Authorization": `Bearer ${token}` } });
+      if(res.status === 404) continue;
+      if(!res.ok){
+        console.warn("Branding fetch error", t.key, res.status);
+        continue;
+      }
+      const blob = await res.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      const info = await loadImageInfo(dataUrl);
+      out[t.key] = info;
+    }
+    return out;
+  }
+
+  // Elaborado por (web)
+  function nameOnlyFromEmailOrName(input){
+    const raw = norm(input);
+    if(!raw) return "";
+    if(!raw.includes("@")) return raw;
+    const local = raw.split("@")[0].trim();
+    if(!local) return "";
+    const spaced = local.replace(/[._-]+/g,' ').trim();
+    return spaced.split(/\s+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" ");
   }
 
   function wrapText(doc, text, maxWidth){
@@ -2684,27 +2962,65 @@ function updatePrintButtonState(){
       if(doc.getTextWidth(test)<=maxWidth) line=test;
       else { lines.push(line); line=words[i]; }
     }
-    lines.push(line); return lines;
+    lines.push(line);
+    return lines;
   }
 
-  function safeFileName(s){
-    return norm(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim() || "resguardo";
+  // Justificado
+  function drawJustifiedLine(doc, words, x, y, maxWidth, isLast){
+    if(!words.length) return;
+    if(isLast || words.length===1){
+      doc.text(words.join(" "), x, y);
+      return;
+    }
+    const wordWidths = words.map(w=>doc.getTextWidth(w));
+    const sumWords = wordWidths.reduce((a,b)=>a+b,0);
+    const gaps = words.length - 1;
+    const extra = (maxWidth - sumWords) / gaps;
+    let cx = x;
+    for(let i=0;i<words.length;i++){
+      doc.text(words[i], cx, y);
+      cx += wordWidths[i] + (i<words.length-1 ? extra : 0);
+    }
+  }
+
+  function wrapTextWords(doc, text, maxWidth){
+    const words = norm(text).split(/\s+/).filter(Boolean);
+    const lines=[];
+    let current=[];
+    let currentW=0;
+    for(const w of words){
+      const wW = doc.getTextWidth(w);
+      const nextW = current.length ? (currentW + doc.getTextWidth(" ") + wW) : wW;
+      if(nextW <= maxWidth){
+        current.push(w);
+        currentW = nextW;
+      }else{
+        if(current.length) lines.push(current);
+        current=[w];
+        currentW=wW;
+      }
+    }
+    if(current.length) lines.push(current);
+    return lines;
   }
 
   async function fetchActivosPorResponsable(resp){
-    const SB_URL = (window.SB_URL || (typeof SB_URL !== "undefined" ? SB_URL : null));
-    const SB_KEY = (window.SB_KEY || (typeof SB_KEY !== "undefined" ? SB_KEY : null));
-  const empresa = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada) ? empresaSeleccionada : window.empresaSeleccionada;
-  const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
+    const SB_URL = window.SB_URL;
+    const SB_KEY = window.SB_KEY;
+    const empresa = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada) ? empresaSeleccionada : window.empresaSeleccionada;
+    const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
+
     if(!SB_URL || !SB_KEY || !empresa?.id || !token) throw new Error("Sesión/empresa no válidas.");
+
     const params = [
       `empresa_id=eq.${encodeURIComponent(empresa.id)}`,
       `responsable=eq.${encodeURIComponent(resp)}`,
-      `select=sku,descripcion,responsable,ubicacion,localizacion,codigo_barras,numero_serie,fecha_adquisicion,dado_de_baja`
+      `select=sku,descripcion,genero,ubicacion,localizacion,codigo_barras,numero_serie,fecha_adquisicion,dado_de_baja`
     ];
     if(window.soloBaja) params.push("dado_de_baja=eq.true");
     const url = `${SB_URL}/rest/v1/activos?${params.join("&")}&order=sku.asc`;
-    // Traer todo: paginar por Range
+
     let all=[]; let from=0; const size=1000;
     while(true){
       const to=from+size-1;
@@ -2727,151 +3043,348 @@ function updatePrintButtonState(){
     return all;
   }
 
-  function drawPdf(resp, activos){
+  function drawPdf(respRaw, activos, branding){
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"legal" });
+    const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"letter" });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const M = 30;
-    const FOOTER_H = 160;
-    const Y_LIMIT = pageH - (M + FOOTER_H + 20);
 
-    const fsTitle=16, fsSub=12, fsBox=11, fsH=8, fsB=8, fsS=7;
-    const zebra=[240,240,240];
-    const boxbg=[230,230,230];
+    // PDFBox->jsPDF (PDFBox origen abajo)
+    const yTop = (yPdf) => pageH - yPdf;
+    const rectBottom = (x, yBottomPdf, w, h, style="S") => {
+      doc.rect(x, pageH - (yBottomPdf + h), w, h, style);
+    };
+    const fillRoundedBottom = (x, yBottomPdf, w, h, r, rgb) => {
+      doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+      doc.roundedRect(x, pageH - (yBottomPdf + h), w, h, r, r, "F");
+      doc.setFillColor(0,0,0);
+    };
+    const linePdf = (x1,y1Pdf,x2,y2Pdf) => doc.line(x1, yTop(y1Pdf), x2, yTop(y2Pdf));
 
-    const empresa = window.empresaSeleccionada?.nombre || "";
-    const fecha = fmtFechaPdf(new Date());
+    const resp = upperEs(respRaw);
+    const empresaNombre = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada?.nombre) ? empresaSeleccionada.nombre : (window.empresaSeleccionada?.nombre || "");
+    const fechaStr = fmtFechaPdf(new Date()).toUpperCase();
+    const elaboradoPor = upperEs(nameOnlyFromEmailOrName((typeof userEmail !== 'undefined' && userEmail) ? userEmail : (window.userEmail||"")) || "Sin registrar");
 
-    function header(){
-      doc.setFont("helvetica","bold"); doc.setFontSize(fsTitle);
-      doc.text("RESGUARDO", pageW/2, 48, { align:"center" });
+    const headerLogo = branding?.header || null;
+    const footerLogo = branding?.footer || null;
 
-      doc.setFontSize(fsSub);
-      doc.text(`PODER JUDICIAL DEL ESTADO DE QUERÉTARO`, pageW/2, 64, { align:"center" });
+    function drawHeaderFirstPage(){
+      let yPosition = Y_START;
 
-      doc.setFont("helvetica","normal"); doc.setFontSize(fsSub);
-      doc.text(upperEs(empresa), pageW/2, 80, { align:"center" });
-
-      // cajas gris: RESPONSABLE / FECHA
-      const bw = (pageW - (M*2) - 10)/2;
-      const by = 96;
-      doc.setFillColor(...boxbg); doc.rect(M, by, bw, 22, "F");
-      doc.rect(M + bw + 10, by, bw, 22, "F");
-      doc.setTextColor(0); doc.setFontSize(fsBox); doc.setFont("helvetica","bold");
-      doc.text("RESPONSABLE:", M+8, by+15);
-      doc.text("FECHA:", M + bw + 18, by+15);
-      doc.setFont("helvetica","normal");
-      doc.text(upperEs(resp), M+92, by+15);
-      doc.text(fecha, M + bw + 60, by+15);
-    }
-
-    function footer(){
-      const y = pageH - (M + FOOTER_H);
-      doc.setFont("helvetica","normal"); doc.setFontSize(fsS);
-      const lines = wrapText(doc, LEGAL_TEXT, pageW - M*2);
-      let yy = y;
-      for(const ln of lines){
-        doc.text(ln, M, yy); yy += 10;
-        if(yy > pageH - 90) break;
+      if(headerLogo){
+        const logoW = 100;
+        const scale = logoW / headerLogo.w;
+        const logoH = headerLogo.h * scale;
+        const x = MARGIN;
+        const yPdf = Y_START - logoH + 15;
+        doc.addImage(headerLogo.dataUrl, "PNG", x, pageH - (yPdf + logoH), logoW, logoH);
       }
-      // firmas
-      const sigY = pageH - 70;
-      const colW = (pageW - M*2 - 16)/2;
-      doc.setDrawColor(120);
-      doc.line(M, sigY, M+colW, sigY);
-      doc.line(M+colW+16, sigY, M+colW+16+colW, sigY);
-      doc.setFontSize(fsB);
-      doc.text("RESPONSABLE", M+colW/2, sigY+14, {align:"center"});
-      doc.text("ENTREGÓ", M+colW+16+colW/2, sigY+14, {align:"center"});
-    }
 
-    // tabla 4 cols
-    const cols = [
-      { key:"sku", label:"SKU", w:110, align:"left" },
-      { key:"descripcion", label:"DESCRIPCIÓN", w:250, align:"left" },
-      { key:"ubicacion", label:"UBICACIÓN", w:110, align:"left" },
-      { key:"localizacion", label:"LOCALIZACIÓN", w:110, align:"left" },
-    ];
-    const tableX = M;
-    const tableW = cols.reduce((a,c)=>a+c.w,0);
-    const colX = [tableX];
-    for(let i=0;i<cols.length;i++) colX[i+1] = colX[i] + cols[i].w;
+      // ✅ Igual que Android (ResguardoPdfGenerator.kt)
+      // - Usa razón social (si existe) como título principal; si no, usa nombre de empresa
+      // - Ajusta automáticamente tamaño si es muy larga
+      const razonSocial = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada?.razonSocial)
+        ? String(empresaSeleccionada.razonSocial || "").trim()
+        : String(window.empresaSeleccionada?.razonSocial || "").trim();
+      const mainTitle = razonSocial || empresaNombre || "";
+      const subTitle  = "Resguardo de Control Patrimonial";
 
-    function rowLinesFor(a){
-      const parts = [
-        norm(a.sku),
-        norm(a.descripcion),
-        norm(a.ubicacion),
-        norm(a.localizacion)
-      ];
-      // compute max lines for wrapped cells
-      doc.setFontSize(fsB); doc.setFont("helvetica","normal");
-      const lines = parts.map((t,i)=> wrapText(doc, upperEs(t), cols[i].w - 10));
-      const maxL = Math.max(...lines.map(x=>x.length), 1);
-      return { lines, maxL };
-    }
-
-    function drawHeaderRow(y){
-      doc.setFillColor(...boxbg);
-      doc.rect(tableX, y, tableW, 18, "F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(fsH);
-      for(let i=0;i<cols.length;i++){
-        doc.text(cols[i].label, colX[i]+4, y+12);
+      doc.setFont("helvetica","bold");
+      const maxTitleW = pageW - (2 * MARGIN);
+      let titleSize = FONT_SIZE_MAIN_TITLE;
+      while(titleSize > 10){
+        doc.setFontSize(titleSize);
+        if(doc.getTextWidth(mainTitle) <= maxTitleW) break;
+        titleSize -= 1;
       }
-      doc.setFont("helvetica","normal"); doc.setFontSize(fsB);
-      doc.setDrawColor(200);
-      doc.line(tableX, y+18, tableX+tableW, y+18);
+      doc.setFontSize(titleSize);
+      doc.setTextColor(COLOR_SHADOW[0], COLOR_SHADOW[1], COLOR_SHADOW[2]);
+      doc.text(mainTitle, pageW/2 + 1, yTop(yPosition) + 1, {align:"center"});
+      doc.setTextColor(0,0,0);
+      doc.text(mainTitle, pageW/2, yTop(yPosition), {align:"center"});
+      yPosition -= 20;
+
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SUB_TITLE);
+      doc.setTextColor(COLOR_SHADOW[0], COLOR_SHADOW[1], COLOR_SHADOW[2]);
+      doc.text(subTitle, pageW/2 + 1, yTop(yPosition) + 1, {align:"center"});
+      doc.setTextColor(0,0,0);
+      doc.text(subTitle, pageW/2, yTop(yPosition), {align:"center"});
+      yPosition -= 35;
+
+      doc.setFont("helvetica","bold"); doc.setFontSize(FONT_SIZE_BOX_TEXT);
+
+      const respTextW = doc.getTextWidth(resp);
+      const boxRespW = respTextW + 40;
+      const boxRespH = 24;
+      const boxRespX = (pageW - boxRespW)/2;
+      const boxRespYBottom = yPosition - boxRespH + 6;
+      fillRoundedBottom(boxRespX, boxRespYBottom, boxRespW, boxRespH, 8, COLOR_BOX_BG);
+      doc.text(resp, boxRespX + 20, yTop(yPosition - 10));
+
+      const dateTextW = doc.getTextWidth(fechaStr);
+      const boxDateW = dateTextW + 30;
+      const boxDateH = 24;
+      const boxDateX = pageW - MARGIN - boxDateW;
+      const boxDateYBottom = yPosition - boxDateH + 6;
+      fillRoundedBottom(boxDateX, boxDateYBottom, boxDateW, boxDateH, 8, COLOR_BOX_BG);
+      doc.text(fechaStr, boxDateX + 15, yTop(yPosition - 10));
+
+      yPosition -= 40;
+      return yPosition;
     }
 
-    let y = 0;
-    function newPage(){
-      if(doc.getNumberOfPages()>0) doc.addPage("legal","portrait");
-      header();
-      y = 128;
-      drawHeaderRow(y);
-      y += 18;
+    const tableWidth = pageW - (2 * MARGIN);
+    const col1W = tableWidth * 0.18;
+    const col2W = tableWidth * 0.42;
+    const col3W = tableWidth * 0.20;
+    const col4W = tableWidth * 0.20;
+
+    const col1X = MARGIN;
+    const col2X = MARGIN + col1W;
+    const col3X = MARGIN + col1W + col2W;
+    const col4X = MARGIN + col1W + col2W + col3W;
+
+    function drawTableHeader(yPdf){
+      doc.setLineWidth(1);
+      linePdf(MARGIN, yPdf + 4, MARGIN + tableWidth, yPdf + 4);
+
+      doc.setFont("helvetica","bold"); doc.setFontSize(FONT_SIZE_HEADER);
+      doc.text("CÓDIGO", col1X + 4, yTop(yPdf - 4));
+      doc.text("DESCRIPCIÓN", col2X + col2W/2, yTop(yPdf - 4), {align:"center"});
+      doc.text("GÉNERO", col3X + col3W/2, yTop(yPdf - 4), {align:"center"});
+      doc.text("UBICACIÓN", col4X + 4, yTop(yPdf - 4));
+
+      linePdf(MARGIN, yPdf - 14, MARGIN + tableWidth, yPdf - 14);
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_BODY);
     }
 
-    // first page
-    doc.deletePage(1); // remove default
-    doc.addPage("legal","portrait");
-    header();
-    y = 128;
-    drawHeaderRow(y);
-    y += 18;
+    function drawRow(yPdf, idx, item){
+      const rawCode = norm(item.codigo_barras) || norm(item.sku);
+      const codigo = norm(rawCode);
+      const desc   = norm(item.descripcion);
+      const genero = norm(item.genero);
+      const ubic   = norm(item.ubicacion);
 
-    let zebraOn = false;
-    for(const a of activos){
-      const { lines, maxL } = rowLinesFor(a);
-      const h = Math.max(18, 10 + (maxL * 9));
-      if(y + h > Y_LIMIT){
-        footer();
-        newPage();
-        zebraOn = false;
-      }
-      if(zebraOn){
-        doc.setFillColor(...zebra);
-        doc.rect(tableX, y, tableW, h, "F");
-      }
-      doc.setDrawColor(220);
-      doc.line(tableX, y+h, tableX+tableW, y+h);
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_BODY);
 
-      // cell text
-      for(let i=0;i<cols.length;i++){
-        const cellLines = lines[i];
-        let ty = y + 12;
-        for(let li=0; li<cellLines.length; li++){
-          const txt = cellLines[li];
-          doc.text(txt, colX[i]+4, ty);
-          ty += 9;
-        }
+      const descLines = wrapText(doc, desc, col2W - 8);
+      const genLines  = wrapText(doc, genero, col3W - 8);
+      const ubicLines = wrapText(doc, ubic, col4W - 8);
+
+      const maxLines = Math.max(1, descLines.length, genLines.length, ubicLines.length);
+      const rowHeight = (maxLines * LEADING_BODY) + 6;
+
+      if(idx % 2 === 1){
+        doc.setFillColor(COLOR_ZEBRA_ROW[0], COLOR_ZEBRA_ROW[1], COLOR_ZEBRA_ROW[2]);
+        rectBottom(MARGIN, yPdf - rowHeight, tableWidth, rowHeight, "F");
+        doc.setFillColor(0,0,0);
       }
-      y += h;
-      zebraOn = !zebraOn;
+
+      const textStartY = yPdf - PADDING_ROW_TOP;
+      doc.text(codigo, col1X + 4, yTop(textStartY));
+
+      let ty = textStartY;
+      descLines.forEach(line=>{
+        doc.text(line, col2X + col2W/2, yTop(ty), {align:"center"});
+        ty -= LEADING_BODY;
+      });
+
+      ty = textStartY;
+      genLines.forEach(line=>{
+        doc.text(line, col3X + col3W/2, yTop(ty), {align:"center"});
+        ty -= LEADING_BODY;
+      });
+
+      ty = textStartY;
+      ubicLines.forEach(line=>{
+        doc.text(line, col4X + 4, yTop(ty));
+        ty -= LEADING_BODY;
+      });
+
+      doc.setDrawColor(230);
+      linePdf(MARGIN, yPdf - rowHeight, MARGIN + tableWidth, yPdf - rowHeight);
+      doc.setDrawColor(0);
+
+      return rowHeight;
     }
 
-    footer();
+    function fitText2Lines(text, maxW, baseSize, minSize){
+      let size = baseSize;
+      while(size >= minSize){
+        doc.setFont("helvetica","bold"); doc.setFontSize(size);
+        const lines = wrapText(doc, text, maxW);
+        if(lines.length <= 2) return { lines, size };
+        size -= 0.5;
+      }
+      doc.setFont("helvetica","bold"); doc.setFontSize(minSize);
+      const lines = wrapText(doc, text, maxW).slice(0,2);
+      return { lines, size:minSize };
+    }
+
+    function drawSignatureFooter(){
+      const tableW = pageW - (2*MARGIN);
+      const boxHeight = 85;
+      const boxBottomY = MARGIN + 60;
+      const boxTopY = boxBottomY + boxHeight;
+
+      doc.setDrawColor(0);
+      rectBottom(MARGIN, boxBottomY, tableW, boxHeight, "S");
+
+      const centerX = MARGIN + (tableW/2);
+      linePdf(centerX, boxBottomY, centerX, boxTopY);
+
+      const paddingX = 10;
+      const halfW = tableW/2;
+      const innerMaxW = halfW - (paddingX*2);
+
+      const leftX = MARGIN;
+      const rightX = centerX;
+
+      const innerLeftX = leftX + paddingX;
+      const innerRightX = rightX + paddingX;
+
+      const lineY = boxBottomY + 48;
+      const lineInset = 18;
+
+      linePdf(leftX + lineInset, lineY, centerX - lineInset, lineY);
+      linePdf(centerX + lineInset, lineY, (MARGIN + tableW) - lineInset, lineY);
+
+      const nameTopY = lineY - 12;
+      const nameGap = 9.5;
+      const roleY = boxBottomY + 12;
+
+      const leftName = upperEs(resp);
+      const rightName = upperEs(elaboradoPor || "SIN REGISTRAR");
+
+      const fitL = fitText2Lines(leftName, innerMaxW, FONT_SIZE_BOX_TEXT, 7);
+      const fitR = fitText2Lines(rightName, innerMaxW, FONT_SIZE_BOX_TEXT, 7);
+
+      doc.setFont("helvetica","bold"); doc.setFontSize(fitL.size);
+      fitL.lines.slice(0,2).forEach((ln,i)=>{
+        const y = nameTopY - (i*nameGap);
+        doc.text(ln, innerLeftX + innerMaxW/2, yTop(y), {align:"center"});
+      });
+
+      doc.setFont("helvetica","bold"); doc.setFontSize(fitR.size);
+      fitR.lines.slice(0,2).forEach((ln,i)=>{
+        const y = nameTopY - (i*nameGap);
+        doc.text(ln, innerRightX + innerMaxW/2, yTop(y), {align:"center"});
+      });
+
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
+      doc.text("RESGUARDANTE", innerLeftX + innerMaxW/2, yTop(roleY), {align:"center"});
+      doc.text("CONTROL PATRIMONIAL", innerRightX + innerMaxW/2, yTop(roleY), {align:"center"});
+    }
+
+    function drawLegalAndNotes(yPdf){
+      const tableW = pageW - (2*MARGIN);
+      const legalInnerW = tableW - 10;
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
+      const legalLines = wrapTextWords(doc, (getEmpresaLegalTextResolved()), legalInnerW);
+
+      const legalLineH = 9;
+      const legalBlockH = (legalLines.length * legalLineH) + 20;
+
+      if(yPdf - legalBlockH < Y_BOTTOM_LIMIT){
+        drawSignatureFooter();
+        doc.addPage("letter","portrait");
+        yPdf = Y_START;
+        drawTableHeader(yPdf);
+        yPdf -= 14;
+      }
+
+      doc.setDrawColor(0);
+      rectBottom(MARGIN, yPdf - legalBlockH, tableW, legalBlockH, "S");
+
+      let textY = yPdf - 12;
+      for(let i=0;i<legalLines.length;i++){
+        const words = legalLines[i];
+        const isLast = (i === legalLines.length-1);
+        drawJustifiedLine(doc, words, MARGIN + 5, yTop(textY), legalInnerW, isLast);
+        textY -= legalLineH;
+      }
+
+      yPdf -= legalBlockH;
+      yPdf -= 10;
+
+      const NOTES_MIN_H = 40;
+      const aestheticMaxH = 250;
+      const notesTitleOffset = 12;
+      const notesTopPadding = 6;
+
+      let available = yPdf - (Y_BOTTOM_LIMIT + notesTitleOffset + notesTopPadding);
+      if(available < NOTES_MIN_H){
+        drawSignatureFooter();
+        doc.addPage("letter","portrait");
+        yPdf = Y_START;
+        drawTableHeader(yPdf);
+        yPdf -= 14;
+        available = yPdf - (Y_BOTTOM_LIMIT + notesTitleOffset + notesTopPadding);
+      }
+
+      const finalNotesH = Math.min(aestheticMaxH, Math.max(NOTES_MIN_H, available));
+      const drawNotesY = Y_BOTTOM_LIMIT;
+
+      doc.setFont("helvetica","bold"); doc.setFontSize(FONT_SIZE_SMALL);
+      doc.text("Notas:", MARGIN + 5, yTop(drawNotesY + finalNotesH + notesTitleOffset - 4));
+      doc.setDrawColor(0);
+      rectBottom(MARGIN, drawNotesY, tableW, finalNotesH, "S");
+
+      return drawNotesY;
+    }
+
+    // ---- Build ----
+    let yPos = drawHeaderFirstPage();
+    drawTableHeader(yPos);
+    yPos -= 14;
+
+    for(let i=0;i<activos.length;i++){
+      const item = activos[i];
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_BODY);
+      const descLines = wrapText(doc, norm(item.descripcion), col2W - 8);
+      const genLines  = wrapText(doc, norm(item.genero), col3W - 8);
+      const ubicLines = wrapText(doc, norm(item.ubicacion), col4W - 8);
+      const maxLines = Math.max(1, descLines.length, genLines.length, ubicLines.length);
+      const rowHeight = (maxLines * LEADING_BODY) + 6;
+
+      if(yPos - rowHeight < Y_BOTTOM_LIMIT){
+        drawSignatureFooter();
+        doc.addPage("letter","portrait");
+        yPos = Y_START;
+        drawTableHeader(yPos);
+        yPos -= 14;
+      }
+
+      const used = drawRow(yPos, i, item);
+      yPos -= used;
+    }
+
+    yPos = drawLegalAndNotes(yPos);
+    drawSignatureFooter();
+
+    // Footer logo + numeración
+    const totalPages = doc.getNumberOfPages();
+    for(let p=1;p<=totalPages;p++){
+      doc.setPage(p);
+
+      if(footerLogo){
+        const footerW = 140;
+        const scale = footerW / footerLogo.w;
+        const footerH = footerLogo.h * scale;
+        const x = (pageW - footerW)/2;
+        const yPdf = 15;
+        doc.addImage(footerLogo.dataUrl, "PNG", x, pageH - (yPdf + footerH), footerW, footerH);
+      }
+
+      doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
+      const pageStr = `${p} / ${totalPages}`;
+      const numW = doc.getTextWidth(pageStr);
+      const x = pageW - MARGIN - numW;
+      const yPdf = 25;
+      doc.text(pageStr, x, yTop(yPdf));
+    }
+
     return doc;
   }
 
@@ -2883,28 +3396,33 @@ function updatePrintButtonState(){
         setSkusMsg("Selecciona un Responsable desde Catálogos para imprimir su resguardo.");
         return;
       }
-      setSkusMsg("Generando PDF…");
+
+      setSkusMsg("Cargando datos…");
       await ensureJsPdf();
+
+      const empresaNombre = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada?.nombre) ? empresaSeleccionada.nombre : (window.empresaSeleccionada?.nombre || "");
+      const branding = await fetchBrandingImages(empresaNombre);
+
       const activos = await fetchActivosPorResponsable(resp);
       if(!activos.length){
         setSkusMsg("No hay activos para este responsable (con los filtros actuales).");
         return;
       }
-      const doc = drawPdf(resp, activos);
-      const fname = `RESGUARDO_${safeFileName(resp)}_${fmtFechaPdf(new Date()).replaceAll('/','-')}.pdf`;
+
+      setSkusMsg("Generando PDF…");
+      const doc = drawPdf(resp, activos, branding);
+      const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(resp)}.pdf`;
       doc.save(fname);
       setSkusMsg("");
     }catch(e){
       console.error(e);
-      setSkusMsg(e.message || "No se pudo generar el PDF.");
+      setSkusMsg(e?.message || "No se pudo generar el PDF.");
     }
   };
 
   // Estado inicial
   try{ updatePrintButtonState(); syncGlobals(); }catch(e){}
-    try{ syncGlobals(); updatePrintButtonState(); }catch(e){}
-  })();
-</script>
+})();</script>
 
 </body>
 </html>
