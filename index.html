@@ -411,7 +411,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.12-2.0</div>
+      <div class="version-tag">2026.02.14-2.1</div>
     </div>
   </div>
 
@@ -458,10 +458,10 @@
         <button class="btn tonal" onclick="switchView('view-empresas')"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
       </div>
       <div style="display:grid; gap:12px; margin-top:16px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-        <button class="btn" onclick="abrirModuloSkus()"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
-        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
-        <button class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard Resguardos</button>
-        <button class="btn tonal" onclick="abrirHistorialResguardos()"><span class="material-symbols-rounded">history</span> Historial Resguardos</button>
+        <button id="btn-mode-skus" class="btn" onclick="abrirModuloSkus()"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
+        <button id="btn-mode-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button id="btn-mode-dash" class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard Resguardos</button>
+        <button id="btn-mode-hist" class="btn tonal" onclick="abrirHistorialResguardos()"><span class="material-symbols-rounded">history</span> Historial Resguardos</button>
       </div>
     </div>
 
@@ -473,7 +473,7 @@
 
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
-        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button id="btn-skus-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
         <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
 
         <span class="divider"></span>
@@ -527,7 +527,7 @@
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
-        <button class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
+        <button id="btn-detalle-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
 
         <span class="divider"></span>
 
@@ -581,7 +581,7 @@
         <h2 style="margin:0">Catálogos</h2>
         <div class="btn-group">
           <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
-          <button class="btn" onclick="switchView('view-skus')"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
+          <button id="btn-cat-ir-skus" class="btn" onclick="switchView('view-skus')"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
         </div>
       </div>
 
@@ -682,8 +682,8 @@
     <!-- DETALLE SESION RESGUARDO -->
     <div id="view-resguardo-session-detail" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
-        <button class="btn tonal" onclick="volverAListaHistorial()"><span class="material-symbols-rounded">arrow_back</span> Historial</button>
-        <button class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard</button>
+        <button id="btn-session-historial" class="btn tonal" onclick="volverAListaHistorial()"><span class="material-symbols-rounded">arrow_back</span> Historial</button>
+        <button id="btn-session-dashboard" class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard</button>
         <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">home</span> Modos</button>
         <span class="divider"></span>
         <button class="btn" onclick="cargarDetalleSesionResguardo(currentSessionId, true)"><span class="material-symbols-rounded">refresh</span> Recargar</button>
@@ -740,7 +740,7 @@
         <button class="btn" onclick="rotateRightLb()"><span class="material-symbols-rounded">rotate_right</span></button>
         <button class="btn" onclick="resetLb()"><span class="material-symbols-rounded">restart_alt</span></button>
 
-        <button class="btn" onclick="window.open(document.getElementById('lightbox-img').src,'_blank')">
+        <button id="btn-lightbox-download" class="btn" onclick="window.open(document.getElementById('lightbox-img').src,'_blank')">
           <span class="material-symbols-rounded">download</span>
         </button>
 
@@ -759,6 +759,184 @@
   window.SB_URL = SB_URL;
   window.SB_KEY = SB_KEY;
 let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+  // =========================
+  // ✅ Permisos (empresa_user_permissions)
+  // =========================
+  const __PERMS_NONE = {
+    loaded:false,
+    esSuperAdmin:false,
+    esAdminEmpresa:false,
+    puedeAccederSkus:false,
+    puedeAccederCatalogos:false,
+    puedeAccederResguardoDashboard:false,
+    puedeAccederResguardosHistorial:false,
+    puedeExportarResCvsPDF:false,
+    puedeCambiarFechaResguardosHistorial:false,
+    puedeDescargarFoto:false
+  };
+
+  const __PERMS_ALL = {
+    loaded:true,
+    esSuperAdmin:true,
+    esAdminEmpresa:true,
+    puedeAccederSkus:true,
+    puedeAccederCatalogos:true,
+    puedeAccederResguardoDashboard:true,
+    puedeAccederResguardosHistorial:true,
+    puedeExportarResCvsPDF:true,
+    puedeCambiarFechaResguardosHistorial:true,
+    puedeDescargarFoto:true
+  };
+
+  let __isSuperAdminChecked = false;
+  let __isSuperAdmin = false;
+
+  let __permsEffective = Object.assign({}, __PERMS_NONE);
+  const __permsCache = new Map(); // key: "<email>|<empresa>" => effective perms
+
+  window.__permsEffective = __permsEffective;
+
+  function resetPermisosState(){
+    try{ __permsCache.clear(); }catch{}
+    __isSuperAdminChecked = false;
+    __isSuperAdmin = false;
+    __permsEffective = Object.assign({}, __PERMS_NONE);
+    window.__permsEffective = __permsEffective;
+    try{ applyPermisosUI(); }catch{}
+  }
+
+  async function ensureSuperAdminFlag(){
+    if(__isSuperAdminChecked) return __isSuperAdmin;
+    __isSuperAdminChecked = true;
+    __isSuperAdmin = await esSuperAdmin();
+    return __isSuperAdmin;
+  }
+
+  function computePermisosEfectivos(raw){
+    const isSuper = __isSuperAdmin === true;
+    const esAdmin = isSuper || (raw?.esAdminEmpresa === true);
+    return {
+      loaded:true,
+      esSuperAdmin:isSuper,
+      esAdminEmpresa:esAdmin,
+
+      puedeAccederSkus: isSuper || esAdmin || raw?.puedeAccederSkus === true,
+      puedeAccederCatalogos: isSuper || esAdmin || raw?.puedeAccederCatalogos === true,
+      puedeAccederResguardoDashboard: isSuper || esAdmin || raw?.puedeAccederResguardoDashboard === true,
+      puedeAccederResguardosHistorial: isSuper || esAdmin || raw?.puedeAccederResguardosHistorial === true,
+
+      puedeExportarResCvsPDF: isSuper || esAdmin || raw?.puedeExportarResCvsPDF === true,
+      puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
+      puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true
+    };
+  }
+
+  function setPermisosEfectivos(eff){
+    __permsEffective = Object.assign({}, eff || __PERMS_NONE);
+    window.__permsEffective = __permsEffective;
+    try{ applyPermisosUI(); }catch{}
+    try{ updatePrintButtonState(); }catch{}
+  }
+
+  async function cargarPermisosEmpresaActual(force){
+    const email = (userEmail||"").trim();
+    const emp   = (empresaSeleccionada?.nombre||"").trim();
+
+    if(!email || !emp || !sessionToken){
+      setPermisosEfectivos(__PERMS_NONE);
+      return __permsEffective;
+    }
+
+    await ensureSuperAdminFlag();
+    if(__isSuperAdmin){
+      setPermisosEfectivos(__PERMS_ALL);
+      return __permsEffective;
+    }
+
+    const key = `${email.toLowerCase()}|${emp.toLowerCase()}`;
+    if(!force && __permsCache.has(key)){
+      setPermisosEfectivos(__permsCache.get(key));
+      return __permsEffective;
+    }
+
+    // Mientras carga: deja todo en "sin permisos" para que UI no deje entrar
+    setPermisosEfectivos(__PERMS_NONE);
+
+    try{
+      const select = [
+        "email","empresaNombre","usuarioNombre",
+        "esAdminEmpresa",
+        "puedeAccederSkus","puedeAccederCatalogos",
+        "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
+        "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
+        "puedeDescargarFoto"
+      ].join(",");
+
+      const url = `${SB_URL}/rest/v1/empresa_user_permissions` +
+        `?email=eq.${encodeURIComponent(email)}` +
+        `&empresaNombre=eq.${encodeURIComponent(emp)}` +
+        `&select=${select}`;
+
+      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        console.warn("Permisos HTTP", res.status, t);
+        setPermisosEfectivos(__PERMS_NONE);
+        return __permsEffective;
+      }
+
+      const arr = await res.json();
+      const raw = Array.isArray(arr) ? arr[0] : null;
+      const eff = computePermisosEfectivos(raw);
+      __permsCache.set(key, eff);
+      setPermisosEfectivos(eff);
+      return __permsEffective;
+    }catch(e){
+      console.warn("No se pudieron cargar permisos:", e);
+      setPermisosEfectivos(__PERMS_NONE);
+      return __permsEffective;
+    }
+  }
+
+  function getPerms(){ return window.__permsEffective || __permsEffective || __PERMS_NONE; }
+  function canSkus(){ return !!getPerms().puedeAccederSkus; }
+  function canCatalogos(){ return !!getPerms().puedeAccederCatalogos; }
+  function canDash(){ return !!getPerms().puedeAccederResguardoDashboard; }
+  function canHist(){ return !!getPerms().puedeAccederResguardosHistorial; }
+  function canExportPdf(){ return !!getPerms().puedeExportarResCvsPDF; }
+  function canChangeFechaPdf(){ return !!getPerms().puedeCambiarFechaResguardosHistorial; }
+  function canDescargarFoto(){ return !!getPerms().puedeDescargarFoto; }
+
+  function setBtnEnabled(id, enabled, disabledTitle){
+    const el = qs(id);
+    if(!el) return;
+    el.disabled = !enabled;
+    if(!enabled && disabledTitle) el.title = disabledTitle;
+    if(enabled && disabledTitle && el.title === disabledTitle) el.title = "";
+  }
+
+  function applyPermisosUI(){
+    // Selector
+    setBtnEnabled('btn-mode-skus', canSkus(), 'Sin permiso para SKUs');
+    setBtnEnabled('btn-mode-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
+    setBtnEnabled('btn-mode-dash', canDash(), 'Sin permiso para Dashboard Resguardos');
+    setBtnEnabled('btn-mode-hist', canHist(), 'Sin permiso para Historial Resguardos');
+
+    // Navegación interna
+    setBtnEnabled('btn-skus-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
+    setBtnEnabled('btn-detalle-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
+    setBtnEnabled('btn-cat-ir-skus', canSkus(), 'Sin permiso para SKUs');
+
+    setBtnEnabled('btn-session-dashboard', canDash(), 'Sin permiso para Dashboard');
+    setBtnEnabled('btn-session-historial', canHist(), 'Sin permiso para Historial');
+
+    // Descarga de foto (lightbox)
+    setBtnEnabled('btn-lightbox-download', canDescargarFoto(), 'Sin permiso para descargar foto');
+
+    // Imprimir PDF (se combina con condiciones de filtro en updatePrintButtonState)
+    try{ updatePrintButtonState(); }catch{}
+  }
+
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
@@ -774,6 +952,8 @@ function syncGlobals(){
   window.empresaSeleccionada = empresaSeleccionada || null;
   window.skuExtraFiltro = skuExtraFiltro || null;
   window.soloBaja = !!soloBaja;
+  // ✅ Permisos efectivos para que otras secciones (ej. PDF) los puedan leer
+  window.__permsEffective = __permsEffective || null;
 }
 
 function getResponsableFiltroActual(){
@@ -791,10 +971,23 @@ function getResponsableFiltroActual(){
 function updatePrintButtonState(){
   const btn = qs('btn-print-resguardo');
   if(!btn) return;
+
   const resp = getResponsableFiltroActual();
-  const ok = !!(resp && empresaSeleccionada && sessionToken);
+  const hasBase = !!(empresaSeleccionada && sessionToken);
+  const allowed = canExportPdf(); // permiso (empresa_user_permissions)
+
+  const ok = !!(resp && hasBase && allowed);
   btn.disabled = !ok;
-  btn.title = ok ? `Imprimir resguardo de ${resp}` : 'Selecciona un Responsable desde Catálogos para habilitar';
+
+  if(!allowed){
+    btn.title = 'No tienes permiso para imprimir/exportar PDF';
+  } else if(!resp){
+    btn.title = 'Selecciona un Responsable desde Catálogos para habilitar';
+  } else if(!hasBase){
+    btn.title = 'Sesión inválida';
+  } else {
+    btn.title = `Imprimir resguardo de ${resp}`;
+  }
 }
 
   // =========================
@@ -812,6 +1005,9 @@ function updatePrintButtonState(){
     sessionToken = "";
     userEmail = "";
     empresaSeleccionada = null;
+
+    // ✅ Permisos
+    try{ resetPermisosState(); }catch{}
 
     // Datos / filtros
     cacheSkus = [];
@@ -946,6 +1142,9 @@ function updatePrintButtonState(){
       // al salir de SKUs, el siguiente ingreso será considerado "directo" a menos que Catálogos lo marque
       window.__fromCatalogos = false;
     }
+
+    // ✅ Re-aplicar permisos al cambiar de vista (por si hay botones en esa vista)
+    try{ applyPermisosUI(); }catch{}
   }
 
   function setSkusMsg(text){
@@ -1011,7 +1210,7 @@ function updatePrintButtonState(){
     if(!lista || lista.__delegationReady) return;
     lista.__delegationReady = true;
 
-    lista.addEventListener('click', (ev)=>{
+    lista.addEventListener('click', async (ev)=>{
       const card = ev.target.closest?.('.empresa-card');
       if(!card) return;
       const id = card.getAttribute('data-id') || "";
@@ -1019,7 +1218,7 @@ function updatePrintButtonState(){
       const razon = card.getAttribute('data-razon') || "";
       const legal = card.getAttribute('data-legal') || "";
       if(!id || !nombre) return;
-      seleccionarEmpresa(id, nombre, razon, legal);
+      await seleccionarEmpresa(id, nombre, razon, legal);
     });
   }
 
@@ -1189,9 +1388,11 @@ function updatePrintButtonState(){
     `;
   }
 
-  function seleccionarEmpresa(id,nombre,razonSocial,legalText){
+  async function seleccionarEmpresa(id,nombre,razonSocial,legalText){
     empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim() };
     window.empresaSeleccionada = empresaSeleccionada || null;
+    // ✅ Evita arrastrar permisos de otra empresa
+    setPermisosEfectivos(__PERMS_NONE);
     syncGlobals();
     updatePrintButtonState();
     qs('chip-empresa-text').innerText = nombre;
@@ -1209,7 +1410,12 @@ function updatePrintButtonState(){
     qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
     qs('dash-users') && (qs('dash-users').innerHTML="");
     resetCatalogosState();
+
+    // ✅ Permisos por empresa (Supabase: empresa_user_permissions)
+    await cargarPermisosEmpresaActual(true);
+
     switchView('view-selector');
+    try{ applyPermisosUI(); }catch{}
   }
 
   function toggleScannerPanel(showIt){
@@ -1255,6 +1461,7 @@ function updatePrintButtonState(){
   // ✅ MEJORA CLAVE: al entrar a "Gestión de SKUs" NO cargamos nada
   function abrirModuloSkus(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canSkus()){ alert('No tienes permiso para acceder a SKUs.'); return; }
     // ✅ Entrada directa a Gestión: no debe quedarse ningún filtro/estado de Catálogos
     // (esto también mantiene el botón de resguardo bloqueado y en gris).
     skuExtraFiltro = null;
@@ -1738,6 +1945,7 @@ function updatePrintButtonState(){
   // =========================
   function abrirCatalogos(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canCatalogos()){ alert('No tienes permiso para acceder a Catálogos.'); return; }
     switchView('view-catalogos');
     currentTab = 'genero';
     marcarTab();
@@ -1859,6 +2067,7 @@ function updatePrintButtonState(){
   }
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
+    if(!canSkus()){ alert('No tienes permiso para acceder a SKUs.'); return; }
     const valor = decodeURIComponent(valorEnc);
     skuExtraFiltro = { tipo, valor, origen: 'catalogos' };
     window.__fromCatalogos = true;
@@ -1929,6 +2138,7 @@ function updatePrintButtonState(){
 
   function abrirDashboardResguardos(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canDash()){ alert('No tienes permiso para acceder al Dashboard de Resguardos.'); return; }
     qs('dash-title').innerText = `Resguardos · ${empresaSeleccionada.nombre}`;
     switchView('view-resguardos-dashboard');
     cargarDashboardResguardos(false);
@@ -2151,7 +2361,7 @@ function updatePrintButtonState(){
           <div style="min-width:0">${head}</div>
         </div>
 
-        <button class="btn tonal full" style="margin:8px 0 10px" onclick="openHistorialForEmail('${escapeHtml(u.email)}')"><span class="material-symbols-rounded">history</span> Ver historial</button>
+        <button class="btn tonal full" style="margin:8px 0 10px" ${canHist() ? '' : 'disabled'} title="${canHist() ? '' : 'Sin permiso para Historial'}" onclick="openHistorialForEmail('${escapeHtml(u.email)}')"><span class="material-symbols-rounded">history</span> Ver historial</button>
 
         <table class="dash-table">
           <thead>
@@ -2245,6 +2455,7 @@ function updatePrintButtonState(){
 
   function abrirHistorialResguardos(emailPref){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canHist()){ alert('No tienes permiso para acceder al Historial de Resguardos.'); return; }
     histPrevView = getCurrentVisibleViewId() || 'view-selector';
 
     safeSetText('hist-title', `Resguardos · ${empresaSeleccionada.nombre}`);
@@ -2808,6 +3019,7 @@ function updatePrintButtonState(){
   }
 
   function openHistorialForEmail(email){
+    if(!canHist()){ alert('No tienes permiso para acceder al Historial de Resguardos.'); return; }
     abrirHistorialResguardos(email);
   }
 
@@ -2880,6 +3092,40 @@ function updatePrintButtonState(){
       const m = date.toLocaleString('es-MX',{month:'short'}).replace('.','');
       return `${dd}/${m}/${yyyy}`.toUpperCase();
     }catch{ return ""; }
+  }
+
+
+  // Preguntar si se desea cambiar la fecha antes de generar el PDF
+  function pedirFechaResguardo(){
+    const today = new Date();
+    const iso = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0,10); // AAAA-MM-DD
+    // ✅ Solo permitir cambiar fecha si tiene permiso
+    if(typeof canChangeFechaPdf === 'function' && !canChangeFechaPdf()){
+      return today;
+    }
+
+    const wants = window.confirm("¿Deseas cambiar la fecha del resguardo antes de generar el PDF?");
+    if(!wants) return today;
+
+    const input = window.prompt("Ingresa la fecha (AAAA-MM-DD o DD/MM/AAAA):", iso);
+    if(!input) return today;
+
+    const v = String(input).trim();
+    let d = null;
+
+    // AAAA-MM-DD
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){
+      d = new Date(v + "T12:00:00");
+    } else if(/^\d{2}\/\d{2}\/\d{4}$/.test(v)){
+      const [dd,mm,yyyy] = v.split("/").map(Number);
+      d = new Date(yyyy, mm-1, dd, 12, 0, 0);
+    }
+
+    if(!d || isNaN(d.getTime())){
+      window.alert("Fecha inválida. Se usará la fecha de hoy.");
+      return today;
+    }
+    return d;
   }
 
   function safeFileName(s){
@@ -3043,7 +3289,7 @@ function updatePrintButtonState(){
     return all;
   }
 
-  function drawPdf(respRaw, activos, branding){
+  function drawPdf(respRaw, activos, branding, fechaOverride){
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"letter" });
     const pageW = doc.internal.pageSize.getWidth();
@@ -3063,7 +3309,7 @@ function updatePrintButtonState(){
 
     const resp = upperEs(respRaw);
     const empresaNombre = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada?.nombre) ? empresaSeleccionada.nombre : (window.empresaSeleccionada?.nombre || "");
-    const fechaStr = fmtFechaPdf(new Date()).toUpperCase();
+    const fechaStr = fmtFechaPdf(fechaOverride instanceof Date ? fechaOverride : new Date()).toUpperCase();
     const elaboradoPor = upperEs(nameOnlyFromEmailOrName((typeof userEmail !== 'undefined' && userEmail) ? userEmail : (window.userEmail||"")) || "Sin registrar");
 
     const headerLogo = branding?.header || null;
@@ -3391,6 +3637,13 @@ function updatePrintButtonState(){
   window.imprimirResguardoResponsable = async function(){
     try{
       updatePrintButtonState();
+
+      // ✅ Permiso para exportar PDF
+      if(!canExportPdf()){
+        setSkusMsg("No tienes permiso para imprimir/exportar PDF.");
+        return;
+      }
+
       const resp = getResponsableFiltroActual();
       if(!resp){
         setSkusMsg("Selecciona un Responsable desde Catálogos para imprimir su resguardo.");
@@ -3410,7 +3663,8 @@ function updatePrintButtonState(){
       }
 
       setSkusMsg("Generando PDF…");
-      const doc = drawPdf(resp, activos, branding);
+      const fechaOverride = pedirFechaResguardo();
+      const doc = drawPdf(resp, activos, branding, fechaOverride);
       const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(resp)}.pdf`;
       doc.save(fname);
       setSkusMsg("");
