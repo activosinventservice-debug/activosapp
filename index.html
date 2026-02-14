@@ -411,7 +411,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.14-2.1</div>
+      <div class="version-tag">2026.02.14-2.2</div>
     </div>
   </div>
 
@@ -940,6 +940,122 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
+// =========================
+// ✅ Cache por empresa (por usuario) + restauración rápida
+//    Evita datos cruzados entre usuarios/empresas y acelera regreso a una empresa ya visitada.
+// =========================
+const __empresaUiCache = new Map(); // key: "<email>|<empresaId>" => snapshot
+const __CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+
+function __empresaCacheKey(email, empresaId){
+  const e = (email||"").trim().toLowerCase();
+  const id = String(empresaId||"").trim();
+  return `${e}|${id}`;
+}
+
+function __deepCopy(obj){
+  try{ return JSON.parse(JSON.stringify(obj)); }catch{ return obj; }
+}
+
+function saveEmpresaCache(){
+  try{
+    if(!userEmail || !empresaSeleccionada?.id) return;
+    const key = __empresaCacheKey(userEmail, empresaSeleccionada.id);
+
+    const snapshot = {
+      ts: Date.now(),
+
+      // Catálogos
+      catalogoCache: __deepCopy(catalogoCache),
+      currentTab: currentTab,
+      catalogoFilter: catalogoFilter,
+
+      // SKUs
+      cacheSkus: __deepCopy(cacheSkus),
+      paginaActual: paginaActual,
+      totalActivos: totalActivos,
+      sortField: sortField,
+      sortAsc: !!sortAsc,
+      soloBaja: !!soloBaja,
+      skuExtraFiltro: __deepCopy(skuExtraFiltro),
+      skusSearch: (qs('sku-search')?.value ?? ""),
+
+      // Dashboard / historial (por ahora solo limpiamos al cambiar; no cacheamos pesado)
+    };
+
+    __empresaUiCache.set(key, snapshot);
+  }catch(e){
+    console.warn("No se pudo guardar cache de empresa:", e);
+  }
+}
+
+function restoreEmpresaCache(empresaId){
+  try{
+    if(!userEmail || !empresaId) return false;
+    const key = __empresaCacheKey(userEmail, empresaId);
+    const snap = __empresaUiCache.get(key);
+    if(!snap) return false;
+
+    // TTL (si caducó, no restauramos)
+    if(snap.ts && (Date.now() - snap.ts) > __CACHE_TTL_MS){
+      __empresaUiCache.delete(key);
+      return false;
+    }
+
+    // Catálogos
+    if(snap.catalogoCache) catalogoCache = __deepCopy(snap.catalogoCache);
+    currentTab = snap.currentTab || currentTab || 'genero';
+    catalogoFilter = (snap.catalogoFilter ?? "");
+
+    // SKUs
+    cacheSkus = __deepCopy(snap.cacheSkus || []);
+    paginaActual = Number.isFinite(+snap.paginaActual) ? +snap.paginaActual : 0;
+    totalActivos = Number.isFinite(+snap.totalActivos) ? +snap.totalActivos : 0;
+    sortField = snap.sortField || "reciente";
+    sortAsc = !!snap.sortAsc;
+    soloBaja = !!snap.soloBaja;
+    skuExtraFiltro = __deepCopy(snap.skuExtraFiltro || null);
+
+    // Restaurar inputs/chips
+    try{ const inp = qs('sku-search'); if(inp) inp.value = snap.skusSearch || ""; }catch{}
+    try{ const chk = qs('solo-baja'); if(chk) chk.checked = soloBaja; }catch{}
+    try{
+      if(skuExtraFiltro && skuExtraFiltro.valor){
+        actualizarChipFiltroConConteo(); // usa totalActivos guardado
+      } else {
+        resetChipFiltroUI();
+        show(qs('filtro-activo'), false);
+      }
+    }catch{}
+
+    // Render inmediato si había lista cargada
+    try{
+      if(Array.isArray(cacheSkus) && cacheSkus.length){
+        renderTabla();
+        renderPaginacion();
+      }else{
+        qs('rows') && (qs('rows').innerHTML="");
+        qs('pagination') && (qs('pagination').innerHTML="");
+      }
+    }catch{}
+
+    // Catálogos (si entras a esa vista, ya estará listo)
+    try{ if(qs('cat-search')) qs('cat-search').value = catalogoFilter || ""; }catch{}
+    try{ renderCatalogo(); }catch{}
+
+    syncGlobals();
+    updatePrintButtonState();
+
+    return true;
+  }catch(e){
+    console.warn("No se pudo restaurar cache de empresa:", e);
+    return false;
+  }
+}
+
+function clearAllEmpresaCaches(){
+  try{ __empresaUiCache.clear(); }catch{}
+}
 
   let skuExtraFiltro = null;
     window.skuExtraFiltro = null;
@@ -1001,6 +1117,11 @@ function updatePrintButtonState(){
     try{ stopScanner(); }catch{}
     try{ closeLb(); }catch{}
 
+
+    // ✅ Abort fetch en vuelo + bump de contexto (anti-datos cruzados)
+    try{ __resetAbortEmpresa(); }catch{}
+    try{ __resetAbortSession(); }catch{}
+    try{ bumpCtxVersion(); }catch{}
     // Auth / sesión
     sessionToken = "";
     userEmail = "";
@@ -1008,6 +1129,9 @@ function updatePrintButtonState(){
 
     // ✅ Permisos
     try{ resetPermisosState(); }catch{}
+
+    // ✅ Cache por empresa (limpieza total, evita datos cruzados)
+    try{ clearAllEmpresaCaches(); }catch{}
 
     // Datos / filtros
     cacheSkus = [];
@@ -1123,6 +1247,57 @@ function updatePrintButtonState(){
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
   }
+
+// ---------------- Abort + Context Guard (anti-datos cruzados) ----------------
+// Idea: si cambias de usuario o de empresa, abortamos TODOS los fetch en vuelo.
+// Esto evita que una respuesta "tardía" pinte datos del contexto anterior.
+const __abortHub = {
+  sessionCtrl: new AbortController(),
+  empresaCtrl: new AbortController(),
+};
+
+function __resetAbortSession(){
+  try{ __abortHub.sessionCtrl.abort('logout'); }catch{}
+  __abortHub.sessionCtrl = new AbortController();
+}
+function __resetAbortEmpresa(){
+  try{ __abortHub.empresaCtrl.abort('empresa_change'); }catch{}
+  __abortHub.empresaCtrl = new AbortController();
+}
+
+// Combina señales: init.signal + session + empresa (si el navegador soporta AbortSignal.any)
+function __combineSignals(signals){
+  const list = (signals || []).filter(Boolean);
+  if(!list.length) return undefined;
+  if(typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function'){
+    return AbortSignal.any(list);
+  }
+  // Fallback compatible
+  const ctrl = new AbortController();
+  const onAbort = () => { try{ ctrl.abort(); }catch{} };
+  for(const s of list){
+    if(s.aborted){ onAbort(); break; }
+    try{ s.addEventListener('abort', onAbort, { once:true }); }catch{}
+  }
+  return ctrl.signal;
+}
+
+// Monkey-patch fetch para inyectar señales de sesión/empresa.
+(function(){
+  const __origFetch = window.fetch.bind(window);
+  window.__origFetch = __origFetch;
+  window.fetch = function(input, init){
+    const i = init ? { ...init } : {};
+    const signal = __combineSignals([ i.signal, __abortHub.sessionCtrl.signal, __abortHub.empresaCtrl.signal ]);
+    if(signal) i.signal = signal;
+    return __origFetch(input, i);
+  };
+})();
+
+// Context version (por si alguna función aplica UI sin esperar a que fetch sea abortado)
+let __ctxVersion = 0;
+function bumpCtxVersion(){ __ctxVersion++; return __ctxVersion; }
+function getCtxVersion(){ return __ctxVersion; }
 
   function switchView(id){
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
@@ -1389,34 +1564,62 @@ function updatePrintButtonState(){
   }
 
   async function seleccionarEmpresa(id,nombre,razonSocial,legalText){
-    empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim() };
-    window.empresaSeleccionada = empresaSeleccionada || null;
-    // ✅ Evita arrastrar permisos de otra empresa
-    setPermisosEfectivos(__PERMS_NONE);
-    syncGlobals();
-    updatePrintButtonState();
-    qs('chip-empresa-text').innerText = nombre;
-    qs('chip-empresa').classList.remove('hidden');
-    qs('txt-empresa-actual').innerText = nombre;
-    // Logo discreto en encabezado
-    updateTopEmpresaLogo().catch(()=>{});
+  // ✅ Antes de cambiar: guardar snapshot de la empresa previa (por usuario)
+  try{ saveEmpresaCache(); }catch{}
 
+  // ✅ Abort de fetch en vuelo del contexto anterior + bump de contexto
+  try{ __resetAbortEmpresa(); }catch{}
+  try{ bumpCtxVersion(); }catch{}
+
+  empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim() };
+  window.empresaSeleccionada = empresaSeleccionada || null;
+
+  // ✅ Evita arrastrar permisos de otra empresa mientras cargan
+  setPermisosEfectivos(__PERMS_NONE);
+  syncGlobals();
+  updatePrintButtonState();
+
+  // UI encabezado
+  qs('chip-empresa-text').innerText = nombre;
+  qs('chip-empresa').classList.remove('hidden');
+  qs('txt-empresa-actual').innerText = nombre;
+
+  // Logo discreto en encabezado
+  updateTopEmpresaLogo().catch(()=>{});
+
+  // ✅ Siempre limpiar vistas "pesadas" para no mezclar (dashboard/historial)
+  try{ setDashMsg(""); }catch{}
+  try{ qs('dash-global-grid') && (qs('dash-global-grid').innerHTML=""); }catch{}
+  try{ qs('dash-users') && (qs('dash-users').innerHTML=""); }catch{}
+
+  // ✅ Intentar restaurar cache de esta empresa (si ya se visitó)
+  const restored = restoreEmpresaCache(id) === true;
+
+  if(!restored){
+    // Estado SKUs limpio
     cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1;
     qs('rows').innerHTML="";
+    qs('pagination').innerHTML="";
     skuExtraFiltro = null;
+    window.__fromCatalogos = false;
     show(qs('filtro-activo'), false);
     setSkusMsg("");
-    setDashMsg("");
-    qs('dash-global-grid') && (qs('dash-global-grid').innerHTML="");
-    qs('dash-users') && (qs('dash-users').innerHTML="");
+
+    // Catálogos limpios
     resetCatalogosState();
-
-    // ✅ Permisos por empresa (Supabase: empresa_user_permissions)
-    await cargarPermisosEmpresaActual(true);
-
-    switchView('view-selector');
-    try{ applyPermisosUI(); }catch{}
+    try{ const inp = qs('cat-search'); if(inp) inp.value = ""; }catch{}
+  }else{
+    // Si restauró, asegurar que el chip y el botón PDF queden consistentes
+    try{ updatePrintButtonState(); }catch{}
   }
+
+  // ✅ Permisos por empresa (Supabase: empresa_user_permissions)
+  //    (usa cache interno por email|empresaNombre; no forzamos red salvo que sea necesario)
+  await cargarPermisosEmpresaActual(false);
+
+  switchView('view-selector');
+  try{ applyPermisosUI(); }catch{}
+}
 
   function toggleScannerPanel(showIt){
     const c = qs('scanner-container');
