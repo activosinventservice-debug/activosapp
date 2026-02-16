@@ -398,6 +398,91 @@
       html.is-mobile .gallery img{height:185px}
       html.is-mobile .select{min-width:140px}
     }
+  
+    /* CSV menu (Gestión SKUs) */
+    .menu-wrap{ position:relative; display:inline-block; }
+    .menu-panel{
+      position:absolute; right:0; top:44px;
+      min-width:320px; max-width:360px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; box-shadow: var(--shadow);
+      padding:8px; z-index:60;
+    }
+    html.is-mobile .menu-panel{
+      left:0; right:auto; top:48px;
+      width:min(92vw, 360px);
+      min-width:unset; max-width:unset;
+    }
+    
+    /* CSV (Gestión SKUs) */
+    .csv-actions{ display:flex; align-items:center; gap:10px; }
+    html.is-mobile .csv-actions{ width:100%; }
+    .csv-actions .btn{ white-space:nowrap; }
+
+    /* Modal */
+    .modal{ position:fixed; inset:0; z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:18px; }
+    .modal.hidden{ display:none; }
+    .modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.40); backdrop-filter: blur(3px); }
+    .modal-card{
+      position:relative;
+      width:min(520px, 96vw);
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      margin:auto;
+    }
+    html.is-mobile .modal{ align-items:flex-end; }
+    html.is-mobile .modal-card{ width: min(560px, 96vw); border-radius:18px 18px 18px 18px; }
+
+    .modal-head{
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:12px; padding:14px 14px 10px 14px;
+      border-bottom:1px solid var(--border);
+      background:linear-gradient(180deg, rgba(11,110,243,.06), rgba(255,255,255,0));
+    }
+    .modal-title{ font-weight:900; font-size:15px; letter-spacing:.2px; color:var(--text); }
+    .modal-sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+    .icon-btn{
+      width:38px; height:38px; border-radius:12px;
+      border:1px solid var(--border); background:var(--surface);
+      display:grid; place-items:center; cursor:pointer;
+    }
+
+    .modal-body{ padding:10px 12px 12px 12px; display:flex; flex-direction:column; gap:10px; }
+    .action-row{
+      width:100%;
+      display:flex; align-items:flex-start; gap:12px;
+      border:1px solid var(--border);
+      background:rgba(11,110,243,.03);
+      padding:12px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      text-align:left;
+    }
+    .action-row:hover{ background:rgba(11,110,243,.06); }
+    .action-ico{ font-size:22px; margin-top:1px; color:var(--primary); }
+    .action-text{ flex:1; display:flex; flex-direction:column; gap:2px; }
+    .action-title{ font-weight:900; color:var(--text); font-size:13px; }
+    .action-desc{ color:var(--muted); font-size:12px; line-height:1.25; }
+    .action-go{ color:var(--muted); margin-top:2px; }
+
+    .modal-hint{ margin-top:2px; font-size:12px; color:var(--muted); padding:4px 2px 0 2px; }
+.menu-item{
+      width:100%;
+      display:flex; align-items:flex-start; gap:12px;
+      background:transparent; border:0;
+      padding:12px 12px; border-radius:12px;
+      font-weight:800; color:var(--text);
+      cursor:pointer; text-align:left;
+    }
+    .menu-item .material-symbols-rounded{ font-size:22px; margin-top:2px; }
+    .menu-item .mi-text{ display:flex; flex-direction:column; gap:2px; }
+    .menu-item .mi-title{ font-weight:950; line-height:1.15; }
+    .menu-item .mi-sub{ font-size:.82rem; font-weight:650; color:var(--muted); line-height:1.2; }
+    .menu-item:hover{ background:rgba(11,110,243,.08); }
+
   </style>
 </head>
 <body>
@@ -411,7 +496,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.14-2.2</div>
+      <div class="version-tag">2026.02.15-2.3</div>
     </div>
   </div>
 
@@ -453,6 +538,7 @@
           <div style="min-width:0;">
           <small style="color:#0B4CB3; font-weight:800;">Empresa Activa</small>
           <h2 id="txt-empresa-actual" style="margin:4px 0 0">—</h2>
+          <div id="txt-empresa-razon" style="margin-top:2px; color:#64748B; font-weight:700; font-size:.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</div>
           </div>
         </div>
         <button class="btn tonal" onclick="switchView('view-empresas')"><span class="material-symbols-rounded">swap_horiz</span> Cambiar</button>
@@ -478,19 +564,29 @@
 
         <span class="divider"></span>
 
-        <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
-        <button id="btn-print-resguardo" class="btn tonal" disabled onclick="imprimirResguardoResponsable()">
-  <span class="material-symbols-rounded">print</span> Imprimir resguardo
-</button>
+        <div class="csv-actions hidden" id="skus-csv-actions">
+          <button class="btn tonal" id="btn-open-csv-modal" onclick="openCsvModal()" title="Acciones CSV">
+            <span class="material-symbols-rounded">table_view</span> CSV
+          </button>
+          <input id="input-skus-csv" type="file" accept=".csv,text/csv" class="hidden" onchange="importarSkusCsv(this.files && this.files[0])"/>
+        </div>
 
-<select id="select-orden" class="select" onchange="cambiarOrdenUI()">
+        <span class="divider"></span>
+
+        <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
+
+        <button id="btn-print-resguardo" class="btn tonal" disabled onclick="imprimirResguardoResponsable()">
+          <span class="material-symbols-rounded">print</span> Imprimir resguardo
+        </button>
+
+        <select id="select-orden" class="select" onchange="cambiarOrdenUI()">
           <option value="reciente.desc" selected>Más reciente</option>
           <option value="sku.asc">SKU ↑</option>
           <option value="sku.desc">SKU ↓</option>
         </select>
       </div>
 
-      <div class="searchgroup">
+<div class="searchgroup">
         <div class="pill" style="flex:1; min-width:280px;">
           <div class="leading"><span class="material-symbols-rounded">search</span></div>
           <input type="text" id="sku-search" placeholder="Buscar SKU, descripción o código de barras…" onkeyup="onSkuSearchKey(event)">
@@ -772,7 +868,8 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
     puedeAccederResguardosHistorial:false,
     puedeExportarResCvsPDF:false,
     puedeCambiarFechaResguardosHistorial:false,
-    puedeDescargarFoto:false
+    puedeDescargarFoto:false,
+    puedeImportarExportarSkusCsv:false
   };
 
   const __PERMS_ALL = {
@@ -785,7 +882,8 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
     puedeAccederResguardosHistorial:true,
     puedeExportarResCvsPDF:true,
     puedeCambiarFechaResguardosHistorial:true,
-    puedeDescargarFoto:true
+    puedeDescargarFoto:true,
+    puedeImportarExportarSkusCsv:true
   };
 
   let __isSuperAdminChecked = false;
@@ -828,6 +926,9 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
       puedeExportarResCvsPDF: isSuper || esAdmin || raw?.puedeExportarResCvsPDF === true,
       puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
       puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true
+    ,
+
+      puedeImportarExportarSkusCsv: isSuper || esAdmin || raw?.puedeImportarExportarSkusCsv === true
     };
   }
 
@@ -869,7 +970,8 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
         "puedeAccederSkus","puedeAccederCatalogos",
         "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
         "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
-        "puedeDescargarFoto"
+        "puedeDescargarFoto",
+        "puedeImportarExportarSkusCsv"
       ].join(",");
 
       const url = `${SB_URL}/rest/v1/empresa_user_permissions` +
@@ -906,6 +1008,7 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   function canExportPdf(){ return !!getPerms().puedeExportarResCvsPDF; }
   function canChangeFechaPdf(){ return !!getPerms().puedeCambiarFechaResguardosHistorial; }
   function canDescargarFoto(){ return !!getPerms().puedeDescargarFoto; }
+  function canSkusCsv(){ return !!getPerms().puedeImportarExportarSkusCsv; }
 
   function setBtnEnabled(id, enabled, disabledTitle){
     const el = qs(id);
@@ -929,6 +1032,16 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
 
     setBtnEnabled('btn-session-dashboard', canDash(), 'Sin permiso para Dashboard');
     setBtnEnabled('btn-session-historial', canHist(), 'Sin permiso para Historial');
+
+    // CSV (Gestión SKUs)
+    try{
+      const g = qs('skus-csv-actions');
+      if(g){
+        if(canSkusCsv()) g.classList.remove('hidden');
+        else g.classList.add('hidden');
+      }
+    }catch{}
+
 
     // Descarga de foto (lightbox)
     setBtnEnabled('btn-lightbox-download', canDescargarFoto(), 'Sin permiso para descargar foto');
@@ -1322,6 +1435,370 @@ function getCtxVersion(){ return __ctxVersion; }
     try{ applyPermisosUI(); }catch{}
   }
 
+  
+  // =========================
+  // ✅ Menú CSV (Gestión SKUs)
+// =========================
+// Opción A: abrir con pointerdown + cerrar "click fuera" en pointerdown (captura)
+// Evita que el mismo gesto que abre el menú lo cierre inmediatamente.
+function toggleSkusCsvMenu(ev){
+  try{
+    ev && ev.preventDefault && ev.preventDefault();
+    ev && ev.stopPropagation && ev.stopPropagation();
+  }catch{}
+  const menu = qs('skus-csv-menu');
+  const btn  = qs('btn-skus-csvmenu');
+  if(!menu) return;
+
+  const willOpen = menu.classList.contains('hidden');
+  if(willOpen){
+    menu.classList.remove('hidden');
+    if(btn) btn.setAttribute('aria-expanded','true');
+  }else{
+    menu.classList.add('hidden');
+    if(btn) btn.setAttribute('aria-expanded','false');
+  }
+}
+
+function closeSkusCsvMenu(){
+  const menu = qs('skus-csv-menu');
+  const btn  = qs('btn-skus-csvmenu');
+  if(menu) menu.classList.add('hidden');
+  if(btn) btn.setAttribute('aria-expanded','false');
+}
+
+// ✅ Cerrar al tocar fuera (captura) — robusto móvil/escritorio
+document.addEventListener('pointerdown', (e)=>{
+  const wrap = qs('skus-csv-wrap');
+  const menu = qs('skus-csv-menu');
+  if(!wrap || !menu) return;
+  if(menu.classList.contains('hidden')) return;
+  if(!wrap.contains(e.target)) closeSkusCsvMenu();
+}, true);
+
+// ✅ Escape para cerrar
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape') closeSkusCsvMenu();
+});
+
+
+  function normHeader(h){
+    return (h||"").toString().trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,'_');
+  }
+
+  function csvEscape(v){
+    if(v===null || v===undefined) return "";
+    const s = String(v);
+    if(/[",\n\r]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+
+  function downloadTextFile(filename, text, mime="text/plain"){
+    const blob = new Blob([text], {type:mime});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  
+  // CSV Modal (SKUs)
+  function openCsvModal(){
+    if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
+    const m = document.getElementById('csv-modal');
+    if(!m) return;
+    m.classList.remove('hidden');
+    // focus trap minimal: focus close button
+    const closeBtn = m.querySelector('.icon-btn');
+    closeBtn && closeBtn.focus && closeBtn.focus();
+  }
+  function closeCsvModal(){
+    const m = document.getElementById('csv-modal');
+    if(!m) return;
+    m.classList.add('hidden');
+  }
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){
+      const m = document.getElementById('csv-modal');
+      if(m && !m.classList.contains('hidden')) closeCsvModal();
+    }
+  });
+
+  // ===================== Machote CSV (igual que la app Android) =====================
+  function _csvTagNow(){
+    // yyyyMMdd_HHmmss (hora local)
+    const d = new Date();
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+
+  function _todayYMD(){
+    // yyyy-MM-dd (fecha local)
+    const d = new Date();
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+
+  async function ensureEmpresaCounterRowWeb(){
+    if(!empresaSeleccionada?.id) throw new Error("Selecciona empresa");
+    const url = `${SB_URL}/rest/v1/empresa_counters?on_conflict=empresa_id`;
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    };
+    const payload = [{
+      empresa_id: empresaSeleccionada.id,
+      empresa_nombre: empresaSeleccionada.nombre || null
+    }];
+    const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(payload) });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `ensureEmpresaCounterRow: ${res.status}`);
+    }
+  }
+
+  async function getEmpresaCounterWeb(){
+    await ensureEmpresaCounterRowWeb();
+    const url = `${SB_URL}/rest/v1/empresa_counters?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=sku_counter`;
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Accept':'application/json' };
+    const res = await fetch(url, { headers });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `getEmpresaCounter: ${res.status}`);
+    }
+    const arr = await res.json().catch(()=> []);
+    const val = Array.isArray(arr) && arr.length ? (arr[0]?.sku_counter ?? 0) : 0;
+    return Number(val) || 0;
+  }
+
+  async function descargarMachoteSkus(){
+    if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+
+    setSkusMsg("Generando machote…");
+    try{
+      const current = await getEmpresaCounterWeb();
+      const filas = 50;
+      const start = current + 1;
+
+      // ✅ Encabezados como en la app (LocalStore.exportActivosCsv)
+      const headers = [
+        "sku","Descripcion","Marca","Modelo","Serie",
+        "genero","ubicacion","localizacion","responsable",
+        "codigoBarras","cantidad","fechaRegistro",
+        "costo","fechaAdquisicion","dadoDeBaja","bajaAt"
+      ];
+
+      const out = [];
+      out.push(headers.join(","));
+
+      for(let i=0;i<filas;i++){
+        const n = start + i;
+        const sku = String(n).padStart(6,'0'); // igual que la app
+        const row = [
+          sku, "", "", "", "",
+          "", "", "", "",
+          "", "1", _todayYMD(),
+          "", "", "0", ""
+        ];
+        out.push(row.map(csvEscape).join(","));
+      }
+
+      const emp = (empresaSeleccionada?.nombre || "empresa").replace(/[^a-z0-9_-]+/ig,'_');
+      const filename = `Machote_Altas_${emp}_${_csvTagNow()}.csv`;
+      downloadTextFile(filename, out.join("\n"), "text/csv;charset=utf-8");
+
+      setSkusMsg(`Machote listo: ${filas} filas (desde ${String(start).padStart(6,'0')})`);
+      setTimeout(()=>setSkusMsg(""), 3000);
+    }catch(e){
+      console.error(e);
+      setSkusMsg("Error al generar machote: " + (e?.message || e));
+    }
+  }
+
+  async function exportarSkusCsv(){
+    if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+    setSkusMsg("Exportando... (puede tardar si hay muchos registros)");
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
+    const cols = [
+      "sku","descripcion","cantidad","genero","codigo_barras","ubicacion","responsable","localizacion",
+      "costo","fecha_adquisicion","marca","modelo","serie","dado_de_baja","updated_at","created_at"
+    ];
+    const limit = 1000;
+    let offset = 0;
+    let all = [];
+    while(true){
+      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(cols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
+      const res = await fetch(url, { headers });
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        console.error(t);
+        setSkusMsg("Error al exportar: " + (t||res.status));
+        return;
+      }
+      const rows = await res.json();
+      if(Array.isArray(rows) && rows.length) all = all.concat(rows);
+      if(!Array.isArray(rows) || rows.length < limit) break;
+      offset += limit;
+    }
+
+    const out = [];
+    out.push(cols.join(","));
+    for(const r of all){
+      out.push(cols.map(c=>csvEscape(r?.[c])).join(","));
+    }
+    const emp = (empresaSeleccionada?.nombre || "empresa").replace(/[^a-z0-9_-]+/ig,'_');
+    downloadTextFile(`activos_${emp}.csv`, out.join("\n"), "text/csv;charset=utf-8");
+    setSkusMsg(`Exportación lista: ${all.length} registros`);
+    setTimeout(()=>setSkusMsg(""), 2500);
+  }
+
+  function parseCsv(text){
+    // Parser CSV básico con soporte de comillas dobles
+    const rows = [];
+    let i=0, field="", row=[], inQuotes=false;
+    const pushField=()=>{ row.push(field); field=""; };
+    const pushRow=()=>{ rows.push(row); row=[]; };
+    while(i<text.length){
+      const ch = text[i];
+      if(inQuotes){
+        if(ch === '"'){
+          const next = text[i+1];
+          if(next === '"'){ field += '"'; i+=2; continue; }
+          inQuotes=false; i++; continue;
+        } else {
+          field += ch; i++; continue;
+        }
+      } else {
+        if(ch === '"'){ inQuotes=true; i++; continue; }
+        if(ch === ','){ pushField(); i++; continue; }
+        if(ch === '\n'){ pushField(); pushRow(); i++; continue; }
+        if(ch === '\r'){ i++; continue; }
+        field += ch; i++; continue;
+      }
+    }
+    pushField();
+    if(row.length>1 || row[0]!=="" ) pushRow();
+    // remove empty trailing rows
+    return rows.filter(r=>r.some(v=>(v||"").trim()!==""));
+  }
+
+  function toBool(v){
+    const s=(v??"").toString().trim().toLowerCase();
+    return (s==="1"||s==="true"||s==="si"||s==="sí"||s==="yes");
+  }
+  function toNum(v){
+    const s=(v??"").toString().trim();
+    if(!s) return null;
+    const n=Number(s.replace(/,/g,''));
+    return Number.isFinite(n)? n : null;
+  }
+
+  async function importarSkusCsv(file){
+    if(!file) return;
+    if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+
+    const ok = confirm("Esto hará UPSERT (insert/update) de los activos por SKU. ¿Continuar?");
+    if(!ok) return;
+
+    setSkusMsg("Leyendo CSV...");
+    const text = await file.text();
+    const table = parseCsv(text);
+    if(!table.length){ setSkusMsg("CSV vacío"); return; }
+
+    const headerRow = table[0].map(normHeader);
+    const dataRows = table.slice(1);
+
+    const idxOf = (name)=> headerRow.indexOf(normHeader(name));
+    const mapIdx = {
+      sku: idxOf("sku"),
+      descripcion: idxOf("descripcion"),
+      cantidad: idxOf("cantidad"),
+      genero: idxOf("genero"),
+      codigo_barras: idxOf("codigo_barras"),
+      ubicacion: idxOf("ubicacion"),
+      responsable: idxOf("responsable"),
+      localizacion: idxOf("localizacion"),
+      costo: idxOf("costo"),
+      fecha_adquisicion: idxOf("fecha_adquisicion"),
+      marca: idxOf("marca"),
+      modelo: idxOf("modelo"),
+      serie: idxOf("serie"),
+      dado_de_baja: idxOf("dado_de_baja"),
+    };
+
+    if(mapIdx.sku < 0){
+      setSkusMsg("El CSV debe incluir columna 'sku'");
+      return;
+    }
+
+    // construir objetos
+    const objs = [];
+    for(const r of dataRows){
+      const sku = (r[mapIdx.sku]||"").trim();
+      if(!sku) continue;
+      const obj = {
+        empresa_id: empresaSeleccionada.id,
+        sku,
+        descripcion: mapIdx.descripcion>=0 ? (r[mapIdx.descripcion]||"").trim() : "",
+        cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"0").toString().trim())||0) : 0,
+        genero: mapIdx.genero>=0 ? (r[mapIdx.genero]||"").trim() : "",
+        codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
+        ubicacion: mapIdx.ubicacion>=0 ? (r[mapIdx.ubicacion]||"").trim() : "",
+        responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
+        localizacion: mapIdx.localizacion>=0 ? (r[mapIdx.localizacion]||"").trim() : "",
+      };
+      if(mapIdx.costo>=0){ const n=toNum(r[mapIdx.costo]); if(n!==null) obj.costo=n; }
+      if(mapIdx.fecha_adquisicion>=0){ const v=(r[mapIdx.fecha_adquisicion]||"").trim(); if(v) obj.fecha_adquisicion=v; }
+      if(mapIdx.marca>=0){ const v=(r[mapIdx.marca]||"").trim(); if(v) obj.marca=v; }
+      if(mapIdx.modelo>=0){ const v=(r[mapIdx.modelo]||"").trim(); if(v) obj.modelo=v; }
+      if(mapIdx.serie>=0){ const v=(r[mapIdx.serie]||"").trim(); if(v) obj.serie=v; }
+      if(mapIdx.dado_de_baja>=0){ obj.dado_de_baja = toBool(r[mapIdx.dado_de_baja]); }
+      objs.push(obj);
+    }
+
+    if(!objs.length){ setSkusMsg("No hay filas válidas para importar"); return; }
+
+    setSkusMsg(`Importando ${objs.length}...`);
+    const headers = {
+      'apikey':SB_KEY,
+      'Authorization':`Bearer ${sessionToken}`,
+      'Content-Type':'application/json',
+      'Prefer':'resolution=merge-duplicates'
+    };
+
+    const CHUNK = 200;
+    let done=0;
+    for(let i=0;i<objs.length;i+=CHUNK){
+      const chunk = objs.slice(i, i+CHUNK);
+      const url = `${SB_URL}/rest/v1/activos?on_conflict=empresa_id,sku`;
+      const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(chunk) });
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        console.error(t);
+        setSkusMsg("Error al importar: " + (t||res.status));
+        return;
+      }
+      done += chunk.length;
+      setSkusMsg(`Importando... ${done}/${objs.length}`);
+    }
+
+    setSkusMsg(`Importación lista: ${objs.length} filas`);
+    // refrescar lista si estamos en skus
+    try{ await consultarSkus(); }catch{}
+    setTimeout(()=>setSkusMsg(""), 3000);
+  }
+
+
   function setSkusMsg(text){
     const el = qs('skus-msg');
     if(!el) return;
@@ -1583,6 +2060,16 @@ function getCtxVersion(){ return __ctxVersion; }
   qs('chip-empresa-text').innerText = nombre;
   qs('chip-empresa').classList.remove('hidden');
   qs('txt-empresa-actual').innerText = nombre;
+  // Razón social
+  try{
+    const rs = (empresaSeleccionada && empresaSeleccionada.razonSocial) ? empresaSeleccionada.razonSocial : "";
+    const elRS = qs('txt-empresa-razon');
+    if(elRS){
+      if(rs){ elRS.innerText = rs; elRS.classList.remove('hidden'); }
+      else { elRS.innerText = '—'; elRS.classList.add('hidden'); }
+    }
+  }catch{}
+
 
   // Logo discreto en encabezado
   updateTopEmpresaLogo().catch(()=>{});
@@ -3880,6 +4367,56 @@ function getCtxVersion(){ return __ctxVersion; }
   // Estado inicial
   try{ updatePrintButtonState(); syncGlobals(); }catch(e){}
 })();</script>
+
+
+  <!-- CSV Modal (SKUs) -->
+  <div class="modal hidden" id="csv-modal" role="dialog" aria-modal="true" aria-labelledby="csv-modal-title">
+    <div class="modal-backdrop" onclick="closeCsvModal()"></div>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="csv-modal-title">Acciones CSV</div>
+          <div class="modal-sub">Machote, exportación e importación de SKUs</div>
+        </div>
+        <button class="icon-btn" onclick="closeCsvModal()" aria-label="Cerrar">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <button class="action-row" onclick="closeCsvModal(); descargarMachoteSkus();">
+          <span class="material-symbols-rounded action-ico">description</span>
+          <span class="action-text">
+            <span class="action-title">Descargar machote</span>
+            <span class="action-desc">Plantilla CSV con columnas correctas para importar.</span>
+          </span>
+          <span class="material-symbols-rounded action-go">chevron_right</span>
+        </button>
+
+        <button class="action-row" onclick="closeCsvModal(); exportarSkusCsv();">
+          <span class="material-symbols-rounded action-ico">download</span>
+          <span class="action-text">
+            <span class="action-title">Exportar</span>
+            <span class="action-desc">Descarga el CSV respetando filtros/búsqueda actual.</span>
+          </span>
+          <span class="material-symbols-rounded action-go">chevron_right</span>
+        </button>
+
+        <button class="action-row" onclick="closeCsvModal(); document.getElementById('input-skus-csv').click();">
+          <span class="material-symbols-rounded action-ico">upload</span>
+          <span class="action-text">
+            <span class="action-title">Importar</span>
+            <span class="action-desc">Sube un CSV para crear/actualizar por SKU (upsert).</span>
+          </span>
+          <span class="material-symbols-rounded action-go">chevron_right</span>
+        </button>
+
+        <div class="modal-hint">
+          Tip: si importas, revisa que la empresa seleccionada sea la correcta.
+        </div>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
