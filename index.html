@@ -496,7 +496,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.15-2.3</div>
+      <div class="version-tag">2026.02.17-2.4</div>
     </div>
   </div>
 
@@ -3772,7 +3772,49 @@ document.addEventListener('keydown', (e)=>{
   const COLOR_SHADOW = [153,153,153];
 
   function norm(v){ const s=(v??"").toString().trim(); return (!s || s.toLowerCase()==="null" || s.toLowerCase()==="undefined") ? "" : s; }
-  function upperEs(s){ return norm(s).toUpperCase(); }
+  
+  // ✅ Solo para PDF: limpia caracteres raros (�) y controles invisibles
+  function sanitizePdfText(input){
+    return norm(input)
+      .replace(/\uFFFD/g, "?")
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, "")
+      .replace(/[\u200B-\u200F\u202A-\u202E]/g, "");
+  }
+
+  function firstNonBlank(){
+    for(let i=0;i<arguments.length;i++){
+      const v = norm(arguments[i]);
+      if(v) return v;
+    }
+    return "";
+  }
+
+  function parseJwtEmail(token){
+    try{
+      if(!token || typeof token !== "string" || token.split(".").length < 2) return "";
+      const payload = token.split(".")[1];
+      const b64 = payload.replace(/-/g,'+').replace(/_/g,'/');
+      const json = decodeURIComponent(atob(b64).split('').map(c=>'%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      const obj = JSON.parse(json);
+      return norm(obj.email || obj.user_email || obj.upn || "");
+    }catch(_){ return ""; }
+  }
+
+  function getSessionUserDisplay(){
+    // Prioridad similar a Android:
+    // 1) nombre explícito en globals si existe
+    // 2) email global
+    // 3) email dentro del token (JWT)
+    // 4) valor del input de login (si está)
+    const nameGuess = norm(window.sessionUserName || window.userName || window.user_name || "");
+    const emailGuess = norm((typeof userEmail !== "undefined" && userEmail) ? userEmail : (window.userEmail||""));
+    const tokenEmail = parseJwtEmail((typeof sessionToken !== "undefined" && sessionToken) ? sessionToken : (window.sessionToken||""));
+    const inputEmail = norm(document.getElementById("login-email")?.value || "");
+    return firstNonBlank(nameGuess, emailGuess, tokenEmail, inputEmail);
+  }
+
+  function pdfClean(v){ return sanitizePdfText(v); }
+function upperEs(s){ return norm(s).toUpperCase(); }
 
   function fmtFechaPdf(d){
     try{
@@ -4000,9 +4042,8 @@ document.addEventListener('keydown', (e)=>{
     const resp = upperEs(respRaw);
     const empresaNombre = (typeof empresaSeleccionada !== 'undefined' && empresaSeleccionada?.nombre) ? empresaSeleccionada.nombre : (window.empresaSeleccionada?.nombre || "");
     const fechaStr = fmtFechaPdf(fechaOverride instanceof Date ? fechaOverride : new Date()).toUpperCase();
-    const elaboradoPor = upperEs(nameOnlyFromEmailOrName((typeof userEmail !== 'undefined' && userEmail) ? userEmail : (window.userEmail||"")) || "Sin registrar");
-
-    const headerLogo = branding?.header || null;
+    const elaboradoPor = upperEs(nameOnlyFromEmailOrName(getSessionUserDisplay()) || "Sin registrar");
+const headerLogo = branding?.header || null;
     const footerLogo = branding?.footer || null;
 
     function drawHeaderFirstPage(){
@@ -4097,10 +4138,10 @@ document.addEventListener('keydown', (e)=>{
 
     function drawRow(yPdf, idx, item){
       const rawCode = norm(item.codigo_barras) || norm(item.sku);
-      const codigo = norm(rawCode);
-      const desc   = norm(item.descripcion);
-      const genero = norm(item.genero);
-      const ubic   = norm(item.ubicacion);
+      const codigo = pdfClean(rawCode);
+      const desc   = pdfClean(item.descripcion);
+      const genero = pdfClean(item.genero);
+      const ubic   = pdfClean(item.ubicacion);
 
       doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_BODY);
 
@@ -4190,8 +4231,8 @@ document.addEventListener('keydown', (e)=>{
       const nameGap = 9.5;
       const roleY = boxBottomY + 12;
 
-      const leftName = upperEs(resp);
-      const rightName = upperEs(elaboradoPor || "SIN REGISTRAR");
+      const leftName = upperEs(pdfClean(resp));
+      const rightName = upperEs(pdfClean(elaboradoPor || "SIN REGISTRAR"));
 
       const fitL = fitText2Lines(leftName, innerMaxW, FONT_SIZE_BOX_TEXT, 7);
       const fitR = fitText2Lines(rightName, innerMaxW, FONT_SIZE_BOX_TEXT, 7);
@@ -4217,7 +4258,7 @@ document.addEventListener('keydown', (e)=>{
       const tableW = pageW - (2*MARGIN);
       const legalInnerW = tableW - 10;
       doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
-      const legalLines = wrapTextWords(doc, (getEmpresaLegalTextResolved()), legalInnerW);
+      const legalLines = wrapTextWords(doc, sanitizePdfText(getEmpresaLegalTextResolved()), legalInnerW);
 
       const legalLineH = 9;
       const legalBlockH = (legalLines.length * legalLineH) + 20;
