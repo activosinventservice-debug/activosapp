@@ -918,6 +918,8 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
       esSuperAdmin:isSuper,
       esAdminEmpresa:esAdmin,
 
+      usuarioNombre: (raw?.usuarioNombre || "").toString(),
+
       puedeAccederSkus: isSuper || esAdmin || raw?.puedeAccederSkus === true,
       puedeAccederCatalogos: isSuper || esAdmin || raw?.puedeAccederCatalogos === true,
       puedeAccederResguardoDashboard: isSuper || esAdmin || raw?.puedeAccederResguardoDashboard === true,
@@ -1626,39 +1628,70 @@ document.addEventListener('keydown', (e)=>{
   async function exportarSkusCsv(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
-    setSkusMsg("Exportando... (puede tardar si hay muchos registros)");
-    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
-    const cols = [
-      "sku","descripcion","cantidad","genero","codigo_barras","ubicacion","responsable","localizacion",
-      "costo","fecha_adquisicion","marca","modelo","serie","dado_de_baja","updated_at","created_at"
-    ];
-    const limit = 1000;
-    let offset = 0;
-    let all = [];
-    while(true){
-      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(cols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
-      const res = await fetch(url, { headers });
-      if(!res.ok){
-        const t = await res.text().catch(()=> "");
-        console.error(t);
-        setSkusMsg("Error al exportar: " + (t||res.status));
-        return;
-      }
-      const rows = await res.json();
-      if(Array.isArray(rows) && rows.length) all = all.concat(rows);
-      if(!Array.isArray(rows) || rows.length < limit) break;
-      offset += limit;
-    }
+    setSkusMsg("Exportando...");
+    try{
+      const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
 
-    const out = [];
-    out.push(cols.join(","));
-    for(const r of all){
-      out.push(cols.map(c=>csvEscape(r?.[c])).join(","));
+      // Nota: Algunas BD no tienen la columna "serie". Intentamos con ella y si falla (42703), reintentamos sin "serie".
+      const baseCols = [
+        "sku","descripcion","cantidad","genero","codigo_barras","ubicacion","responsable","localizacion",
+        "costo","fecha_adquisicion","marca","modelo","serie","dado_de_baja","updated_at","created_at"
+      ];
+
+      async function fetchAll(cols){
+        const limit = 1000;
+        let offset = 0;
+        let all = [];
+        while(true){
+          const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(cols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
+          const res = await fetch(url, { headers });
+          if(!res.ok){
+            const t = await res.text().catch(()=> "");
+            let code = null;
+            try{ code = JSON.parse(t)?.code ?? null; }catch(_){}
+            const looksSerie = (t||"").includes("activos.serie") || (t||"").includes("serie does not exist") || (t||"").includes("column") && (t||"").includes("serie");
+            const err = new Error("Export failed");
+            err._payload = { text: t, status: res.status, code, looksSerie };
+            throw err;
+          }
+          const rows = await res.json();
+          if(Array.isArray(rows) && rows.length) all = all.concat(rows);
+          if(!Array.isArray(rows) || rows.length < limit) break;
+          offset += limit;
+        }
+        return all;
+      }
+
+      let colsUsed = baseCols.slice();
+      let all = [];
+      try{
+        all = await fetchAll(colsUsed);
+      }catch(e){
+        const p = e?._payload || {};
+        if(p.code === "42703" || p.looksSerie){
+          colsUsed = baseCols.filter(c => c !== "serie");
+          all = await fetchAll(colsUsed);
+        }else{
+          throw e;
+        }
+      }
+
+      const out = [];
+      out.push(colsUsed.join(","));
+      for(const r of all){
+        out.push(colsUsed.map(c => csvEscape(r?.[c])).join(","));
+      }
+
+      const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
+        .toString().trim().replace(/\s+/g,'_');
+      downloadTextFile(`activos_${emp}.csv`, out.join("\n"), "text/csv;charset=utf-8");
+      setSkusMsg(`Exportación lista: ${all.length} registros`);
+      setTimeout(()=>setSkusMsg(""), 2500);
+    }catch(e){
+      const t = e?._payload?.text || (e?.message || "");
+      console.error(e);
+      setSkusMsg("Error al exportar: " + (t || "Error"));
     }
-    const emp = (empresaSeleccionada?.nombre || "empresa").replace(/[^a-z0-9_-]+/ig,'_');
-    downloadTextFile(`activos_${emp}.csv`, out.join("\n"), "text/csv;charset=utf-8");
-    setSkusMsg(`Exportación lista: ${all.length} registros`);
-    setTimeout(()=>setSkusMsg(""), 2500);
   }
 
   function parseCsv(text){
@@ -3773,7 +3806,7 @@ document.addEventListener('keydown', (e)=>{
 
   function norm(v){ const s=(v??"").toString().trim(); return (!s || s.toLowerCase()==="null" || s.toLowerCase()==="undefined") ? "" : s; }
   
-  // ✅ Solo para PDF: limpia caracteres raros (�) y controles invisibles
+  // ✅ Solo para PDF: limpia caracteres raros ( ) y controles invisibles
   function sanitizePdfText(input){
     return norm(input)
       .replace(/\uFFFD/g, "?")
@@ -3806,11 +3839,12 @@ document.addEventListener('keydown', (e)=>{
     // 2) email global
     // 3) email dentro del token (JWT)
     // 4) valor del input de login (si está)
+    const permsName = norm((typeof getPerms === "function" ? (getPerms().usuarioNombre||"") : (window.__permsEffective?.usuarioNombre||"")));
     const nameGuess = norm(window.sessionUserName || window.userName || window.user_name || "");
     const emailGuess = norm((typeof userEmail !== "undefined" && userEmail) ? userEmail : (window.userEmail||""));
     const tokenEmail = parseJwtEmail((typeof sessionToken !== "undefined" && sessionToken) ? sessionToken : (window.sessionToken||""));
     const inputEmail = norm(document.getElementById("login-email")?.value || "");
-    return firstNonBlank(nameGuess, emailGuess, tokenEmail, inputEmail);
+    return firstNonBlank(permsName, nameGuess, emailGuess, tokenEmail, inputEmail);
   }
 
   function pdfClean(v){ return sanitizePdfText(v); }
