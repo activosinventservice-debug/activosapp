@@ -496,7 +496,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.17-2.6</div>
+      <div class="version-tag">2026.02.17-2.7</div>
     </div>
   </div>
 
@@ -1609,6 +1609,46 @@ document.addEventListener('keydown', (e)=>{
     }
   }
 
+  async function ensureEmpresaCounterRowWeb(){
+    // Crea la fila en empresa_counters si no existe (igual que la app Android)
+    const url = `${SB_URL}/rest/v1/empresa_counters?on_conflict=empresa_id`;
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    };
+    const payload = [{ 
+      empresa_id: empresaSeleccionada.id,
+      empresa_nombre: (empresaSeleccionada.nombre || empresaSeleccionada.razon_social || "").toString()
+    }];
+    const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(payload) });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `ensureEmpresaCounterRowWeb: ${res.status}`);
+    }
+  }
+
+  async function ensureSkuCounterAtLeastWeb(pLastMin){
+    const url = `${SB_URL}/rest/v1/rpc/ensure_sku_counter_at_least`;
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    const empresaNombre = (empresaSeleccionada.nombre || empresaSeleccionada.razon_social || "").toString();
+    const body = { p_empresa: empresaNombre, p_last_min: Number(pLastMin)||0 };
+    const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body) });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `ensureSkuCounterAtLeastWeb: ${res.status}`);
+    }
+    // Puede regresar número o texto; no lo necesitamos aquí.
+    return await res.text().catch(()=> "");
+  }
+
+
 
     async function descargarMachoteSkus(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
@@ -1863,6 +1903,31 @@ document.addEventListener('keydown', (e)=>{
       done += chunk.length;
       setSkusMsg(`Importando... ${done}/${objs.length}`);
     }
+
+
+    // ✅ Igual que Android: al terminar la importación, ajusta empresa_counters
+    //   - Calcula el SKU numérico máximo importado
+    //   - Llama RPC ensure_sku_counter_at_least con (max+1)
+    //   - Esto evita que el machote se "regrese" a números ya usados
+    try{
+      let maxSkuNum = 0;
+      for(const o of objs){
+        const s = (o?.sku ?? "").toString().trim();
+        if(!s) continue;
+        const digits = s.replace(/[^0-9]/g,'');
+        if(!digits) continue;
+        const n = parseInt(digits, 10);
+        if(Number.isFinite(n) && n > maxSkuNum) maxSkuNum = n;
+      }
+      if(maxSkuNum > 0){
+        await ensureEmpresaCounterRowWeb();
+        await ensureSkuCounterAtLeastWeb(maxSkuNum + 1);
+      }
+    }catch(e){
+      console.warn("No se pudo actualizar empresa_counters:", e);
+      // No frenamos la importación; solo avisamos en consola.
+    }
+
 
     setSkusMsg(`Importación lista: ${objs.length} filas`);
     // refrescar lista si estamos en skus
