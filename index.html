@@ -496,7 +496,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.17-2.4</div>
+      <div class="version-tag">2026.02.17-2.6</div>
     </div>
   </div>
 
@@ -1580,17 +1580,56 @@ document.addEventListener('keydown', (e)=>{
     return Number(val) || 0;
   }
 
-  async function descargarMachoteSkus(){
+  async function getMaxSkuFromActivosWeb(){
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Accept':'application/json' };
+    const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=sku&order=sku.desc&limit=1`;
+    const res = await fetch(url, { headers });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `getMaxSkuFromActivosWeb: ${res.status}`);
+    }
+    const arr = await res.json().catch(()=> []);
+    const sku = (Array.isArray(arr) && arr.length) ? (arr[0]?.sku ?? "") : "";
+    const n = parseInt(String(sku).replace(/[^\d]/g,''), 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  async function setEmpresaCounterWeb(newCounter){
+    const url = `${SB_URL}/rest/v1/empresa_counters?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}`;
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+    const res = await fetch(url, { method:'PATCH', headers, body: JSON.stringify({ sku_counter: newCounter }) });
+    if(!res.ok){
+      const t = await res.text().catch(()=> "");
+      throw new Error(t || `setEmpresaCounterWeb: ${res.status}`);
+    }
+  }
+
+
+    async function descargarMachoteSkus(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
 
     setSkusMsg("Generando machote…");
     try{
       const current = await getEmpresaCounterWeb();
-      const filas = 50;
-      const start = current + 1;
+      const maxSku = await getMaxSkuFromActivosWeb();
 
-      // ✅ Encabezados como en la app (LocalStore.exportActivosCsv)
+      // Usa el mayor entre counter y el máximo SKU real existente
+      const base = Math.max(current, maxSku);
+      const start = base + 1;
+
+      // Si el counter estaba atrasado, lo corregimos (sin adelantarlo más allá del máximo real)
+      if(current < maxSku){
+        await setEmpresaCounterWeb(maxSku);
+      }
+
+      const filas = 50;
+
       const headers = [
         "sku","Descripcion","Marca","Modelo","Serie",
         "genero","ubicacion","localizacion","responsable",
@@ -1603,7 +1642,7 @@ document.addEventListener('keydown', (e)=>{
 
       for(let i=0;i<filas;i++){
         const n = start + i;
-        const sku = String(n).padStart(6,'0'); // igual que la app
+        const sku = String(n).padStart(6,'0');
         const row = [
           sku, "", "", "", "",
           "", "", "", "",
