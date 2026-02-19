@@ -496,7 +496,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.17-2.7</div>
+      <div class="version-tag">2026.02.19-2.8</div>
     </div>
   </div>
 
@@ -783,6 +783,11 @@
         <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">home</span> Modos</button>
         <span class="divider"></span>
         <button class="btn" onclick="cargarDetalleSesionResguardo(currentSessionId, true)"><span class="material-symbols-rounded">refresh</span> Recargar</button>
+
+        <!-- ✅ NUEVO: Imprimir/Generar PDF desde Historial (con opción de cambiar fecha si tiene permiso) -->
+        <button id="btn-session-print-pdf" class="btn tonal" disabled onclick="imprimirResguardoSesionActual()" title="Generar PDF de esta sesión">
+          <span class="material-symbols-rounded">picture_as_pdf</span> Generar PDF
+        </button>
       </div>
 
       <div id="session-msg" class="error-msg hidden"></div>
@@ -3280,6 +3285,71 @@ document.addEventListener('keydown', (e)=>{
     el.classList.remove('hidden');
   }
 
+  // ✅ Estado del botón PDF en Detalle Sesión (Historial)
+  function updateSessionPdfButtonState(){
+    const btn = qs('btn-session-print-pdf');
+    if(!btn) return;
+
+    const hasData = !!sessionInfo && Array.isArray(sessionEntries) && sessionEntries.length > 0;
+    const allowed = (typeof canExportPdf === 'function' ? canExportPdf() : false);
+    const allowedHist = (typeof canHist === 'function' ? canHist() : false);
+
+    btn.disabled = !(allowed && allowedHist && hasData);
+
+    if(!allowed) btn.title = 'No tienes permiso para imprimir/exportar PDF';
+    else if(!allowedHist) btn.title = 'Sin permiso para Historial Resguardos';
+    else if(!hasData) btn.title = 'Cargando sesión…';
+    else btn.title = 'Generar PDF de esta sesión';
+  }
+
+  // ✅ Botón: Generar PDF desde Historial (con opción de cambiar fecha si tiene permiso)
+  window.imprimirResguardoSesionActual = async function(){
+    try{
+      updateSessionPdfButtonState();
+
+      if(typeof canExportPdf === 'function' && !canExportPdf()){
+        setSessionMsg('No tienes permiso para imprimir/exportar PDF.');
+        return;
+      }
+      if(!empresaSeleccionada?.nombre || !empresaSeleccionada?.id){
+        setSessionMsg('Selecciona una empresa.');
+        return;
+      }
+      if(!sessionInfo?.id){
+        setSessionMsg('No hay sesión cargada.');
+        return;
+      }
+      if(!Array.isArray(sessionEntries) || !sessionEntries.length){
+        setSessionMsg('Esta sesión no tiene entradas para imprimir.');
+        return;
+      }
+
+      // Delegar al generador PDF (definido en el bloque jsPDF)
+      if(typeof window.imprimirResguardoSesionPdf !== 'function'){
+        setSessionMsg('El generador de PDF no está listo.');
+        return;
+      }
+
+      setSessionMsg('Generando PDF…');
+      await window.imprimirResguardoSesionPdf({
+        empresaNombre: empresaSeleccionada.nombre,
+        empresaId: empresaSeleccionada.id,
+        sessionId: sessionInfo.id,
+        nuevoResponsable: sessionInfo.nuevoResponsable,
+        nuevaUbicacion: sessionInfo.nuevaUbicacion,
+        nuevaLocalizacion: sessionInfo.nuevaLocalizacion,
+        entries: sessionEntries
+      });
+
+      // refrescar badges locales (sin bloquear)
+      try{ await cargarDetalleSesionResguardo(sessionInfo.id, true); }catch(_){ }
+      setSessionMsg('');
+    }catch(e){
+      console.error(e);
+      setSessionMsg(e?.message || 'No se pudo generar el PDF.');
+    }
+  };
+
   function abrirHistorialResguardos(emailPref){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     if(!canHist()){ alert('No tienes permiso para acceder al Historial de Resguardos.'); return; }
@@ -3567,6 +3637,9 @@ document.addEventListener('keydown', (e)=>{
   function abrirDetalleSesionResguardo(id){
     currentSessionId = id;
     switchView('view-resguardo-session-detail');
+    // reset UI state
+    sessionInfo = null; sessionEntries = [];
+    updateSessionPdfButtonState();
     cargarDetalleSesionResguardo(id, false);
   }
 
@@ -3680,11 +3753,16 @@ document.addEventListener('keydown', (e)=>{
 
       renderSessionSummary();
       renderDetalleSesion();
+
+      // ✅ habilitar/deshabilitar PDF en base a permisos y datos
+      updateSessionPdfButtonState();
     }catch(e){
       console.error(e);
       if(qs('session-entries')) qs('session-entries').innerHTML = "";
       if(qs('session-summary')) qs('session-summary').innerHTML = "";
       setSessionMsg(e.message || "Error cargando sesión.");
+
+      updateSessionPdfButtonState();
     }
   }
 
@@ -4541,6 +4619,68 @@ const headerLogo = branding?.header || null;
       console.error(e);
       setSkusMsg(e?.message || "No se pudo generar el PDF.");
     }
+  };
+
+  // ✅ NUEVO: Generar PDF desde Historial (sesión específica)
+  // payload: { empresaNombre, empresaId, sessionId, nuevoResponsable, nuevaUbicacion, nuevaLocalizacion, entries: [] }
+  window.imprimirResguardoSesionPdf = async function(payload){
+    const empresaNombre = norm(payload?.empresaNombre);
+    const sessionId = norm(payload?.sessionId);
+    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+
+    // Permiso (mismo que Android: imprimir/exportar PDF)
+    if(typeof canExportPdf === 'function' && !canExportPdf()){
+      throw new Error('No tienes permiso para imprimir/exportar PDF.');
+    }
+    if(!empresaNombre || !sessionId) throw new Error('Faltan datos para generar el PDF.');
+    if(!entries.length) throw new Error('Esta sesión no tiene entradas para imprimir.');
+
+    await ensureJsPdf();
+    const branding = await fetchBrandingImages(empresaNombre);
+
+    // Responsable/ubicación: replica lógica Android (ResguardosHistorial.kt)
+    const responsablePdf = norm(payload?.nuevoResponsable) || 'SIN RESPONSABLE ASIGNADO';
+    const ubicacionGlobal = norm(payload?.nuevaUbicacion);
+
+    const itemsPdf = entries.map(e=>({
+      sku: norm(e?.codigo),
+      codigo_barras: norm(e?.codigo_barras),
+      descripcion: norm(e?.descripcion),
+      ubicacion: ubicacionGlobal || norm(e?.ubicacion_original) || '',
+      genero: norm(e?.genero)
+    })).filter(x=>x.sku || x.codigo_barras);
+
+    if(!itemsPdf.length) throw new Error('No se pudieron preparar los items del PDF.');
+
+    // ✅ Preguntar fecha SOLO si tiene permiso (pedirFechaResguardo ya lo respeta)
+    const fechaOverride = pedirFechaResguardo();
+    const doc = drawPdf(responsablePdf, itemsPdf, branding, fechaOverride);
+    const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(responsablePdf)}.pdf`;
+    doc.save(fname);
+
+    // ✅ Marcar en nube quién generó el PDF (mismo concepto que Android)
+    try{
+      const email = norm((typeof userEmail !== 'undefined' && userEmail) ? userEmail : '');
+      const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : (window.sessionToken||'');
+      const tokenEmail = parseJwtEmail(token);
+      const emailDb = (email || tokenEmail || '').trim();
+
+      // Admin/super: no pisa el registro (igual que Android)
+      const isSuper = emailDb.toLowerCase() === 'admin@activos.mx';
+      if(!isSuper && emailDb){
+        const url = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(sessionId)}`;
+        await fetch(url, {
+          method:'PATCH',
+          headers:{
+            'apikey': SB_KEY,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type':'application/json',
+            'Prefer':'return=minimal'
+          },
+          body: JSON.stringify({ pdf_generado_por: emailDb })
+        }).catch(()=>{});
+      }
+    }catch(_){ /* no bloquear por fallo de marca */ }
   };
 
   // Estado inicial
