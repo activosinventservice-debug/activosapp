@@ -483,7 +483,37 @@
     .menu-item .mi-sub{ font-size:.82rem; font-weight:650; color:var(--muted); line-height:1.2; }
     .menu-item:hover{ background:rgba(11,110,243,.08); }
 
-  </style>
+  
+    /* ✅ Estado Servidor/Backend (login) */
+    .status-banner{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#FFFFFF;
+      color:#0F172A;
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .status-banner .material-symbols-rounded{font-size:20px}
+    .status-banner.ok{
+      border-color:#CFE2FF;
+      background:#E8F1FF;
+      color:#0B4CB3;
+    }
+    .status-banner.warn{
+      border-color:#FCA5A5;
+      background:#FEE2E2;
+      color:#991B1B;
+    }
+    .status-banner.muted{
+      border-color:#E5E7EB;
+      background:#F3F4F6;
+      color:#374151;
+    }
+</style>
 </head>
 <body>
 
@@ -496,7 +526,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.19-2.8</div>
+      <div class="version-tag">2026.02.23-2.9</div>
     </div>
   </div>
 
@@ -517,6 +547,11 @@
       </div>
       <div style="margin-top:12px">
         <button class="btn full" id="btn-login" onclick="ejecutarLogin()"><span class="material-symbols-rounded">login</span> Entrar</button>
+      </div>
+
+      <div id="backend-banner" class="status-banner muted hidden">
+        <span class="material-symbols-rounded">cloud_off</span>
+        <span id="backend-banner-text">Verificando conexión…</span>
       </div>
       <div id="login-msg" class="error-msg hidden"></div>
     </div>
@@ -859,6 +894,134 @@
   // Exponer credenciales a scripts internos (PDF)
   window.SB_URL = SB_URL;
   window.SB_KEY = SB_KEY;
+
+  /* =========================
+     ✅ Monitor Internet vs servidor (Login + global)
+     - OFFLINE   = navigator offline o sin ruta (sin internet)
+     - DEGRADED  = hay internet, pero sel servidor no está operativo
+     - ONLINE    = Servidor responde (2xx/401/403/406)
+     ========================= */
+  const BackendStatus = { OFFLINE:"OFFLINE", DEGRADED:"DEGRADED", ONLINE:"ONLINE" };
+  window.__backendStatus = BackendStatus.OFFLINE;
+
+  const __backend = {
+    status: BackendStatus.OFFLINE,
+    detail: "",
+    okIntervalMs: 30000,
+    failIntervalMs: 7000,
+    timeoutMs: 2500,
+    timer: null,
+    started: false
+  };
+
+  function __setBackendStatus(st, detail){
+    __backend.status = st;
+    __backend.detail = detail || "";
+    window.__backendStatus = st;
+
+    // Actualiza banner de login si existe
+    const banner = document.getElementById("backend-banner");
+    const bannerText = document.getElementById("backend-banner-text");
+    const btnLogin = document.getElementById("btn-login");
+
+    if(banner && bannerText){
+      banner.classList.remove("hidden","ok","warn","muted");
+      if(st === BackendStatus.ONLINE){
+        banner.classList.add("ok");
+        banner.querySelector(".material-symbols-rounded").textContent = "cloud_done";
+        bannerText.textContent = "En línea (Servidor OK)";
+        // En login puedes ocultarlo si prefieres:
+        // banner.classList.add("hidden");
+      } else if(st === BackendStatus.DEGRADED){
+        banner.classList.add("warn");
+        banner.querySelector(".material-symbols-rounded").textContent = "cloud_off";
+        bannerText.textContent = "Sin conexión al servidor";
+      } else {
+        banner.classList.add("muted");
+        banner.querySelector(".material-symbols-rounded").textContent = "wifi_off";
+        bannerText.textContent = "Sin internet";
+      }
+    }
+
+    // Si estás en login, lo más claro es deshabilitar el botón cuando no hay backend operativo
+    if(btnLogin){
+      btnLogin.disabled = (st !== BackendStatus.ONLINE);
+    }
+  }
+
+  async function __probeServerOnce(){
+    // Endpoint REST real (como en Android):
+    const url = `${SB_URL}/rest/v1/empresas?select=id&limit=1`;
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), __backend.timeoutMs);
+
+    try{
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "apikey": SB_KEY,
+          "Authorization": `Bearer ${SB_KEY}`,
+          "Accept": "application/json"
+        },
+        signal: ctrl.signal,
+        cache: "no-store"
+      });
+
+      // OK si PostgREST está vivo
+      const code = res.status;
+      const ok = (code >= 200 && code <= 299) || code === 401 || code === 403 || code === 406;
+      clearTimeout(t);
+
+      return { ok, code };
+    } catch (e){
+      clearTimeout(t);
+      return { ok:false, code:null, err:(e && e.name) ? e.name : "Exception" };
+    }
+  }
+
+  async function __tickBackend(){
+    // 1) Internet básico
+    if(!navigator.onLine){
+      __setBackendStatus(BackendStatus.OFFLINE, "navigator.offline");
+      __scheduleNext(__backend.failIntervalMs);
+      return;
+    }
+
+    // 2) Probe servidor
+    const r = await __probeServerOnce();
+    if(r.ok){
+      __setBackendStatus(BackendStatus.ONLINE, `HTTP ${r.code}`);
+      __scheduleNext(__backend.okIntervalMs);
+    } else {
+      const detail = r.code ? `HTTP ${r.code}` : (r.err || "no-response");
+      __setBackendStatus(BackendStatus.DEGRADED, detail);
+      __scheduleNext(__backend.failIntervalMs);
+    }
+  }
+
+  function __scheduleNext(ms){
+    try{ if(__backend.timer) clearTimeout(__backend.timer); }catch{}
+    __backend.timer = setTimeout(__tickBackend, ms);
+  }
+
+  function startServerHealthMonitor(){
+    if(__backend.started) return;
+    __backend.started = true;
+
+    // Estado inicial
+    __setBackendStatus(BackendStatus.OFFLINE, "init");
+
+    // Eventos del navegador
+    window.addEventListener("online", () => { __scheduleNext(10); }, { passive:true });
+    window.addEventListener("offline", () => { __setBackendStatus(BackendStatus.OFFLINE, "browser-offline"); }, { passive:true });
+
+    // Primer probe inmediato
+    __tickBackend();
+  }
+
+  // Auto-start cuando cargue la página
+  document.addEventListener("DOMContentLoaded", startServerHealthMonitor);
 let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   // =========================
   // ✅ Permisos (empresa_user_permissions)
@@ -2017,7 +2180,7 @@ document.addEventListener('keydown', (e)=>{
   }
 
   // ---------------- Branding (UI) ----------------
-  // Carga discreta del logo por empresa desde Supabase Storage (mismo path que PDF)
+  // Carga discreta del logo por empresa desde servidor Storage (mismo path que PDF)
   const __empresaLogoCache = new Map(); // key: slug -> { url, ts }
 
   // ✅ Helper (UI): convierte nombre de empresa a slug de storage
@@ -2242,7 +2405,7 @@ document.addEventListener('keydown', (e)=>{
     try{ updatePrintButtonState(); }catch{}
   }
 
-  // ✅ Permisos por empresa (Supabase: empresa_user_permissions)
+  // ✅ Permisos por empresa (servidor: empresa_user_permissions)
   //    (usa cache interno por email|empresaNombre; no forzamos red salvo que sea necesario)
   await cargarPermisosEmpresaActual(false);
 
@@ -3936,7 +4099,7 @@ document.addEventListener('keydown', (e)=>{
 /* =========================
    ✅ Resguardo PDF (Single-file) v10
    - Replica el layout de la app Android (header + tabla 4 cols + legal + notas + firmas + logo footer + paginado)
-   - Branding (logo + footer) por empresa desde Supabase Storage:
+   - Branding (logo + footer) por empresa desde servidor Storage:
        bucket: "activo"
        paths: <empresa_safe>/branding/logo.png  y  <empresa_safe>/branding/footer.png
    - Solo habilitado si el filtro extra es RESPONSABLE y viene de Catálogos (origen=catalogos)
