@@ -526,7 +526,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.02.23-2.9</div>
+      <div class="version-tag">2026.02.26-3.0</div>
     </div>
   </div>
 
@@ -2174,8 +2174,9 @@ document.addEventListener('keydown', (e)=>{
       const nombre = card.getAttribute('data-nombre') || "";
       const razon = card.getAttribute('data-razon') || "";
       const legal = card.getAttribute('data-legal') || "";
+      const control = card.getAttribute('data-control') || "";
       if(!id || !nombre) return;
-      await seleccionarEmpresa(id, nombre, razon, legal);
+      await seleccionarEmpresa(id, nombre, razon, legal, control);
     });
   }
 
@@ -2286,7 +2287,7 @@ document.addEventListener('keydown', (e)=>{
       const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
 
       if(await esSuperAdmin()){
-        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre,razon_social,resguardo_legal_text&order=nombre.asc`, headers);
+        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`, headers);
         if(!resEmp.ok) throw new Error("Error al cargar empresas");
         const empresas = await resEmp.json();
         lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>No hay empresas registradas.</p>";
@@ -2308,7 +2309,7 @@ document.addEventListener('keydown', (e)=>{
       if(!set.size){ lista.innerHTML = "<p>No tienes empresas asignadas.</p>"; return; }
 
       const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\\"')}"`).join(',');
-      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,razon_social,resguardo_legal_text&order=nombre.asc`, headers);
+      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`, headers);
       if(!resEmp.ok){ console.error(await resEmp.text()); throw new Error("Error al cargar empresas autorizadas"); }
       const empresas = await resEmp.json();
       lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>Error: Tienes permisos, pero las empresas no existen.</p>";
@@ -2325,9 +2326,10 @@ document.addEventListener('keydown', (e)=>{
     const nombre = norm(e.nombre);
     const razon = norm(e.razon_social || e.razonSocial || "");
     const legal = norm(e.resguardo_legal_text || e.resguardoLegalText || "");
+    const control = norm(e.resguardo_control_label || e.resguardoControlLabel || "");
     const safeSlug = makeEmpresaSlug(nombre);
     return `
-      <div class="row empresa-card" data-id="${escapeHtml(id)}" data-nombre="${escapeHtml(nombre)}" data-razon="${escapeHtml(razon)}" data-legal="${escapeHtml(legal)}" data-slug="${escapeHtml(safeSlug)}"
+      <div class="row empresa-card" data-id="${escapeHtml(id)}" data-nombre="${escapeHtml(nombre)}" data-razon="${escapeHtml(razon)}" data-legal="${escapeHtml(legal)}" data-control="${escapeHtml(control)}" data-slug="${escapeHtml(safeSlug)}"
            style="cursor:pointer">
         <div class="empresa-logo-wrap">
           <img class="logo-mini skeleton" data-empresa-logo="${escapeHtml(id)}" alt="Logo" />
@@ -2345,7 +2347,7 @@ document.addEventListener('keydown', (e)=>{
     `;
   }
 
-  async function seleccionarEmpresa(id,nombre,razonSocial,legalText){
+  async function seleccionarEmpresa(id,nombre,razonSocial,legalText,controlLabel){
   // ✅ Antes de cambiar: guardar snapshot de la empresa previa (por usuario)
   try{ saveEmpresaCache(); }catch{}
 
@@ -2353,7 +2355,7 @@ document.addEventListener('keydown', (e)=>{
   try{ __resetAbortEmpresa(); }catch{}
   try{ bumpCtxVersion(); }catch{}
 
-  empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim() };
+  empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim(), controlLabel: (controlLabel||"").trim() };
   window.empresaSeleccionada = empresaSeleccionada || null;
 
   // ✅ Evita arrastrar permisos de otra empresa mientras cargan
@@ -4130,6 +4132,17 @@ document.addEventListener('keydown', (e)=>{
   }
 
 
+
+
+  function getEmpresaControlLabelResolved(){
+    try{
+      const t = (empresaSeleccionada && typeof empresaSeleccionada.controlLabel === 'string') ? empresaSeleccionada.controlLabel.trim() : '';
+      return t ? t : "CONTROL PATRIMONIAL";
+    }catch(_){
+      return "CONTROL PATRIMONIAL";
+    }
+  }
+
   const FONT_SIZE_MAIN_TITLE = 16;
   const FONT_SIZE_SUB_TITLE  = 12;
   const FONT_SIZE_BOX_TEXT   = 11;
@@ -4237,6 +4250,13 @@ function upperEs(s){ return norm(s).toUpperCase(); }
       return today;
     }
     return d;
+  }
+
+
+  function pedirObservacionesGenerales(){
+    // Se muestra siempre (igual que Android): después del cambio de fecha
+    const input = window.prompt("Observaciones generales (opcional):", "");
+    return (input == null) ? "" : String(input).trim();
   }
 
   function safeFileName(s){
@@ -4400,7 +4420,7 @@ function upperEs(s){ return norm(s).toUpperCase(); }
     return all;
   }
 
-  function drawPdf(respRaw, activos, branding, fechaOverride){
+  function drawPdf(respRaw, activos, branding, fechaOverride, observacionesGenerales){
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"letter" });
     const pageW = doc.internal.pageSize.getWidth();
@@ -4630,7 +4650,7 @@ const headerLogo = branding?.header || null;
 
       doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
       doc.text("RESGUARDANTE", innerLeftX + innerMaxW/2, yTop(roleY), {align:"center"});
-      doc.text("CONTROL PATRIMONIAL", innerRightX + innerMaxW/2, yTop(roleY), {align:"center"});
+      doc.text(getEmpresaControlLabelResolved(), innerRightX + innerMaxW/2, yTop(roleY), {align:"center"});
     }
 
     function drawLegalAndNotes(yPdf){
@@ -4686,6 +4706,25 @@ const headerLogo = branding?.header || null;
       doc.text("Notas:", MARGIN + 5, yTop(drawNotesY + finalNotesH + notesTitleOffset - 4));
       doc.setDrawColor(0);
       rectBottom(MARGIN, drawNotesY, tableW, finalNotesH, "S");
+
+      // ✅ Observaciones generales (capturadas al generar el PDF)
+      const obsRaw = sanitizePdfText(observacionesGenerales || "");
+      if(obsRaw){
+        doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
+        const obsLines = wrapText(doc, obsRaw, tableW - 10);
+        const lineH = 9;
+        const maxLines = Math.max(1, Math.floor((finalNotesH - 12) / lineH));
+        const finalLines = (obsLines.length > maxLines)
+          ? obsLines.slice(0, Math.max(1, maxLines-1)).concat(["…"])
+          : obsLines;
+
+        let textY2 = drawNotesY + finalNotesH - 14; // desde arriba hacia abajo (coords PDF)
+        for(const ln of finalLines){
+          doc.text(ln, MARGIN + 5, yTop(textY2));
+          textY2 -= lineH;
+          if(textY2 < drawNotesY + 6) break;
+        }
+      }
 
       return drawNotesY;
     }
@@ -4774,7 +4813,8 @@ const headerLogo = branding?.header || null;
 
       setSkusMsg("Generando PDF…");
       const fechaOverride = pedirFechaResguardo();
-      const doc = drawPdf(resp, activos, branding, fechaOverride);
+      const observacionesGenerales = pedirObservacionesGenerales();
+      const doc = drawPdf(resp, activos, branding, fechaOverride, observacionesGenerales);
       const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(resp)}.pdf`;
       doc.save(fname);
       setSkusMsg("");
@@ -4817,7 +4857,8 @@ const headerLogo = branding?.header || null;
 
     // ✅ Preguntar fecha SOLO si tiene permiso (pedirFechaResguardo ya lo respeta)
     const fechaOverride = pedirFechaResguardo();
-    const doc = drawPdf(responsablePdf, itemsPdf, branding, fechaOverride);
+    const observacionesGenerales = pedirObservacionesGenerales();
+    const doc = drawPdf(responsablePdf, itemsPdf, branding, fechaOverride, observacionesGenerales);
     const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(responsablePdf)}.pdf`;
     doc.save(fname);
 
