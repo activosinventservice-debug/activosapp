@@ -536,7 +536,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.03.03-3.1</div>
+      <div class="version-tag">2026.02.26-3.0</div>
     </div>
   </div>
 
@@ -1334,7 +1334,7 @@ function restoreEmpresaCache(empresaId){
 
     // Catálogos (si entras a esa vista, ya estará listo)
     try{ if(qs('cat-search')) qs('cat-search').value = catalogoFilter || ""; }catch{}
-    try{ renderCatalogo(); }catch{}
+    try{ requestRenderCatalogo(); }catch{}
 
     syncGlobals();
     updatePrintButtonState();
@@ -3028,7 +3028,7 @@ document.addEventListener('keydown', (e)=>{
           console.warn("Conteo responsable falló:", val, e);
           __setRespCount(val, 0);
         }
-        try{ renderCatalogo(); }catch{}
+        try{ requestRenderCatalogo(); }catch{}
       }
     }
     const workers = Array.from({length: Math.min(CONC, pending.length)}, () => worker());
@@ -3129,7 +3129,18 @@ document.addEventListener('keydown', (e)=>{
     show(qs('cat-total'), true);
   }
 
-  function renderCatalogo(){
+  
+  // ✅ Throttle de render en Catálogos (evita re-render continuo mientras se calculan conteos)
+  let __catalogRenderTimer = null;
+  function requestRenderCatalogo(){
+    if(__catalogRenderTimer) return;
+    __catalogRenderTimer = setTimeout(()=>{
+      __catalogRenderTimer = null;
+      try{ renderCatalogo(); }catch(e){ console.warn(e); }
+    }, 60);
+  }
+
+function renderCatalogo(){
     const list = qs('cat-list');
     const all = catalogoCache[currentTab] || [];
     const filtered = catalogoFilter ? all.filter(v=>v.toLowerCase().includes(catalogoFilter)) : all;
@@ -3147,14 +3158,14 @@ document.addEventListener('keydown', (e)=>{
       const isResp = (currentTab === 'responsable');
       const c = isResp ? __getRespCount(v) : null;
       const badge = isResp
-        ? `<span class="badge" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
+        ? `<span class="badge" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
         : '';
       return `
       <div class="cat-row" role="button" tabindex="0"
            onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')"
            onkeydown="if(event.key==='Enter'||event.key===' '){ event.preventDefault(); aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}'); }">
-        <div class="label">${escapeHtml(v)}</div>
-        <div class="count">${badge}<span class="material-symbols-rounded" style="font-size:18px" aria-hidden="true">chevron_right</span></div>
+        <div class="label" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${escapeHtml(v)}</div>
+        <div class="count" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${badge}<span class="material-symbols-rounded" style="font-size:18px" aria-hidden="true">chevron_right</span></div>
       </div>
     `;
     }).join('');
