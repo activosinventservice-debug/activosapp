@@ -4811,7 +4811,8 @@ function fitText2Lines(text, maxW, baseSize, minSize){
       doc.text("RESGUARDANTE", innerLeftX + innerMaxW/2, yTop(roleY), {align:"center"});
 
       // Derecha (replica Android): multi-línea + centrado vertical dentro del espacio
-      const rightRole = sanitizePdfText(getEmpresaControlLabelResolved());
+      //const rightRole = sanitizePdfText(getEmpresaControlLabelResolved());
+      const rightRole = upperEs(sanitizePdfText(getEmpresaControlLabelResolved())); //para mayusculas
       const fitRole = fitTextUpToNLines(rightRole, innerMaxW, FONT_SIZE_SMALL, 7, 3, "normal");
 
       doc.setFont("helvetica","normal"); doc.setFontSize(fitRole.size);
