@@ -536,7 +536,7 @@
         <span class="material-symbols-rounded">business</span>
         <span id="chip-empresa-text">—</span>
       </div>
-      <div class="version-tag">2026.03.03-3.3</div>
+      <div class="version-tag">2026.02.26-3.0</div>
     </div>
   </div>
 
@@ -4707,7 +4707,42 @@ const headerLogo = branding?.header || null;
       return rowHeight;
     }
 
-    function fitText2Lines(text, maxW, baseSize, minSize){
+    function drawLinesCenteredInRegion(lines, xCenter, regionBottomY, regionTopY, lineGap){
+      const regionH = Math.max(0, regionTopY - regionBottomY);
+      const totalH = (Math.max(0, lines.length - 1)) * lineGap;
+      const mid = regionBottomY + (regionH / 2);
+      const firstY = mid + (totalH / 2);
+
+      lines.forEach((ln, i) => {
+        const y = firstY - (i * lineGap);
+        doc.text(ln, xCenter, yTop(y), { align: "center" });
+      });
+    }
+
+function fitTextUpToNLines(text, maxW, baseSize, minSize, maxLines, fontStyle){
+      let size = baseSize;
+      const style = fontStyle || "normal";
+
+      while(size >= minSize){
+        doc.setFont("helvetica", style); doc.setFontSize(size);
+        const lines = wrapText(doc, text, maxW);
+        if(lines.length <= maxLines) return { lines, size };
+        size -= 0.5;
+      }
+
+      doc.setFont("helvetica", style); doc.setFontSize(minSize);
+      let lines = wrapText(doc, text, maxW);
+
+      if(lines.length > maxLines){
+        lines = lines.slice(0, maxLines);
+        let last = (lines[lines.length - 1] || "").trim();
+        lines[lines.length - 1] = (last.length > 3 ? last.slice(0, Math.max(0, last.length - 3)) : last) + "...";
+      }
+
+      return { lines, size: minSize };
+    }
+
+function fitText2Lines(text, maxW, baseSize, minSize){
       let size = baseSize;
       while(size >= minSize){
         doc.setFont("helvetica","bold"); doc.setFontSize(size);
@@ -4748,7 +4783,7 @@ const headerLogo = branding?.header || null;
       linePdf(leftX + lineInset, lineY, centerX - lineInset, lineY);
       linePdf(centerX + lineInset, lineY, (MARGIN + tableW) - lineInset, lineY);
 
-      const nameTopY = lineY - 12;
+      const nameTopY = lineY - 16; // +espacio entre firma (línea) y nombre
       const nameGap = 9.5;
       const roleY = boxBottomY + 12;
 
@@ -4771,9 +4806,35 @@ const headerLogo = branding?.header || null;
       });
 
       doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
+
+      // Izquierda (igual que antes)
       doc.text("RESGUARDANTE", innerLeftX + innerMaxW/2, yTop(roleY), {align:"center"});
-      doc.text(getEmpresaControlLabelResolved(), innerRightX + innerMaxW/2, yTop(roleY), {align:"center"});
-    }
+
+      // Derecha (replica Android): multi-línea + centrado vertical dentro del espacio
+      const rightRole = sanitizePdfText(getEmpresaControlLabelResolved());
+      const fitRole = fitTextUpToNLines(rightRole, innerMaxW, FONT_SIZE_SMALL, 7, 3, "normal");
+
+      doc.setFont("helvetica","normal"); doc.setFontSize(fitRole.size);
+
+      const roleRegionBottomY = boxBottomY + 10;   // margen inferior
+      const roleLineGap = 9.0;
+
+      // ✅ Espacio entre nombre y "firma" (texto del área):
+      // Reservamos la zona superior (cerca de la línea) para el nombre.
+      // El texto del área se centra SOLO en el espacio restante debajo del nombre.
+      const rightNameLinesCount = Math.min(2, fitR.lines.length);
+      const rightNameLowestY = nameTopY - ((rightNameLinesCount - 1) * nameGap); // Y (coords internas) de la última línea del nombre
+      const roleRegionTopY = rightNameLowestY - 14; // 14pt de separación debajo del nombre
+
+
+      drawLinesCenteredInRegion(
+        fitRole.lines,
+        innerRightX + innerMaxW/2,
+        roleRegionBottomY,
+        roleRegionTopY,
+        roleLineGap
+      );
+}
 
     function drawLegalAndNotes(yPdf){
       const tableW = pageW - (2*MARGIN);
