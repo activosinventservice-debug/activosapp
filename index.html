@@ -289,6 +289,16 @@
     .hist-title{font-weight:900}
     .hist-sub{color:#64748B; font-weight:800; font-size:.9rem; margin-top:2px; display:flex; gap:10px; flex-wrap:wrap}
     .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:900; border:1px solid var(--border); background:#F6F8FC}
+
+/* ✅ Catálogos responsivo (Responsables con conteo) */
+.cat-row .count{display:flex; align-items:center; gap:8px;}
+@media (max-width: 420px){
+  .cat-row{flex-wrap:wrap; align-items:flex-start;}
+  .cat-row .label{flex: 1 1 100%;}
+  .cat-row .count{width:100%; justify-content:flex-end; margin-top:6px; font-size:.82rem;}
+  .badge{padding:5px 9px;}
+}
+
     .badge.mono{font-family:'Courier New',monospace}
     .badge.scroll{max-width:70vw; overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch}
     .badge.primary{background:#E6F0FF; border-color:#CFE2FF; color:#0B4CB3}
@@ -2953,10 +2963,10 @@ document.addEventListener('keydown', (e)=>{
   let catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] };
 
   // ✅ Conteo de SKUs por Responsable (Catálogos)
-  // cache por empresa_id -> { responsableValue: countNumber }
+  // cache por empresa_id -> Map(responsable -> count)
   const __respSkuCountsByEmpresa = new Map();
   function __getRespCountsMap(){
-    const empId = empresaSeleccionada?.id || "no-empresa";
+    const empId = (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
     if(!__respSkuCountsByEmpresa.has(empId)) __respSkuCountsByEmpresa.set(empId, new Map());
     return __respSkuCountsByEmpresa.get(empId);
   }
@@ -2973,10 +2983,10 @@ document.addEventListener('keydown', (e)=>{
     }catch{}
   }
 
-  async function __headCountActivosBy(col, val){
+  async function __headCountActivosByResponsable(respVal){
     if(!empresaSeleccionada) return 0;
-    const safeVal = encodeURIComponent(String(val||""));
-    const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&${col}=eq.${safeVal}`;
+    const safeVal = encodeURIComponent(String(respVal||""));
+    const url = `${SB_URL}/rest/v1/activos?select=sku&empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&responsable=eq.${safeVal}`;
     const res = await fetch(url, {
       method: "HEAD",
       headers: {
@@ -2984,17 +2994,15 @@ document.addEventListener('keydown', (e)=>{
         "Authorization": `Bearer ${sessionToken}`,
         "Prefer": "count=exact"
       },
-      signal: __abortHub?.empresaCtrl?.signal
+      signal: (__abortHub && __abortHub.empresaCtrl) ? __abortHub.empresaCtrl.signal : undefined
     });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Supabase/PostgREST devuelve count en Content-Range: 0-0/123
     const cr = res.headers.get("content-range") || res.headers.get("Content-Range") || "";
     const m = cr.match(/\/(\d+)\s*$/);
     return m ? Number(m[1]) : 0;
   }
 
   async function precalcularConteoSkusResponsables(){
-    // Solo cuando estamos en tab Responsable
     if(currentTab !== "responsable") return;
     if(!empresaSeleccionada || !sessionToken) return;
 
@@ -3004,29 +3012,25 @@ document.addEventListener('keydown', (e)=>{
     const pending = all.filter(v => __getRespCount(v) === null);
     if(!pending.length) return;
 
-    // Mostrar placeholders inmediatamente
+    // Mostrar placeholders
     try{ renderCatalogo(); }catch{}
 
-    // Concurrencia limitada (para no saturar)
     const CONC = 5;
     let i = 0;
-
     async function worker(){
       while(i < pending.length){
         const idx = i++;
-        const respVal = pending[idx];
+        const val = pending[idx];
         try{
-          const c = await __headCountActivosBy("responsable", respVal);
-          __setRespCount(respVal, c);
+          const c = await __headCountActivosByResponsable(val);
+          __setRespCount(val, c);
         }catch(e){
-          console.warn("Conteo responsable falló:", respVal, e);
-          __setRespCount(respVal, 0);
+          console.warn("Conteo responsable falló:", val, e);
+          __setRespCount(val, 0);
         }
-        // re-render parcial
         try{ renderCatalogo(); }catch{}
       }
     }
-
     const workers = Array.from({length: Math.min(CONC, pending.length)}, () => worker());
     await Promise.all(workers);
   }
@@ -3051,7 +3055,6 @@ document.addEventListener('keydown', (e)=>{
     marcarTab();
     limpiarBusquedaCatalogo();
     cargarCatalogoActual(false);
-    // ✅ Si es Responsable, calcula conteos de SKUs
     try{ precalcularConteoSkusResponsables(); }catch(e){ console.warn(e); }
   }
 
@@ -3144,15 +3147,18 @@ document.addEventListener('keydown', (e)=>{
       const isResp = (currentTab === 'responsable');
       const c = isResp ? __getRespCount(v) : null;
       const badge = isResp
-        ? `<span class="badge" style="margin-right:8px; background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
+        ? `<span class="badge" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
         : '';
       return `
-      <div class="cat-row" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">
+      <div class="cat-row" role="button" tabindex="0"
+           onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')"
+           onkeydown="if(event.key==='Enter'||event.key===' '){ event.preventDefault(); aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}'); }">
         <div class="label">${escapeHtml(v)}</div>
-        <div class="count">${badge}<span class="material-symbols-rounded" style="font-size:18px">chevron_right</span></div>
+        <div class="count">${badge}<span class="material-symbols-rounded" style="font-size:18px" aria-hidden="true">chevron_right</span></div>
       </div>
     `;
     }).join('');
+
   }
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
@@ -4690,44 +4696,6 @@ const headerLogo = branding?.header || null;
       return { lines, size:minSize };
     }
 
-
-    // Ajusta tamaño para que el texto quepa en N líneas (sin romper el PDF si es muy largo)
-    function fitTextUpToNLines(text, maxW, baseSize, minSize, maxLines, fontStyle){
-      let size = baseSize;
-      const style = fontStyle || "normal";
-
-      while(size >= minSize){
-        doc.setFont("helvetica", style); doc.setFontSize(size);
-        const lines = wrapText(doc, text, maxW);
-        if(lines.length <= maxLines) return { lines, size };
-        size -= 0.5;
-      }
-
-      doc.setFont("helvetica", style); doc.setFontSize(minSize);
-      let lines = wrapText(doc, text, maxW);
-
-      if(lines.length > maxLines){
-        lines = lines.slice(0, maxLines);
-        let last = (lines[lines.length - 1] || "").trim();
-        lines[lines.length - 1] = (last.length > 3 ? last.slice(0, Math.max(0, last.length - 3)) : last) + "...";
-      }
-
-      return { lines, size: minSize };
-    }
-
-    function drawLinesCenteredInRegion(lines, xCenter, regionBottomY, regionTopY, lineGap){
-      const regionH = Math.max(0, regionTopY - regionBottomY);
-      const totalH = (Math.max(0, lines.length - 1)) * lineGap;
-      const mid = regionBottomY + (regionH / 2);
-      const firstY = mid + (totalH / 2);
-
-      lines.forEach((ln, i) => {
-        const y = firstY - (i * lineGap);
-        doc.text(ln, xCenter, yTop(y), { align: "center" });
-      });
-    }
-
-
     function drawSignatureFooter(){
       const tableW = pageW - (2*MARGIN);
       const boxHeight = 85;
@@ -4756,7 +4724,7 @@ const headerLogo = branding?.header || null;
       linePdf(leftX + lineInset, lineY, centerX - lineInset, lineY);
       linePdf(centerX + lineInset, lineY, (MARGIN + tableW) - lineInset, lineY);
 
-      const nameTopY = lineY - 16; // +espacio entre firma (línea) y nombre
+      const nameTopY = lineY - 12;
       const nameGap = 9.5;
       const roleY = boxBottomY + 12;
 
@@ -4779,35 +4747,9 @@ const headerLogo = branding?.header || null;
       });
 
       doc.setFont("helvetica","normal"); doc.setFontSize(FONT_SIZE_SMALL);
-
-      // Izquierda (igual que antes)
       doc.text("RESGUARDANTE", innerLeftX + innerMaxW/2, yTop(roleY), {align:"center"});
-
-      // Derecha (replica Android): multi-línea + centrado vertical dentro del espacio
-      const rightRole = sanitizePdfText(getEmpresaControlLabelResolved());
-      const fitRole = fitTextUpToNLines(rightRole, innerMaxW, FONT_SIZE_SMALL, 7, 3, "normal");
-
-      doc.setFont("helvetica","normal"); doc.setFontSize(fitRole.size);
-
-      const roleRegionBottomY = boxBottomY + 10;   // margen inferior
-      const roleLineGap = 9.0;
-
-      // ✅ Espacio entre nombre y "firma" (texto del área):
-      // Reservamos la zona superior (cerca de la línea) para el nombre.
-      // El texto del área se centra SOLO en el espacio restante debajo del nombre.
-      const rightNameLinesCount = Math.min(2, fitR.lines.length);
-      const rightNameLowestY = nameTopY - ((rightNameLinesCount - 1) * nameGap); // Y (coords internas) de la última línea del nombre
-      const roleRegionTopY = rightNameLowestY - 14; // 14pt de separación debajo del nombre
-
-
-      drawLinesCenteredInRegion(
-        fitRole.lines,
-        innerRightX + innerMaxW/2,
-        roleRegionBottomY,
-        roleRegionTopY,
-        roleLineGap
-      );
-}
+      doc.text(getEmpresaControlLabelResolved(), innerRightX + innerMaxW/2, yTop(roleY), {align:"center"});
+    }
 
     function drawLegalAndNotes(yPdf){
       const tableW = pageW - (2*MARGIN);
