@@ -3,7 +3,7 @@
 // Nota: la anon/publishable key NO se puede ocultar en un front estático; se protege con RLS.
 window.APP_CONFIG = {
   // Elige uno: "cloudflare" o "supabase"
-  active: "cloudflare",
+  active: "supabase",
 
   targets: {
     cloudflare: {
