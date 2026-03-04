@@ -33,8 +33,7 @@
       document.addEventListener("DOMContentLoaded", applyDeviceClass);
     })();
 
-const SB_URL = "https://cfowmccvnzcrssgkabtt.supabase.co";
-  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90";
+const { SB_URL, SB_KEY } = (window.getActiveSupabaseConfig ? window.getActiveSupabaseConfig() : { SB_URL:"", SB_KEY:"" });
 
   
   // Exponer credenciales a scripts internos (PDF)
