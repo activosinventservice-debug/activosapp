@@ -338,6 +338,7 @@ let sessionToken = "", userEmail = "", empresaSeleccionada = null;
     setBtnEnabled('btn-mode-skus', canSkus(), 'Sin permiso para SKUs');
     setBtnEnabled('btn-mode-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
     setBtnEnabled('btn-mode-dash', canDash(), 'Sin permiso para Dashboard Resguardos');
+    setBtnEnabled('btn-mode-skus-dash', canDash(), 'Sin permiso para Dashboard SKUs');
     setBtnEnabled('btn-mode-hist', canHist(), 'Sin permiso para Historial Resguardos');
 
     // Navegación interna
@@ -2817,6 +2818,199 @@ function renderCatalogo(){
       ejecutarLogin();
     }
   });
+
+  // =========================
+  // ✅ DASHBOARD SKUS
+  // =========================
+  function setSkusDashMsg(text){
+    const el = qs('skus-dash-msg');
+    if(!el) return;
+    if(!text){ el.classList.add('hidden'); el.innerText = ''; return; }
+    el.innerText = text;
+    el.classList.remove('hidden');
+  }
+
+  function abrirDashboardSkus(){
+    if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canDash()){ alert('No tienes permiso para acceder al Dashboard de SKUs.'); return; }
+    qs('skus-dash-title').innerText = `SKUs · ${empresaSeleccionada.nombre}`;
+    switchView('view-skus-dashboard');
+    cargarDashboardSkus(false);
+  }
+
+  async function cargarDashboardSkus(forceRefresh){
+    setSkusDashMsg('');
+    if(!empresaSeleccionada?.id) return;
+
+    const grid = qs('skus-dash-global-grid');
+    const users = qs('skus-dash-users');
+    grid.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
+    users.innerHTML = '';
+
+    try{
+      const nombresMap = await cargarNombresUsuariosPorEmpresa();
+      const raw = await fetchSkusDashboardRaw(empresaSeleccionada.id);
+      const now = new Date();
+
+      let gHoyAlt=0,gHoyAct=0,gSemAlt=0,gSemAct=0,gMesAlt=0,gMesAct=0,gTotAlt=0,gTotAct=0;
+
+      const userMap = new Map();
+      function addToUser(email, period, altas, activos){
+        const safe = (email || '').trim() || 'Sin Asignar';
+        if(!userMap.has(safe)){
+          userMap.set(safe, { HOY:{altas:0,activos:0}, SEMANA:{altas:0,activos:0}, MES:{altas:0,activos:0}, TOTAL:{altas:0,activos:0} });
+        }
+        const o = userMap.get(safe);
+        o[period].altas += altas;
+        o[period].activos += activos;
+      }
+
+      for(const it of raw){
+        const dt = toDate(it.createdAt);
+        const activoInt = it.dadoDeBaja ? 0 : 1;
+
+        gTotAlt++; gTotAct += activoInt;
+        addToUser(it.email, 'TOTAL', 1, activoInt);
+
+        if(isSameDay(dt, now)){ gHoyAlt++; gHoyAct += activoInt; addToUser(it.email, 'HOY', 1, activoInt); }
+        if(isSameWeekLocal(dt, now)){ gSemAlt++; gSemAct += activoInt; addToUser(it.email, 'SEMANA', 1, activoInt); }
+        if(isSameMonth(dt, now)){ gMesAlt++; gMesAct += activoInt; addToUser(it.email, 'MES', 1, activoInt); }
+      }
+
+      grid.innerHTML = [
+        dashStatCardDual('Hoy', gHoyAlt, gHoyAct, 'today', 'Altas', 'Activos'),
+        dashStatCardDual('Esta Semana', gSemAlt, gSemAct, 'date_range', 'Altas', 'Activos'),
+        dashStatCardDual('Este Mes', gMesAlt, gMesAct, 'calendar_month', 'Altas', 'Activos'),
+        dashStatCardDual('Total Histórico', gTotAlt, gTotAct, 'all_inclusive', 'Altas', 'Activos'),
+      ].join('');
+
+      const list = [...userMap.entries()]
+        .map(([email, p])=>({
+          email,
+          nombre: nombresMap.get(String(email).toLowerCase()) || '',
+          hoy: p.HOY,
+          sem: p.SEMANA,
+          mes: p.MES,
+          total: p.TOTAL
+        }))
+        .sort((a,b)=> (b.total.altas - a.total.altas));
+
+      users.innerHTML = list.length
+        ? list.map(u=>dashUserCardDual(u, 'Altas', 'Activos')).join('')
+        : `<div class="chip" style="justify-content:center; width:100%;">Sin datos de SKUs.</div>`;
+
+    }catch(e){
+      console.error(e);
+      qs('skus-dash-global-grid').innerHTML = '';
+      qs('skus-dash-users').innerHTML = '';
+      setSkusDashMsg(e.message || 'Error cargando dashboard de SKUs.');
+    }
+  }
+
+  async function fetchSkusDashboardRaw(empresaId){
+    const batchSize = 1000;
+    let offset = 0;
+    const out = [];
+
+    const select = 'created_at,creado_por_email,creado_por_nombre,dado_de_baja';
+    while(true){
+      const url =
+        `${SB_URL}/rest/v1/activos` +
+        `?select=${encodeURIComponent(select)}` +
+        `&empresa_id=eq.${encodeURIComponent(empresaId)}` +
+        `&order=created_at.desc.nullslast` +
+        `&limit=${batchSize}` +
+        `&offset=${offset}`;
+
+      const res = await fetch(url, {
+        headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`
+        }
+      });
+
+      if(!res.ok){
+        const t = await res.text().catch(()=> '');
+        throw new Error(`Dashboard SKUs error (offset ${offset}) HTTP ${res.status}. ${t||''}`);
+      }
+
+      const arr = await res.json();
+      if(!Array.isArray(arr) || arr.length === 0) break;
+
+      for(const o of arr){
+        out.push({
+          createdAt: o?.created_at,
+          email: (o?.creado_por_email || '').trim(),
+          nombre: (o?.creado_por_nombre || '').trim(),
+          dadoDeBaja: !!o?.dado_de_baja
+        });
+      }
+
+      offset += arr.length;
+      if(arr.length < batchSize) break;
+    }
+
+    return out;
+  }
+
+  function dashStatCardDual(title, a, b, icon, labelA, labelB){
+    return `
+      <div class="dash-card">
+        <div class="t"><span class="material-symbols-rounded" style="vertical-align:-4px; margin-right:6px; color:#0B4CB3">${icon}</span>${escapeHtml(title)}</div>
+        <div class="dash-kpis">
+          <div class="dash-kpi">
+            <span class="material-symbols-rounded" style="color:#0B4CB3">add_circle</span>
+            <div><small>${escapeHtml(labelA)}</small>${Number(a||0)}</div>
+          </div>
+          <div class="dash-kpi">
+            <span class="material-symbols-rounded" style="color:#0F172A">inventory_2</span>
+            <div><small>${escapeHtml(labelB)}</small>${Number(b||0)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function dashUserCardDual(u, labelA, labelB){
+    const hasNombre = (u.nombre||'').trim().length>0;
+    const head = hasNombre
+      ? `<div class="dash-user-name">${escapeHtml(u.nombre)}</div><div class="dash-user-email">${escapeHtml(u.email)}</div>`
+      : `<div class="dash-user-name">${escapeHtml(u.email)}</div>`;
+
+    return `
+      <div class="dash-user">
+        <div class="dash-user-head">
+          <span class="material-symbols-rounded" style="color:#0B4CB3">person</span>
+          <div style="min-width:0">${head}</div>
+        </div>
+
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th>${escapeHtml(labelA)}</th>
+              <th>${escapeHtml(labelB)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dashRowDual('Hoy', u.hoy)}
+            ${dashRowDual('Semana', u.sem)}
+            ${dashRowDual('Mes', u.mes)}
+            ${dashRowDual('Total', u.total, true)}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function dashRowDual(label, st, bold){
+    const fw = bold ? 'font-weight:900' : '';
+    return `<tr style="${fw}">
+      <td style="text-align:left">${escapeHtml(label)}</td>
+      <td>${Number(st?.altas||0)}</td>
+      <td>${Number(st?.activos||0)}</td>
+    </tr>`;
+  }
 
   // =========================
   // ✅ HISTORIAL + DETALLE RESGUARDOS

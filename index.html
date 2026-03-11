@@ -579,6 +579,7 @@
         <button id="btn-mode-skus" class="btn" onclick="abrirModuloSkus()"><span class="material-symbols-rounded">inventory_2</span> Gestión de SKUs</button>
         <button id="btn-mode-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
         <button id="btn-mode-dash" class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard Resguardos</button>
+        <button id="btn-mode-skus-dash" class="btn tonal" onclick="abrirDashboardSkus()"><span class="material-symbols-rounded">monitoring</span> Dashboard SKUs</button>
         <button id="btn-mode-hist" class="btn tonal" onclick="abrirHistorialResguardos()"><span class="material-symbols-rounded">history</span> Historial Resguardos</button>
       </div>
     </div>
@@ -764,6 +765,36 @@
       <div style="margin:14px 0 10px">
         <div class="label" style="margin:0 0 8px"><span class="material-symbols-rounded">group</span> Desglose por Usuario</div>
         <div id="dash-users" class="stack"></div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD SKUS -->
+    <div id="view-skus-dashboard" class="card hidden">
+      <div class="header-flex" style="margin-bottom:10px">
+        <div>
+          <small style="color:#0B4CB3; font-weight:800;">Dashboard SKUs (Nube)</small>
+          <h2 id="skus-dash-title" style="margin:4px 0 0">SKUs · —</h2>
+        </div>
+        <div class="btn-group">
+          <button class="btn tonal" onclick="switchView('view-selector')">
+            <span class="material-symbols-rounded">arrow_back</span> Modos
+          </button>
+          <button class="btn" onclick="cargarDashboardSkus(true)">
+            <span class="material-symbols-rounded">refresh</span> Recargar
+          </button>
+        </div>
+      </div>
+
+      <div id="skus-dash-msg" class="error-msg hidden"></div>
+
+      <div style="margin-top:10px">
+        <div class="label" style="margin:0 0 8px"><span class="material-symbols-rounded">bar_chart</span> Resumen Global</div>
+        <div id="skus-dash-global-grid" class="dash-grid"></div>
+      </div>
+
+      <div style="margin:14px 0 10px">
+        <div class="label" style="margin:0 0 8px"><span class="material-symbols-rounded">group</span> Desglose por Usuario</div>
+        <div id="skus-dash-users" class="stack"></div>
       </div>
     </div>
 
