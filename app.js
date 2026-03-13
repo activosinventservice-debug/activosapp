@@ -34,11 +34,34 @@
     })();
 
 const { SB_URL, SB_KEY } = (window.getActiveSupabaseConfig ? window.getActiveSupabaseConfig() : { SB_URL:"", SB_KEY:"" });
+const WEBAPP_VERSION_CODE = Number(window.APP_VERSION_CODE || 6);
+const WEBAPP_VERSION_NAME = String(window.APP_VERSION_NAME || "2026.03.12.web_v6");
+const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
 
   
   // Exponer credenciales a scripts internos (PDF)
   window.SB_URL = SB_URL;
   window.SB_KEY = SB_KEY;
+  window.APP_VERSION_CODE = WEBAPP_VERSION_CODE;
+  window.APP_VERSION_NAME = WEBAPP_VERSION_NAME;
+  window.APP_PLATFORM = WEBAPP_PLATFORM;
+
+
+  function withVersionHeaders(init){
+    const i = init ? { ...init } : {};
+    const headers = new Headers(i.headers || {});
+    headers.set("X-App-Platform", WEBAPP_PLATFORM);
+    headers.set("X-App-Version-Code", String(WEBAPP_VERSION_CODE));
+    headers.set("X-App-Version-Name", WEBAPP_VERSION_NAME);
+    i.headers = headers;
+    return i;
+  }
+
+  function applyWebVersionTag(){
+    const el = document.querySelector('.version-tag');
+    if(!el) return;
+    el.textContent = `${WEBAPP_VERSION_NAME} (${WEBAPP_VERSION_CODE})`;
+  }
 
   /* =========================
      ✅ Monitor Internet vs servidor (Login + global)
@@ -166,7 +189,7 @@ const { SB_URL, SB_KEY } = (window.getActiveSupabaseConfig ? window.getActiveSup
   }
 
   // Auto-start cuando cargue la página
-  document.addEventListener("DOMContentLoaded", startServerHealthMonitor);
+  document.addEventListener("DOMContentLoaded", ()=>{ applyWebVersionTag(); startServerHealthMonitor(); });
 let sessionToken = "", userEmail = "", empresaSeleccionada = null;
   // =========================
   // ✅ Permisos (empresa_user_permissions)
@@ -716,7 +739,7 @@ function __combineSignals(signals){
   const __origFetch = window.fetch.bind(window);
   window.__origFetch = __origFetch;
   window.fetch = function(input, init){
-    const i = init ? { ...init } : {};
+    const i = withVersionHeaders(init);
     const signal = __combineSignals([ i.signal, __abortHub.sessionCtrl.signal, __abortHub.empresaCtrl.signal ]);
     if(signal) i.signal = signal;
     return __origFetch(input, i);
@@ -1566,50 +1589,78 @@ function parseCsv(text){
     }
   }
 
-  async function cargarEmpresasAutorizadas(){
-    switchView('view-empresas');
-    const lista = qs('lista-empresas');
-    setupEmpresaDelegation();
+async function cargarEmpresasAutorizadas(){
+  switchView('view-empresas');
+  const lista = qs('lista-empresas');
+  setupEmpresaDelegation();
 
-    // Sin skeleton (evitar parpadeo): solo un texto simple
-    lista.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Cargando empresas…</div>`;
+  lista.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Cargando empresas…</div>`;
 
-    try{
-      const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
+  try{
+    const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
 
-      if(await esSuperAdmin()){
-        const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?select=id,nombre,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`, headers);
-        if(!resEmp.ok) throw new Error("Error al cargar empresas");
-        const empresas = await resEmp.json();
-        lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>No hay empresas registradas.</p>";
-        queueEmpresaLogoHydration(empresas);
-        return;
-      }
+    if(await esSuperAdmin()){
+      const resEmp = await fetch(
+        `${SB_URL}/rest/v1/empresas?select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`,
+        headers
+      );
+      if(!resEmp.ok) throw new Error("Error al cargar empresas");
 
-      const email = encodeURIComponent(userEmail);
+      const empresasRaw = await resEmp.json();
+      const empresas = (empresasRaw || []).filter(e => e?.activo !== false);
 
-      const resVer = await fetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&puedeVerEmpresa=eq.true&select=empresaNombre`, headers);
-      if(!resVer.ok){ console.error(await resVer.text()); throw new Error("Error al consultar permisos (ver)"); }
-      const arrVer = await resVer.json();
+      lista.innerHTML = empresas.length
+        ? empresas.map(e => empresaCard(e)).join('')
+        : "<p>No hay empresas activas registradas.</p>";
 
-      const resAdm = await fetch(`${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&esAdminEmpresa=eq.true&select=empresaNombre`, headers);
-      if(!resAdm.ok){ console.error(await resAdm.text()); throw new Error("Error al consultar permisos (admin)"); }
-      const arrAdm = await resAdm.json();
-
-      const set = new Set(); [...arrVer, ...arrAdm].forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
-      if(!set.size){ lista.innerHTML = "<p>No tienes empresas asignadas.</p>"; return; }
-
-      const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\\"')}"`).join(',');
-      const resEmp = await fetch(`${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`, headers);
-      if(!resEmp.ok){ console.error(await resEmp.text()); throw new Error("Error al cargar empresas autorizadas"); }
-      const empresas = await resEmp.json();
-      lista.innerHTML = empresas.length ? empresas.map(e => empresaCard(e)).join('') : "<p>Error: Tienes permisos, pero las empresas no existen.</p>";
       queueEmpresaLogoHydration(empresas);
-    }catch(e){
-      console.error(e);
-      lista.innerHTML = `<p class='error-msg'>${escapeHtml(e.message)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
+      return;
     }
+
+    const email = encodeURIComponent(userEmail);
+
+    const resVer = await fetch(
+      `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&puedeVerEmpresa=eq.true&select=empresaNombre`,
+      headers
+    );
+    if(!resVer.ok){ console.error(await resVer.text()); throw new Error("Error al consultar permisos (ver)"); }
+    const arrVer = await resVer.json();
+
+    const resAdm = await fetch(
+      `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&esAdminEmpresa=eq.true&select=empresaNombre`,
+      headers
+    );
+    if(!resAdm.ok){ console.error(await resAdm.text()); throw new Error("Error al consultar permisos (admin)"); }
+    const arrAdm = await resAdm.json();
+
+    const set = new Set();
+    [...arrVer, ...arrAdm].forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
+
+    if(!set.size){
+      lista.innerHTML = "<p>No tienes empresas asignadas.</p>";
+      return;
+    }
+
+    const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\\"')}"`).join(',');
+    const resEmp = await fetch(
+      `${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`,
+      headers
+    );
+    if(!resEmp.ok){ console.error(await resEmp.text()); throw new Error("Error al cargar empresas autorizadas"); }
+
+    const empresasRaw = await resEmp.json();
+    const empresas = (empresasRaw || []).filter(e => e?.activo !== false);
+
+    lista.innerHTML = empresas.length
+      ? empresas.map(e => empresaCard(e)).join('')
+      : "<p>No tienes empresas activas asignadas.</p>";
+
+    queueEmpresaLogoHydration(empresas);
+  }catch(e){
+    console.error(e);
+    lista.innerHTML = `<p class='error-msg'>${escapeHtml(e.message)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
   }
+}
 
   // ✅ YA NO USA onclick inline (evita fallas por escape)
   function empresaCard(e){

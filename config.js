@@ -28,3 +28,9 @@ window.getActiveSupabaseConfig = function(){
   }
   return t;
 };
+
+
+// ✅ Versionado de la webapp para gate de servidor
+window.APP_VERSION_CODE = 6;
+window.APP_VERSION_NAME = "2026.03.12.web_v6";
+window.APP_PLATFORM = "web";
