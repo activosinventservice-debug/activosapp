@@ -35,7 +35,7 @@
 
 const { SB_URL, SB_KEY } = (window.getActiveSupabaseConfig ? window.getActiveSupabaseConfig() : { SB_URL:"", SB_KEY:"" });
 const WEBAPP_VERSION_CODE = Number(window.APP_VERSION_CODE || 6);
-const WEBAPP_VERSION_NAME = String(window.APP_VERSION_NAME || "2026.03.12.web_v6");
+const WEBAPP_VERSION_NAME = String(window.APP_VERSION_NAME || "2026.03.17.web_v6");
 const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
 
   
