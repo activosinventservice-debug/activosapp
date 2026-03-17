@@ -77,7 +77,7 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
     detail: "",
     okIntervalMs: 30000,
     failIntervalMs: 7000,
-    timeoutMs: 2500,
+    timeoutMs: 8000,
     timer: null,
     started: false
   };
@@ -189,8 +189,189 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
   }
 
   // Auto-start cuando cargue la página
-  document.addEventListener("DOMContentLoaded", ()=>{ applyWebVersionTag(); startServerHealthMonitor(); });
+  document.addEventListener("DOMContentLoaded", async ()=>{
+    applyWebVersionTag();
+    startServerHealthMonitor();
+    const restored = restoreAuthSession();
+    syncGlobals();
+    updatePrintButtonState();
+    if(restored){
+      try{
+        await refreshSessionToken(false);
+        await cargarEmpresasAutorizadas();
+      }catch(e){
+        console.warn("No se pudo rehidratar la sesión:", e);
+      }
+    }
+  });
 let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+let refreshToken = "";
+let sessionExpiresAt = 0;
+
+const AUTH_STORAGE_KEY = "afitmex_web_auth_v1";
+const __originalFetch = window.fetch.bind(window);
+let __refreshPromise = null;
+
+function persistAuthSession(){
+  try{
+    const payload = {
+      sessionToken: sessionToken || "",
+      refreshToken: refreshToken || "",
+      userEmail: userEmail || "",
+      sessionExpiresAt: Number(sessionExpiresAt || 0) || 0,
+      empresaSeleccionada: empresaSeleccionada || null
+    };
+    if(payload.sessionToken && payload.refreshToken){
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+    }else{
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }catch(e){
+    console.warn("No se pudo persistir la sesión:", e);
+  }
+}
+
+function restoreAuthSession(){
+  try{
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    sessionToken = String(data?.sessionToken || "");
+    refreshToken = String(data?.refreshToken || "");
+    userEmail = String(data?.userEmail || "");
+    sessionExpiresAt = Number(data?.sessionExpiresAt || 0) || 0;
+    empresaSeleccionada = data?.empresaSeleccionada || null;
+    if(!sessionToken || !refreshToken) {
+      clearPersistedAuthSession();
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.warn("No se pudo restaurar la sesión:", e);
+    clearPersistedAuthSession();
+    return false;
+  }
+}
+
+function clearPersistedAuthSession(){
+  try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch{}
+}
+
+function applyAuthPayload(data, fallbackEmail){
+  sessionToken = String(data?.access_token || "");
+  refreshToken = String(data?.refresh_token || refreshToken || "");
+  userEmail = String(data?.user?.email || fallbackEmail || userEmail || "");
+  const expiresIn = Number(data?.expires_in || 0) || 0;
+  sessionExpiresAt = expiresIn > 0 ? (Date.now() + Math.max(0, expiresIn - 30) * 1000) : 0;
+  window.sessionToken = sessionToken || null;
+  window.userEmail = userEmail || null;
+  persistAuthSession();
+  syncGlobals();
+}
+
+async function refreshSessionToken(force){
+  if(!refreshToken) throw new Error("No hay refresh token disponible");
+  const needsRefresh = force || !sessionToken || !sessionExpiresAt || Date.now() >= sessionExpiresAt;
+  if(!needsRefresh) return sessionToken;
+  if(__refreshPromise) return __refreshPromise;
+
+  __refreshPromise = (async ()=>{
+    const res = await __originalFetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method:'POST',
+      headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${SB_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    const raw = await res.text();
+    let data = null;
+    try{ data = raw ? JSON.parse(raw) : null; }catch{}
+    if(!res.ok || !data?.access_token){
+      hardResetAppState();
+      throw new Error((data && (data.error_description || data.error || data.message)) || raw || `HTTP ${res.status}`);
+    }
+    applyAuthPayload(data, userEmail);
+    return sessionToken;
+  })();
+
+  try{
+    return await __refreshPromise;
+  }finally{
+    __refreshPromise = null;
+  }
+}
+
+async function fetchSupabaseJsonWithRetry(url, init, options){
+  const attempts = Math.max(1, Number(options?.attempts || 3));
+  const retryStatuses = new Set(options?.retryStatuses || [502,503,504]);
+  const baseDelayMs = Math.max(0, Number(options?.baseDelayMs || 700));
+  let lastRes = null;
+  let lastText = '';
+
+  for(let i = 0; i < attempts; i++){
+    const res = await fetch(url, init);
+    lastRes = res;
+    const raw = await res.text();
+    lastText = raw || '';
+
+    if(res.ok){
+      let data = null;
+      try{ data = raw ? JSON.parse(raw) : null; }catch{ data = null; }
+      return { res, data, raw };
+    }
+
+    if(i < attempts - 1 && retryStatuses.has(res.status)){
+      const waitMs = baseDelayMs * (i + 1);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+
+    const err = new Error((options && options.errorMessage) || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.responseText = lastText;
+    throw err;
+  }
+
+  const err = new Error((options && options.errorMessage) || `HTTP ${lastRes?.status || 0}`);
+  err.status = lastRes?.status || 0;
+  err.responseText = lastText;
+  throw err;
+}
+
+window.fetch = async function(input, init){
+  const url = (typeof input === 'string') ? input : (input && input.url) ? input.url : '';
+  const isSupabaseApi = typeof url === 'string' && url.startsWith(SB_URL);
+  const isAuthRefreshCall = isSupabaseApi && url.includes('/auth/v1/token?grant_type=refresh_token');
+  const isPasswordLoginCall = isSupabaseApi && url.includes('/auth/v1/token?grant_type=password');
+
+  let reqInit = withVersionHeaders(init || {});
+
+  if(isSupabaseApi && !isAuthRefreshCall && !isPasswordLoginCall && refreshToken){
+    try{ await refreshSessionToken(false); }catch(e){ console.warn('No se pudo refrescar previo a la petición:', e); }
+    const headers = new Headers(reqInit.headers || {});
+    const auth = headers.get('Authorization') || '';
+    if(auth === `Bearer ${window.sessionToken || sessionToken}` || auth === `Bearer ${sessionToken}`){
+      headers.set('Authorization', `Bearer ${sessionToken}`);
+    }
+    reqInit.headers = headers;
+  }
+
+  let res = await __originalFetch(input, reqInit);
+
+  if(isSupabaseApi && !isAuthRefreshCall && !isPasswordLoginCall && res.status === 401 && refreshToken){
+    try{
+      await refreshSessionToken(true);
+      const retryInit = withVersionHeaders(reqInit || {});
+      const headers = new Headers(retryInit.headers || {});
+      const auth = headers.get('Authorization') || '';
+      if(auth.startsWith('Bearer ')) headers.set('Authorization', `Bearer ${sessionToken}`);
+      retryInit.headers = headers;
+      res = await __originalFetch(input, retryInit);
+    }catch(e){
+      console.warn('No se pudo reintentar tras 401:', e);
+    }
+  }
+
+  return res;
+};
   // =========================
   // ✅ Permisos (empresa_user_permissions)
   // =========================
@@ -522,6 +703,9 @@ function syncGlobals(){
   window.soloBaja = !!soloBaja;
   // ✅ Permisos efectivos para que otras secciones (ej. PDF) los puedan leer
   window.__permsEffective = __permsEffective || null;
+  if(sessionToken || refreshToken){
+    try{ persistAuthSession(); }catch{}
+  }
 }
 
 function getResponsableFiltroActual(){
@@ -576,8 +760,11 @@ function updatePrintButtonState(){
     try{ bumpCtxVersion(); }catch{}
     // Auth / sesión
     sessionToken = "";
+    refreshToken = "";
+    sessionExpiresAt = 0;
     userEmail = "";
     empresaSeleccionada = null;
+    clearPersistedAuthSession();
 
     // ✅ Permisos
     try{ resetPermisosState(); }catch{}
@@ -1411,11 +1598,7 @@ function parseCsv(text){
       const raw = await res.text(); let data = null; try{ data = raw ? JSON.parse(raw) : null }catch{}
       if(!res.ok) throw new Error((data && (data.error_description||data.error||data.message)) || raw || `HTTP ${res.status}`);
       if(!data?.access_token) throw new Error('Respuesta inesperada de Auth: sin access_token');
-      sessionToken = data.access_token; userEmail = emailInput;
-      window.sessionToken = sessionToken || null;
-      window.userEmail = userEmail || null;
-      window.sessionToken = sessionToken;
-      syncGlobals();
+      applyAuthPayload(data, emailInput);
       updatePrintButtonState();
       await cargarEmpresasAutorizadas();
     }catch(e){
@@ -1598,19 +1781,15 @@ async function cargarEmpresasAutorizadas(){
 
   try{
     const headers = { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } };
+    const superAdmin = await esSuperAdmin();
 
-    if(await esSuperAdmin()){
-      const resEmp = await fetch(
+    if(superAdmin){
+      const { data: empresasRaw } = await fetchSupabaseJsonWithRetry(
         `${SB_URL}/rest/v1/empresas?select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`,
-        headers
+        headers,
+        { attempts: 3, errorMessage: "Error al cargar empresas" }
       );
-      if(!resEmp.ok){
-        const errTxt = await resEmp.text().catch(()=>"");
-        console.error('Empresas superadmin:', resEmp.status, errTxt);
-        throw new Error(`Error al cargar empresas (${resEmp.status})`);
-      }
 
-      const empresasRaw = await resEmp.json();
       const empresas = (empresasRaw || []).filter(e => e?.activo !== false);
 
       lista.innerHTML = empresas.length
@@ -1622,21 +1801,15 @@ async function cargarEmpresasAutorizadas(){
     }
 
     const email = encodeURIComponent(userEmail);
-    const resPerm = await fetch(
-      `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresaNombre`,
-      headers
+    const permisosUrl = `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresaNombre`;
+    const { data: permisosRaw } = await fetchSupabaseJsonWithRetry(
+      permisosUrl,
+      headers,
+      { attempts: 3, errorMessage: "Error al consultar permisos de empresas" }
     );
-    if(!resPerm.ok){
-      const errTxt = await resPerm.text().catch(()=>"");
-      console.error('Permisos empresas:', resPerm.status, errTxt);
-      if(resPerm.status === 401) throw new Error('La sesión venció al consultar permisos. Inicia sesión de nuevo.');
-      if(resPerm.status === 403) throw new Error('Tu usuario no tiene permiso para consultar empresas asignadas.');
-      throw new Error(`Error al consultar permisos (${resPerm.status})`);
-    }
-    const arrPerm = await resPerm.json();
 
     const set = new Set();
-    (arrPerm || []).forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
+    (permisosRaw || []).forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
 
     if(!set.size){
       lista.innerHTML = "<p>No tienes empresas asignadas.</p>";
@@ -1644,17 +1817,12 @@ async function cargarEmpresasAutorizadas(){
     }
 
     const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\"')}"`).join(',');
-    const resEmp = await fetch(
+    const { data: empresasRaw } = await fetchSupabaseJsonWithRetry(
       `${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`,
-      headers
+      headers,
+      { attempts: 3, errorMessage: "Error al cargar empresas autorizadas" }
     );
-    if(!resEmp.ok){
-      const errTxt = await resEmp.text().catch(()=>"");
-      console.error('Empresas autorizadas:', resEmp.status, errTxt);
-      throw new Error(`Error al cargar empresas autorizadas (${resEmp.status})`);
-    }
 
-    const empresasRaw = await resEmp.json();
     const empresas = (empresasRaw || []).filter(e => e?.activo !== false);
 
     lista.innerHTML = empresas.length
@@ -1664,7 +1832,12 @@ async function cargarEmpresasAutorizadas(){
     queueEmpresaLogoHydration(empresas);
   }catch(e){
     console.error(e);
-    lista.innerHTML = `<p class='error-msg'>${escapeHtml(e.message)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
+    if(e?.responseText) console.error(e.responseText);
+    const statusMsg = e?.status ? ` (HTTP ${e.status})` : "";
+    const friendly = e?.status === 503
+      ? "Servicio temporalmente no disponible al consultar empresas. Intenta de nuevo en unos segundos."
+      : `${e.message || 'Error al cargar empresas'}${statusMsg}`;
+    lista.innerHTML = `<p class='error-msg'>${escapeHtml(friendly)}</p><p class='debug-msg'>Verifica la consola (F12) para más detalles.</p>`;
   }
 }
 
