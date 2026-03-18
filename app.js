@@ -1596,7 +1596,11 @@ function parseCsv(text){
     const col = skuExtraFiltro.tipo;
     const iconMap = { genero:'category', ubicacion:'location_on', localizacion:'map', responsable:'badge' };
     const label = col.charAt(0).toUpperCase() + col.slice(1);
-    const n = Number.isFinite(totalActivos) ? totalActivos : 0;
+    let n = Number.isFinite(totalActivos) ? totalActivos : 0;
+    if (col === 'responsable') {
+      const c = __getRespCount(skuExtraFiltro.valor);
+      if (Number.isFinite(c)) n = c;
+    }
     qs('filtro-text').innerText = `${label}: ${skuExtraFiltro.valor} · ${n} SKU${n===1?'':'s'}`;
     qs('filtro-icon').innerText = iconMap[col] || 'filter_alt';
     show(qs('filtro-activo'), true);
@@ -2521,31 +2525,12 @@ function resetChipFiltroUI(){
   let catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] };
 
   // ✅ Conteo de SKUs por Responsable (Catálogos)
-  // Cache por empresa_id -> { ts, counts: Map(responsable -> count) }
+  // cache por empresa_id -> Map(responsable -> count)
   const __respSkuCountsByEmpresa = new Map();
-  const RESP_SKU_COUNT_TTL_MS = 5 * 60 * 1000;
-  const RESP_SKU_PAGE_SIZE = 1000;
-  let __respSkuCountInFlight = null;
-
-  function __currentEmpresaId(){
-    return (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
-  }
   function __getRespCountsMap(){
-    const empId = __currentEmpresaId();
-    const entry = __respSkuCountsByEmpresa.get(empId);
-    return entry?.counts || new Map();
-  }
-  function __setRespCountsMap(counts){
-    const empId = __currentEmpresaId();
-    __respSkuCountsByEmpresa.set(empId, { ts: Date.now(), counts: counts instanceof Map ? counts : new Map() });
-  }
-  function __hasFreshRespCounts(){
-    const empId = __currentEmpresaId();
-    const entry = __respSkuCountsByEmpresa.get(empId);
-    return !!entry && (Date.now() - (entry.ts || 0) < RESP_SKU_COUNT_TTL_MS);
-  }
-  function __invalidateRespCounts(){
-    try{ __respSkuCountsByEmpresa.delete(__currentEmpresaId()); }catch{}
+    const empId = (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
+    if(!__respSkuCountsByEmpresa.has(empId)) __respSkuCountsByEmpresa.set(empId, new Map());
+    return __respSkuCountsByEmpresa.get(empId);
   }
   function __getRespCount(value){
     try{
@@ -2555,107 +2540,81 @@ function resetChipFiltroUI(){
   }
   function __setRespCount(value, count){
     try{
-      const empId = __currentEmpresaId();
-      const entry = __respSkuCountsByEmpresa.get(empId) || { ts: Date.now(), counts: new Map() };
-      entry.counts.set(value, Number.isFinite(count) ? count : 0);
-      entry.ts = Date.now();
-      __respSkuCountsByEmpresa.set(empId, entry);
+      const m = __getRespCountsMap();
+      m.set(value, count === null ? null : (Number.isFinite(count) ? count : 0));
     }catch{}
   }
 
-  async function __fetchRespSkuCountsForEmpresa(){
-    if(!empresaSeleccionada?.id || !window.SB_URL || !window.SB_KEY || !window.sessionToken){
-      return new Map();
-    }
-    const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${sessionToken}` };
-    const skuSets = new Map();
-    let from = 0;
-    while(true){
-      const to = from + RESP_SKU_PAGE_SIZE - 1;
-      const params = [
-        `empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}`,
-        `select=${encodeURIComponent('responsable,sku')}`,
-        `responsable=not.is.null`,
-        `sku=not.is.null`,
-        `order=${encodeURIComponent('responsable.asc,sku.asc')}`
-      ];
-      if(window.soloBaja) params.push('dado_de_baja=eq.true');
-      const url = `${SB_URL}/rest/v1/activos?${params.join('&')}`;
-      const res = await fetch(url, { headers: { ...headers, 'Range': `${from}-${to}` } });
-      if(!res.ok){
-        const t = await res.text().catch(()=> '');
-        throw new Error(`Error calculando SKUs por responsable (${res.status}): ${t || res.statusText}`);
-      }
-      const batch = await res.json();
-      (batch || []).forEach(row => {
-        const resp = norm(row?.responsable);
-        const sku = norm(row?.sku);
-        if(!resp || !sku) return;
-        if(!skuSets.has(resp)) skuSets.set(resp, 0);
-        skuSets.set(resp, skuSets.get(resp) + 1);
-      });
-      if(!Array.isArray(batch) || batch.length < RESP_SKU_PAGE_SIZE) break;
-      from += batch.length;
-    }
-    const counts = new Map();
-    skuSets.forEach((count, resp) => counts.set(resp, count));
-    return counts;
+  async function __headCountActivosByResponsable(respVal){
+    return null;
   }
 
-  async function __ensureRespSkuCounts(force){
-    if(!force && __hasFreshRespCounts()) return __getRespCountsMap();
-    const companyKey = __currentEmpresaId();
-    if(__respSkuCountInFlight && __respSkuCountInFlight.companyKey === companyKey){
-      return __respSkuCountInFlight.promise;
-    }
-    const promise = (async()=>{
-      const counts = await __fetchRespSkuCountsForEmpresa();
-      __setRespCountsMap(counts);
-      return counts;
-    })();
-    __respSkuCountInFlight = { companyKey, promise };
-    try{
-      return await promise;
-    } finally {
-      if(__respSkuCountInFlight?.companyKey === companyKey) __respSkuCountInFlight = null;
-    }
-  }
-
+  
   function __updateRespBadge(respVal, count){
     try{
       const key = encodeURIComponent(String(respVal||""));
       document.querySelectorAll(`.badge[data-resp="${key}"]`).forEach(el=>{
-        el.textContent = count===null ? 'SKUs: …' : `SKUs: ${count}`;
+        el.textContent = (count === null ? 'SKUs: …' : ('SKUs: ' + count));
       });
     }catch(e){ /* ignore */ }
   }
 
-  async function precalcularConteoSkusResponsables(force=false){
+async function precalcularConteoSkusResponsables(){
     if(currentTab !== "responsable") return;
+    const empresaId = empresaSeleccionada?.id;
+    if(!empresaId) return;
     try{
       const all = catalogoCache?.responsable || [];
       all.forEach(val => {
-        if(force || __getRespCount(val) === null){
-          __updateRespBadge(val, null);
-        }
+        __setRespCount(val, null);
+        __updateRespBadge(val, null);
       });
-      const counts = await __ensureRespSkuCounts(force);
+
+      const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
+      const pageSize = 1000;
+      let desde = 0;
+      let total = null;
+      const byResp = new Map(); // responsable -> Set(sku)
+
+      while(true){
+        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&select=responsable,sku&responsable=not.is.null&sku=not.is.null&order=responsable.asc`;
+        const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
+        if(!res.ok){
+          const t = await res.text().catch(()=>"");
+          console.warn('Conteo responsables:', res.status, t);
+          break;
+        }
+        const batch = await res.json();
+        const range = res.headers.get('Content-Range');
+        if (range){
+          const parts = range.split('/');
+          total = parseInt(parts[1] || '0', 10);
+        }
+        (batch||[]).forEach(o=>{
+          const rawResp = String(o?.responsable ?? '');
+          const sku = String(o?.sku ?? '').trim();
+          if(!rawResp || !sku) return;
+          if(!byResp.has(rawResp)) byResp.set(rawResp, new Set());
+          byResp.get(rawResp).add(sku);
+        });
+        desde += Array.isArray(batch) ? batch.length : pageSize;
+        if (!Array.isArray(batch) || batch.length < pageSize) break;
+        if (total !== null && desde >= total) break;
+      }
+
       all.forEach(val => {
-        const count = counts.has(val) ? counts.get(val) : 0;
+        const count = byResp.has(val) ? byResp.get(val).size : 0;
         __setRespCount(val, count);
         __updateRespBadge(val, count);
       });
-      requestRenderCatalogo();
-    }catch(err){
-      console.warn('No se pudo precalcular conteo de SKUs por responsables:', err);
-    }
+      try{ if (skuExtraFiltro?.tipo === 'responsable' && skuExtraFiltro?.valor) actualizarChipFiltroConConteo(); }catch{}
+    }catch(e){ console.warn(e); }
   }
 
   let catalogoFilter = '';
 
 
   function resetCatalogosState(){
-    try{ __invalidateRespCounts(); }catch{}
     try{ currentTab = 'genero'; }catch{}
     try{ catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] }; }catch{}
     try{ catalogoFilter = ''; }catch{}
@@ -2731,7 +2690,9 @@ function resetChipFiltroUI(){
       }
 
       (batch||[]).forEach(o=>{
-        const v = norm(o?.[col]);
+        const raw = String(o?.[col] ?? '');
+        if (!raw) return;
+        const v = (col === 'responsable') ? raw : norm(raw);
         if (v) values.add(v);
       });
 
