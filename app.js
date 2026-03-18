@@ -1815,24 +1815,35 @@ async function cargarEmpresasAutorizadas(){
     }
 
     const email = encodeURIComponent(userEmail);
-    const permisosUrl = `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresaNombre`;
+    const permisosUrl = `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresa_id,empresaNombre`;
     const { data: permisosRaw } = await fetchSupabaseJsonWithRetry(
       permisosUrl,
       headers,
       { attempts: 3, errorMessage: "Error al consultar permisos de empresas" }
     );
 
-    const set = new Set();
-    (permisosRaw || []).forEach(p => p?.empresaNombre && set.add(p.empresaNombre));
+    const setIds = new Set();
+    const setNames = new Set();
+    (permisosRaw || []).forEach(p => {
+      if(p?.empresa_id) setIds.add(String(p.empresa_id).trim());
+      else if(p?.empresaNombre) setNames.add(String(p.empresaNombre).trim());
+    });
 
-    if(!set.size){
+    if(!setIds.size && !setNames.size){
       lista.innerHTML = "<p>No tienes empresas asignadas.</p>";
       return;
     }
 
-    const inNames = [...set].map(n => `"${String(n).replace(/"/g,'\"')}"`).join(',');
+    let empresasUrl = `${SB_URL}/rest/v1/empresas?select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`;
+    if(setIds.size){
+      const inIds = [...setIds].map(id => `"${String(id).replace(/"/g,'\"')}"`).join(',');
+      empresasUrl += `&id=in.(${inIds})`;
+    }else{
+      const inNames = [...setNames].map(n => `"${String(n).replace(/"/g,'\"')}"`).join(',');
+      empresasUrl += `&nombre=in.(${inNames})`;
+    }
     const { data: empresasRaw } = await fetchSupabaseJsonWithRetry(
-      `${SB_URL}/rest/v1/empresas?nombre=in.(${inNames})&select=id,nombre,activo,razon_social,resguardo_legal_text,resguardo_control_label&order=nombre.asc`,
+      empresasUrl,
       headers,
       { attempts: 3, errorMessage: "Error al cargar empresas autorizadas" }
     );
@@ -2531,68 +2542,28 @@ function resetChipFiltroUI(){
   }
 
   async function __headCountActivosByResponsable(respVal){
-    if(!empresaSeleccionada) return 0;
-    const safeVal = encodeURIComponent(String(respVal||""));
-    const url = `${SB_URL}/rest/v1/activos?select=sku&empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&responsable=eq.${safeVal}`;
-    const res = await fetch(url, {
-      method: "HEAD",
-      headers: {
-        "apikey": SB_KEY,
-        "Authorization": `Bearer ${sessionToken}`,
-        "Prefer": "count=exact"
-      },
-      signal: (__abortHub && __abortHub.empresaCtrl) ? __abortHub.empresaCtrl.signal : undefined
-    });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const cr = res.headers.get("content-range") || res.headers.get("Content-Range") || "";
-    const m = cr.match(/\/(\d+)\s*$/);
-    return m ? Number(m[1]) : 0;
+    return null;
   }
 
   
   function __updateRespBadge(respVal, count){
     try{
       const key = encodeURIComponent(String(respVal||""));
-      // Update all matching badges (filtered lists etc.)
       document.querySelectorAll(`.badge[data-resp="${key}"]`).forEach(el=>{
-        el.textContent = `SKUs: ${count}`;
+        el.textContent = `Filtrar`;
       });
     }catch(e){ /* ignore */ }
   }
 
 async function precalcularConteoSkusResponsables(){
     if(currentTab !== "responsable") return;
-    if(!empresaSeleccionada || !sessionToken) return;
-
-    const all = catalogoCache?.responsable || [];
-    if(!all.length) return;
-
-    const pending = all.filter(v => __getRespCount(v) === null);
-    if(!pending.length) return;
-
-    // Mostrar placeholders
-    try{ renderCatalogo(); }catch{}
-
-    const CONC = 5;
-    let i = 0;
-    async function worker(){
-      while(i < pending.length){
-        const idx = i++;
-        const val = pending[idx];
-        try{
-          const c = await __headCountActivosByResponsable(val);
-          __setRespCount(val, c);
-          __updateRespBadge(val, c);
-        }catch(e){
-          console.warn("Conteo responsable falló:", val, e);
-          __setRespCount(val, 0);
-          __updateRespBadge(val, 0);
-        }
-        try{ __updateRespBadge(val, __getRespCount(val)); }catch{}
-      }
-    }
-    const workers = Array.from({length: Math.min(CONC, pending.length)}, () => worker());
-    await Promise.all(workers);
+    try{
+      const all = catalogoCache?.responsable || [];
+      all.forEach(val => {
+        __setRespCount(val, null);
+        __updateRespBadge(val, null);
+      });
+    }catch{}
   }
 
   let catalogoFilter = '';
@@ -2647,7 +2618,7 @@ async function precalcularConteoSkusResponsables(){
 
   async function cargarCatalogoCompleto(tipo){
     const col = tipo;
-    const baseHeaders = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}`, 'Prefer':'count=exact' };
+    const baseHeaders = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     const pageSize = 1000;
     let desde = 0;
     let total = null;
@@ -2758,20 +2729,9 @@ function renderCatalogo(){
     const map = new Map();
     try{
       const uniq = Array.from(new Set((ids||[]).map(x=>String(x||"").trim()).filter(Boolean))).filter(isUuid);
-      if(!uniq.length) return map;
-
-      const inList = uniq.map(x=>`"${x.replace(/"/g,'\\"')}"`).join(',');
-      const url = `${SB_URL}/rest/v1/users?id=in.(${inList})&select=id,email,nombre`;
-      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-      if(!res.ok) return map;
-      const arr = await res.json();
-      (arr||[]).forEach(u=>{
-        const id = norm(u?.id);
-        if(!id) return;
-        map.set(id, { email: norm(u?.email), nombre: norm(u?.nombre) });
-      });
+      uniq.forEach(id=> map.set(id, { email: '', nombre: '' }));
     }catch(e){
-      console.warn("No se pudieron cargar usuarios por ids:", e);
+      console.warn("No se pudieron preparar usuarios por ids:", e);
     }
     return map;
   }
