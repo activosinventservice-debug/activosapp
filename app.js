@@ -2870,7 +2870,7 @@ function renderCatalogo(){
   }
 
   async function fetchResguardoDashboardRaw(empresaId){
-    const batchSize = 1000;
+    const batchSize = 100;
     let offset = 0;
     const out = [];
 
@@ -2883,14 +2883,24 @@ function renderCatalogo(){
         `&order=created_at.desc` +
         `&limit=${batchSize}` +
         `&offset=${offset}` +
-        `&resguardo_entries.limit=5000`;
+        `&resguardo_entries.limit=1`;
 
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         headers:{
           'apikey':SB_KEY,
           'Authorization':`Bearer ${sessionToken}`
         }
       });
+
+      if((res.status === 503 || res.status === 504 || res.status === 429) && offset === 0){
+        await new Promise(r => setTimeout(r, 700));
+        res = await fetch(url, {
+          headers:{
+            'apikey':SB_KEY,
+            'Authorization':`Bearer ${sessionToken}`
+          }
+        });
+      }
 
       if(!res.ok){
         const t = await res.text().catch(()=> "");
@@ -3112,7 +3122,7 @@ function renderCatalogo(){
   }
 
   async function fetchSkusDashboardRaw(empresaId){
-    const batchSize = 1000;
+    const batchSize = 100;
     let offset = 0;
     const out = [];
 
@@ -3539,7 +3549,7 @@ function renderCatalogo(){
     `;
   }
 
-  async function fetchResguardoSessionsRemote(empresaId, limit=500){
+  async function fetchResguardoSessionsRemote(empresaId, limit=150){
     const select =
       "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
       "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
@@ -3555,9 +3565,15 @@ function renderCatalogo(){
       `&limit=${limit}` +
       `&resguardo_entries.limit=1`;
 
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
     });
+    if(res.status === 503 || res.status === 504 || res.status === 429){
+      await new Promise(r => setTimeout(r, 700));
+      res = await fetch(url, {
+        headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
+      });
+    }
     if(!res.ok){
       const t = await res.text().catch(()=> "");
       throw new Error(`Error historial (HTTP ${res.status}). ${t||""}`);
