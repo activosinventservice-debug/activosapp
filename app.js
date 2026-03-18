@@ -118,30 +118,40 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
   }
 
   async function __probeServerOnce(){
-    // Endpoint REST real (como en Android):
-    const url = `${SB_URL}/rest/v1/empresas?select=id&limit=1`;
-
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), __backend.timeoutMs);
 
     try{
+      const hasSession = !!String(sessionToken || "").trim();
+      const url = hasSession
+        ? `${SB_URL}/rest/v1/empresas?select=id&limit=1`
+        : `${SB_URL}/auth/v1/settings`;
+
+      const headers = hasSession
+        ? {
+            "apikey": SB_KEY,
+            "Authorization": `Bearer ${sessionToken}`,
+            "Accept": "application/json"
+          }
+        : {
+            "apikey": SB_KEY,
+            "Accept": "application/json"
+          };
+
       const res = await fetch(url, {
         method: "GET",
-        headers: {
-          "apikey": SB_KEY,
-          "Authorization": `Bearer ${SB_KEY}`,
-          "Accept": "application/json"
-        },
+        headers,
         signal: ctrl.signal,
         cache: "no-store"
       });
 
-      // OK si PostgREST está vivo
       const code = res.status;
-      const ok = (code >= 200 && code <= 299) || code === 401 || code === 403 || code === 406;
+      const ok = hasSession
+        ? ((code >= 200 && code <= 299) || code === 401 || code === 403 || code === 406)
+        : (code >= 200 && code <= 299);
       clearTimeout(t);
 
-      return { ok, code };
+      return { ok, code, hasSession };
     } catch (e){
       clearTimeout(t);
       return { ok:false, code:null, err:(e && e.name) ? e.name : "Exception" };
@@ -1617,13 +1627,9 @@ function parseCsv(text){
   }
 
   async function esSuperAdmin(){
-    try{
-      const url = `${SB_URL}/rest/v1/users?email=eq.${encodeURIComponent(userEmail)}&select=esSuperAdmin`;
-      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-      if(!res.ok) return false;
-      const u = await res.json();
-      return u[0]?.esSuperAdmin === true;
-    }catch{ return false }
+    // En la web no hay bypass por correo ni consulta a /users.
+    // El acceso se determina solo por permisos reales en empresa_user_permissions.
+    return false;
   }
 
   // ✅ Delegación de click para empresas (SOLUCIONA "no entra")
