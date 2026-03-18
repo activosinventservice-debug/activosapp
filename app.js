@@ -75,9 +75,9 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
   const __backend = {
     status: BackendStatus.OFFLINE,
     detail: "",
-    okIntervalMs: 30000,
-    failIntervalMs: 7000,
-    timeoutMs: 8000,
+    okIntervalMs: 60000,
+    failIntervalMs: 20000,
+    timeoutMs: 6000,
     timer: null,
     started: false
   };
@@ -149,6 +149,11 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
   }
 
   async function __tickBackend(){
+    if(document.visibilityState === "hidden"){
+      __scheduleNext(__backend.okIntervalMs);
+      return;
+    }
+
     // 1) Internet básico
     if(!navigator.onLine){
       __setBackendStatus(BackendStatus.OFFLINE, "navigator.offline");
@@ -183,6 +188,9 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
     // Eventos del navegador
     window.addEventListener("online", () => { __scheduleNext(10); }, { passive:true });
     window.addEventListener("offline", () => { __setBackendStatus(BackendStatus.OFFLINE, "browser-offline"); }, { passive:true });
+    document.addEventListener("visibilitychange", () => {
+      if(document.visibilityState === "visible") __scheduleNext(10);
+    }, { passive:true });
 
     // Primer probe inmediato
     __tickBackend();
@@ -2093,7 +2101,7 @@ function resetChipFiltroUI(){
           'apikey':SB_KEY,
           'Authorization':`Bearer ${sessionToken}`,
           'Range': `${desde}-${hasta}`,
-          'Prefer':'count=exact'
+          'Prefer':'count=planned'
         }
       });
 
