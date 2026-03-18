@@ -2521,12 +2521,31 @@ function resetChipFiltroUI(){
   let catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] };
 
   // ✅ Conteo de SKUs por Responsable (Catálogos)
-  // cache por empresa_id -> Map(responsable -> count)
+  // Cache por empresa_id -> { ts, counts: Map(responsable -> count) }
   const __respSkuCountsByEmpresa = new Map();
+  const RESP_SKU_COUNT_TTL_MS = 5 * 60 * 1000;
+  const RESP_SKU_PAGE_SIZE = 1000;
+  let __respSkuCountInFlight = null;
+
+  function __currentEmpresaId(){
+    return (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
+  }
   function __getRespCountsMap(){
-    const empId = (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
-    if(!__respSkuCountsByEmpresa.has(empId)) __respSkuCountsByEmpresa.set(empId, new Map());
-    return __respSkuCountsByEmpresa.get(empId);
+    const empId = __currentEmpresaId();
+    const entry = __respSkuCountsByEmpresa.get(empId);
+    return entry?.counts || new Map();
+  }
+  function __setRespCountsMap(counts){
+    const empId = __currentEmpresaId();
+    __respSkuCountsByEmpresa.set(empId, { ts: Date.now(), counts: counts instanceof Map ? counts : new Map() });
+  }
+  function __hasFreshRespCounts(){
+    const empId = __currentEmpresaId();
+    const entry = __respSkuCountsByEmpresa.get(empId);
+    return !!entry && (Date.now() - (entry.ts || 0) < RESP_SKU_COUNT_TTL_MS);
+  }
+  function __invalidateRespCounts(){
+    try{ __respSkuCountsByEmpresa.delete(__currentEmpresaId()); }catch{}
   }
   function __getRespCount(value){
     try{
@@ -2536,40 +2555,107 @@ function resetChipFiltroUI(){
   }
   function __setRespCount(value, count){
     try{
-      const m = __getRespCountsMap();
-      m.set(value, Number.isFinite(count) ? count : 0);
+      const empId = __currentEmpresaId();
+      const entry = __respSkuCountsByEmpresa.get(empId) || { ts: Date.now(), counts: new Map() };
+      entry.counts.set(value, Number.isFinite(count) ? count : 0);
+      entry.ts = Date.now();
+      __respSkuCountsByEmpresa.set(empId, entry);
     }catch{}
   }
 
-  async function __headCountActivosByResponsable(respVal){
-    return null;
+  async function __fetchRespSkuCountsForEmpresa(){
+    if(!empresaSeleccionada?.id || !window.SB_URL || !window.SB_KEY || !window.sessionToken){
+      return new Map();
+    }
+    const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${sessionToken}` };
+    const skuSets = new Map();
+    let from = 0;
+    while(true){
+      const to = from + RESP_SKU_PAGE_SIZE - 1;
+      const params = [
+        `empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}`,
+        `select=${encodeURIComponent('responsable,sku')}`,
+        `responsable=not.is.null`,
+        `sku=not.is.null`,
+        `order=${encodeURIComponent('responsable.asc,sku.asc')}`
+      ];
+      if(window.soloBaja) params.push('dado_de_baja=eq.true');
+      const url = `${SB_URL}/rest/v1/activos?${params.join('&')}`;
+      const res = await fetch(url, { headers: { ...headers, 'Range': `${from}-${to}` } });
+      if(!res.ok){
+        const t = await res.text().catch(()=> '');
+        throw new Error(`Error calculando SKUs por responsable (${res.status}): ${t || res.statusText}`);
+      }
+      const batch = await res.json();
+      (batch || []).forEach(row => {
+        const resp = norm(row?.responsable);
+        const sku = norm(row?.sku);
+        if(!resp || !sku) return;
+        if(!skuSets.has(resp)) skuSets.set(resp, new Set());
+        skuSets.get(resp).add(sku);
+      });
+      if(!Array.isArray(batch) || batch.length < RESP_SKU_PAGE_SIZE) break;
+      from += batch.length;
+    }
+    const counts = new Map();
+    skuSets.forEach((set, resp) => counts.set(resp, set.size));
+    return counts;
   }
 
-  
+  async function __ensureRespSkuCounts(force){
+    if(!force && __hasFreshRespCounts()) return __getRespCountsMap();
+    const companyKey = __currentEmpresaId();
+    if(__respSkuCountInFlight && __respSkuCountInFlight.companyKey === companyKey){
+      return __respSkuCountInFlight.promise;
+    }
+    const promise = (async()=>{
+      const counts = await __fetchRespSkuCountsForEmpresa();
+      __setRespCountsMap(counts);
+      return counts;
+    })();
+    __respSkuCountInFlight = { companyKey, promise };
+    try{
+      return await promise;
+    } finally {
+      if(__respSkuCountInFlight?.companyKey === companyKey) __respSkuCountInFlight = null;
+    }
+  }
+
   function __updateRespBadge(respVal, count){
     try{
       const key = encodeURIComponent(String(respVal||""));
       document.querySelectorAll(`.badge[data-resp="${key}"]`).forEach(el=>{
-        el.textContent = `Filtrar`;
+        el.textContent = count===null ? 'SKUs: …' : `SKUs: ${count}`;
       });
     }catch(e){ /* ignore */ }
   }
 
-async function precalcularConteoSkusResponsables(){
+  async function precalcularConteoSkusResponsables(force=false){
     if(currentTab !== "responsable") return;
     try{
       const all = catalogoCache?.responsable || [];
       all.forEach(val => {
-        __setRespCount(val, null);
-        __updateRespBadge(val, null);
+        if(force || __getRespCount(val) === null){
+          __updateRespBadge(val, null);
+        }
       });
-    }catch{}
+      const counts = await __ensureRespSkuCounts(force);
+      all.forEach(val => {
+        const count = counts.has(val) ? counts.get(val) : 0;
+        __setRespCount(val, count);
+        __updateRespBadge(val, count);
+      });
+      requestRenderCatalogo();
+    }catch(err){
+      console.warn('No se pudo precalcular conteo de SKUs por responsables:', err);
+    }
   }
 
   let catalogoFilter = '';
 
 
   function resetCatalogosState(){
+    try{ __invalidateRespCounts(); }catch{}
     try{ currentTab = 'genero'; }catch{}
     try{ catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] }; }catch{}
     try{ catalogoFilter = ''; }catch{}
@@ -2689,7 +2775,7 @@ function renderCatalogo(){
       const isResp = (currentTab === 'responsable');
       const c = isResp ? __getRespCount(v) : null;
       const badge = isResp
-        ? `<span class="badge" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
+        ? `<span class="badge" data-resp="${encodeURIComponent(v)}" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
         : '';
       return `
       <div class="cat-row" role="button" tabindex="0"
