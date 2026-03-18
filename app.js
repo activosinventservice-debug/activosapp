@@ -2591,14 +2591,14 @@ function resetChipFiltroUI(){
         const resp = norm(row?.responsable);
         const sku = norm(row?.sku);
         if(!resp || !sku) return;
-        if(!skuSets.has(resp)) skuSets.set(resp, new Set());
-        skuSets.get(resp).add(sku);
+        if(!skuSets.has(resp)) skuSets.set(resp, 0);
+        skuSets.set(resp, skuSets.get(resp) + 1);
       });
       if(!Array.isArray(batch) || batch.length < RESP_SKU_PAGE_SIZE) break;
       from += batch.length;
     }
     const counts = new Map();
-    skuSets.forEach((set, resp) => counts.set(resp, set.size));
+    skuSets.forEach((count, resp) => counts.set(resp, count));
     return counts;
   }
 
