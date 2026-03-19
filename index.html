@@ -825,11 +825,29 @@
           <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaHistorial()"><span class="material-symbols-rounded">close</span></button>
         </div>
 
-        <div class="hist-chips" style="justify-content:flex-end">
+        <div class="hist-chips" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; align-items:center;">
           <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
           <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
           <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
           <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
+          <button id="hist-chip-pers" class="hist-chip" onclick="activarRangoPersonalizado()"><span class="material-symbols-rounded">edit_calendar</span> Pers.</button>
+
+          <span class="divider"></span>
+
+          <label class="chip" style="gap:6px; padding-right:10px;">
+            <span class="material-symbols-rounded">event</span>
+            <span>Inicio</span>
+            <input type="date" id="hist-date-start" onchange="onHistDateChange()" style="border:none; background:transparent; color:inherit; font:inherit; outline:none; min-width:140px;">
+          </label>
+
+          <label class="chip" style="gap:6px; padding-right:10px;">
+            <span class="material-symbols-rounded">event_available</span>
+            <span>Final</span>
+            <input type="date" id="hist-date-end" onchange="onHistDateChange()" style="border:none; background:transparent; color:inherit; font:inherit; outline:none; min-width:140px;">
+          </label>
+
+          <button class="hist-chip" onclick="aplicarRangoPersonalizado()"><span class="material-symbols-rounded">filter_alt</span> Aplicar</button>
+          <button class="hist-chip" onclick="limpiarFechasHistorial()"><span class="material-symbols-rounded">ink_eraser</span> Limpiar</button>
 
           <span class="divider"></span>
 

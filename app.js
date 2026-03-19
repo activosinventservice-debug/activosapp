@@ -3299,6 +3299,7 @@ function renderCatalogo(){
 
   let histRango = 'todo';
   let histSearchDebounce = null;
+  let histCustomRange = { start: '', end: '' };
   let histNamesMap = new Map();
 
   let currentSessionId = null;
@@ -3421,6 +3422,9 @@ function renderCatalogo(){
     if(inp) inp.value = emailPref ? String(emailPref) : "";
 
     histRango = 'todo';
+    histCustomRange = { start:'', end:'' };
+    const ds = qs('hist-date-start'); if(ds) ds.value = '';
+    const de = qs('hist-date-end'); if(de) de.value = '';
     marcarChipsHist();
     histPage = 0;
     cargarHistorialResguardos(false);
@@ -3441,13 +3445,51 @@ function renderCatalogo(){
 
   function setHistRango(r){
     histRango = r || 'todo';
+    if(histRango !== 'pers'){
+      histCustomRange = { start:'', end:'' };
+      const s = qs('hist-date-start'); if(s) s.value = '';
+      const e = qs('hist-date-end'); if(e) e.value = '';
+    }
+    histPage = 0;
+    marcarChipsHist();
+    aplicarFiltrosHistorial();
+  }
+
+  function activarRangoPersonalizado(){
+    histRango = 'pers';
+    histPage = 0;
+    marcarChipsHist();
+    aplicarFiltrosHistorial();
+    const s = qs('hist-date-start');
+    if(s) s.showPicker ? s.showPicker() : s.focus();
+  }
+
+  function onHistDateChange(){
+    const s = qs('hist-date-start')?.value || '';
+    const e = qs('hist-date-end')?.value || '';
+    histCustomRange = { start:s, end:e };
+    histRango = (s || e) ? 'pers' : 'todo';
+    histPage = 0;
+    marcarChipsHist();
+  }
+
+  function aplicarRangoPersonalizado(){
+    onHistDateChange();
+    aplicarFiltrosHistorial();
+  }
+
+  function limpiarFechasHistorial(){
+    histCustomRange = { start:'', end:'' };
+    const s = qs('hist-date-start'); if(s) s.value = '';
+    const e = qs('hist-date-end'); if(e) e.value = '';
+    histRango = 'todo';
     histPage = 0;
     marcarChipsHist();
     aplicarFiltrosHistorial();
   }
 
   function marcarChipsHist(){
-    const map = { hoy:'hist-chip-hoy', semana:'hist-chip-semana', mes:'hist-chip-mes', todo:'hist-chip-todo' };
+    const map = { hoy:'hist-chip-hoy', semana:'hist-chip-semana', mes:'hist-chip-mes', todo:'hist-chip-todo', pers:'hist-chip-pers' };
     Object.entries(map).forEach(([k,id])=>{
       const el = qs(id);
       if(el) el.classList.toggle('active', k===histRango);
@@ -3466,6 +3508,20 @@ function renderCatalogo(){
     histPage=0; aplicarFiltrosHistorial();
   }
 
+  function parseHistDateStart(value){
+    if(!value) return null;
+    const [y,m,d] = String(value).split('-').map(Number);
+    if(!y || !m || !d) return null;
+    return new Date(y, m-1, d, 0, 0, 0, 0).getTime();
+  }
+
+  function parseHistDateEnd(value){
+    if(!value) return null;
+    const [y,m,d] = String(value).split('-').map(Number);
+    if(!y || !m || !d) return null;
+    return new Date(y, m-1, d, 23, 59, 59, 999).getTime();
+  }
+
   function getBoundsMs(rango){
     const now = new Date();
     const startOfDayMs = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
@@ -3482,6 +3538,15 @@ function renderCatalogo(){
       const day = (x)=> (x.getDay()+6)%7;
       const s = startOfDayMs(now) - day(now)*86400000;
       return { start:s, end:s + 7*86400000 - 1 };
+    }
+    if(rango === 'pers'){
+      let start = parseHistDateStart(histCustomRange.start);
+      let end = parseHistDateEnd(histCustomRange.end);
+      if(start == null && end == null) return null;
+      if(start == null) start = Number.MIN_SAFE_INTEGER;
+      if(end == null) end = Number.MAX_SAFE_INTEGER;
+      if(start > end){ const tmp = start; start = end; end = tmp; }
+      return { start, end };
     }
     return null;
   }
@@ -3611,7 +3676,7 @@ function renderCatalogo(){
     `;
   }
 
-  async function fetchResguardoSessionsRemote(empresaId, limit=150){
+  async function fetchResguardoSessionsRemote(empresaId, batchSize=500){
     const select =
       "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
       "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
@@ -3619,29 +3684,38 @@ function renderCatalogo(){
       "autorizada,autorizada_at," +
       "aplicada,aplicada_at,apply_error," +
       "resguardo_entries(count)";
-    const url =
-      `${SB_URL}/rest/v1/resguardo_sessions` +
-      `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
-      `&select=${encodeURIComponent(select)}` +
-      `&order=created_at.desc` +
-      `&limit=${limit}` +
-      `&resguardo_entries.limit=1`;
 
-    let res = await fetch(url, {
-      headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
-    });
-    if(res.status === 503 || res.status === 504 || res.status === 429){
-      await new Promise(r => setTimeout(r, 700));
-      res = await fetch(url, {
-        headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` }
-      });
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
+    let all = [];
+    let offset = 0;
+
+    while(true){
+      const url =
+        `${SB_URL}/rest/v1/resguardo_sessions` +
+        `?empresa_id=eq.${encodeURIComponent(empresaId)}` +
+        `&select=${encodeURIComponent(select)}` +
+        `&order=created_at.desc` +
+        `&limit=${batchSize}` +
+        `&offset=${offset}` +
+        `&resguardo_entries.limit=1`;
+
+      let res = await fetch(url, { headers });
+      if(res.status === 503 || res.status === 504 || res.status === 429){
+        await new Promise(r => setTimeout(r, 700));
+        res = await fetch(url, { headers });
+      }
+      if(!res.ok){
+        const t = await res.text().catch(()=> "");
+        throw new Error(`Error historial (HTTP ${res.status}). ${t||""}`);
+      }
+      const arr = await res.json();
+      const rows = Array.isArray(arr) ? arr : [];
+      all.push(...rows);
+      if(rows.length < batchSize) break;
+      offset += batchSize;
     }
-    if(!res.ok){
-      const t = await res.text().catch(()=> "");
-      throw new Error(`Error historial (HTTP ${res.status}). ${t||""}`);
-    }
-    const arr = await res.json();
-    return Array.isArray(arr) ? arr : [];
+
+    return all;
   }
 
   function normalizeSessionRow(o){
