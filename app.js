@@ -692,7 +692,6 @@ function restoreEmpresaCache(empresaId){
 
     // Catálogos (si entras a esa vista, ya estará listo)
     try{ if(qs('cat-search')) qs('cat-search').value = catalogoFilter || ""; }catch{}
-    try{ __updateRespBadge(val, __getRespCount(val)); }catch{}
 
     syncGlobals();
     updatePrintButtonState();
@@ -852,18 +851,6 @@ function updatePrintButtonState(){
     const s = String(v).trim();
     if (s.toLowerCase() === "null" || s.toLowerCase() === "undefined") return "";
     return s;
-  };
-
-  const searchNorm = (v) => {
-    const s = norm(v);
-    if (!s) return "";
-    return s
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
-      .replace(/[._\/-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
   };
 
   const getv = (obj, ...keys) => {
@@ -1609,10 +1596,8 @@ function parseCsv(text){
     const iconMap = { genero:'category', ubicacion:'location_on', localizacion:'map', responsable:'badge' };
     const label = col.charAt(0).toUpperCase() + col.slice(1);
     let n = Number.isFinite(totalActivos) ? totalActivos : 0;
-    if (col === 'responsable') {
-      const c = __getRespCount(skuExtraFiltro.valor);
-      if (Number.isFinite(c)) n = c;
-    }
+    const c = __getCatalogCount(col, skuExtraFiltro.valor);
+    if (Number.isFinite(c)) n = c;
     qs('filtro-text').innerText = `${label}: ${skuExtraFiltro.valor} · ${n} SKU${n===1?'':'s'}`;
     qs('filtro-icon').innerText = iconMap[col] || 'filter_alt';
     show(qs('filtro-activo'), true);
@@ -2536,64 +2521,76 @@ function resetChipFiltroUI(){
   let currentTab = 'genero';
   let catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] };
 
-  // ✅ Conteo de SKUs por Responsable (Catálogos)
-  // cache por empresa_id -> Map(responsable -> count)
-  const __respSkuCountsByEmpresa = new Map();
-  function __getRespCountsMap(){
+  const __catalogSkuCountsByEmpresa = new Map();
+  function __catalogCountBucket(){
     const empId = (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
-    if(!__respSkuCountsByEmpresa.has(empId)) __respSkuCountsByEmpresa.set(empId, new Map());
-    return __respSkuCountsByEmpresa.get(empId);
+    if(!__catalogSkuCountsByEmpresa.has(empId)){
+      __catalogSkuCountsByEmpresa.set(empId, {
+        ready: false,
+        genero: new Map(),
+        ubicacion: new Map(),
+        localizacion: new Map(),
+        responsable: new Map()
+      });
+    }
+    return __catalogSkuCountsByEmpresa.get(empId);
   }
-  function __getRespCount(value){
+  function __resetCatalogCountsForEmpresa(){
+    const empId = (empresaSeleccionada && empresaSeleccionada.id) ? empresaSeleccionada.id : "no-empresa";
+    __catalogSkuCountsByEmpresa.delete(empId);
+  }
+  function __getCatalogCount(tipo, value){
     try{
-      const m = __getRespCountsMap();
-      return m.has(value) ? m.get(value) : null; // null = no calculado
+      const bucket = __catalogCountBucket();
+      const map = bucket?.[tipo];
+      if(!map) return null;
+      return map.has(value) ? map.get(value) : (bucket.ready ? 0 : null);
     }catch{ return null; }
   }
-  function __setRespCount(value, count){
+  function __setCatalogCount(tipo, value, count){
     try{
-      const m = __getRespCountsMap();
-      m.set(value, count === null ? null : (Number.isFinite(count) ? count : 0));
+      const bucket = __catalogCountBucket();
+      const map = bucket?.[tipo];
+      if(!map) return;
+      map.set(value, Number.isFinite(count) ? count : 0);
     }catch{}
   }
-
-  async function __headCountActivosByResponsable(respVal){
-    return null;
-  }
-
-  
-  function __updateRespBadge(respVal, count){
+  function __updateCatalogBadge(tipo, value, count){
     try{
-      const key = encodeURIComponent(String(respVal||""));
-      document.querySelectorAll(`.badge[data-resp="${key}"]`).forEach(el=>{
+      const key = encodeURIComponent(String(value||""));
+      document.querySelectorAll(`.badge[data-tab="${tipo}"][data-value="${key}"]`).forEach(el=>{
         el.textContent = (count === null ? 'SKUs: …' : ('SKUs: ' + count));
       });
-    }catch(e){ /* ignore */ }
+    }catch{}
   }
-
-async function precalcularConteoSkusResponsables(){
-    if(currentTab !== "responsable") return;
+  async function precalcularConteoSkusCatalogos(){
+    if(!['genero','ubicacion','localizacion','responsable'].includes(currentTab)) return;
     const empresaId = empresaSeleccionada?.id;
     if(!empresaId) return;
     try{
-      const all = catalogoCache?.responsable || [];
-      all.forEach(val => {
-        __setRespCount(val, null);
-        __updateRespBadge(val, null);
+      const bucket = __catalogCountBucket();
+      ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
+        bucket[tipo].clear();
+        (catalogoCache?.[tipo] || []).forEach(val=> __updateCatalogBadge(tipo, val, null));
       });
+      bucket.ready = false;
 
       const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
       const pageSize = 1000;
       let desde = 0;
       let total = null;
-      const byResp = new Map(); // responsable -> Set(sku)
-
+      const sets = {
+        genero: new Map(),
+        ubicacion: new Map(),
+        localizacion: new Map(),
+        responsable: new Map()
+      };
       while(true){
-        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&select=responsable,sku&responsable=not.is.null&sku=not.is.null&order=responsable.asc`;
+        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&select=genero,ubicacion,localizacion,responsable,sku&sku=not.is.null&order=sku.asc`;
         const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
         if(!res.ok){
           const t = await res.text().catch(()=>"");
-          console.warn('Conteo responsables:', res.status, t);
+          console.warn('Conteo catálogos:', res.status, t);
           break;
         }
         const batch = await res.json();
@@ -2603,23 +2600,29 @@ async function precalcularConteoSkusResponsables(){
           total = parseInt(parts[1] || '0', 10);
         }
         (batch||[]).forEach(o=>{
-          const rawResp = String(o?.responsable ?? '');
           const sku = String(o?.sku ?? '').trim();
-          if(!rawResp || !sku) return;
-          if(!byResp.has(rawResp)) byResp.set(rawResp, new Set());
-          byResp.get(rawResp).add(sku);
+          if(!sku) return;
+          ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
+            const raw = String(o?.[tipo] ?? '');
+            if(!raw) return;
+            if(!sets[tipo].has(raw)) sets[tipo].set(raw, new Set());
+            sets[tipo].get(raw).add(sku);
+          });
         });
         desde += Array.isArray(batch) ? batch.length : pageSize;
         if (!Array.isArray(batch) || batch.length < pageSize) break;
         if (total !== null && desde >= total) break;
       }
 
-      all.forEach(val => {
-        const count = byResp.has(val) ? byResp.get(val).size : 0;
-        __setRespCount(val, count);
-        __updateRespBadge(val, count);
+      ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
+        (catalogoCache?.[tipo] || []).forEach(val=>{
+          const count = sets[tipo].has(val) ? sets[tipo].get(val).size : 0;
+          __setCatalogCount(tipo, val, count);
+          __updateCatalogBadge(tipo, val, count);
+        });
       });
-      try{ if (skuExtraFiltro?.tipo === 'responsable' && skuExtraFiltro?.valor) actualizarChipFiltroConConteo(); }catch{}
+      bucket.ready = true;
+      try{ if (skuExtraFiltro?.tipo && skuExtraFiltro?.valor) actualizarChipFiltroConConteo(); }catch{}
     }catch(e){ console.warn(e); }
   }
 
@@ -2629,6 +2632,7 @@ async function precalcularConteoSkusResponsables(){
   function resetCatalogosState(){
     try{ currentTab = 'genero'; }catch{}
     try{ catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] }; }catch{}
+    try{ __resetCatalogCountsForEmpresa(); }catch{}
     try{ catalogoFilter = ''; }catch{}
     try{ const inp = qs('cat-search'); if(inp) inp.value=''; }catch{}
     try{ qs('cat-list') && (qs('cat-list').innerHTML=''); }catch{}
@@ -2643,7 +2647,7 @@ async function precalcularConteoSkusResponsables(){
     marcarTab();
     limpiarBusquedaCatalogo();
     cargarCatalogoActual(false);
-    try{ precalcularConteoSkusResponsables(); }catch(e){ console.warn(e); }
+    try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
   }
 
   function marcarTab(){
@@ -2657,20 +2661,29 @@ async function precalcularConteoSkusResponsables(){
     const inp = qs('cat-search');
     if (inp) inp.value = '';
     renderCatalogo();
-    try{ precalcularConteoSkusResponsables(); }catch(e){ console.warn(e); }
+    try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
+  }
+
+  function normalizeCatalogSearch(v){
+    return (v ?? '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLocaleLowerCase('es-MX');
   }
 
   function filtrarCatalogo(){
-    catalogoFilter = searchNorm(qs('cat-search').value || '');
+    catalogoFilter = qs('cat-search').value || '';
     renderCatalogo();
-    try{ precalcularConteoSkusResponsables(); }catch(e){ console.warn(e); }
+    try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
   }
 
   async function cargarCatalogoActual(forceNetwork){
-    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){ renderCatalogo(); try{ precalcularConteoSkusResponsables(); }catch(e){console.warn(e);} return; }
+    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){ renderCatalogo(); try{ precalcularConteoSkusCatalogos(); }catch(e){console.warn(e);} return; }
     await cargarCatalogoCompleto(currentTab);
     renderCatalogo();
-    try{ precalcularConteoSkusResponsables(); }catch(e){ console.warn(e); }
+    try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
   }
 
   async function cargarCatalogoCompleto(tipo){
@@ -2704,8 +2717,7 @@ async function precalcularConteoSkusResponsables(){
       (batch||[]).forEach(o=>{
         const raw = String(o?.[col] ?? '');
         if (!raw) return;
-        const v = (col === 'responsable') ? raw : norm(raw);
-        if (v) values.add(v);
+        values.add(raw);
       });
 
       desde += Array.isArray(batch) ? batch.length : pageSize;
@@ -2733,7 +2745,8 @@ async function precalcularConteoSkusResponsables(){
 function renderCatalogo(){
     const list = qs('cat-list');
     const all = catalogoCache[currentTab] || [];
-    const filtered = catalogoFilter ? all.filter(v=>searchNorm(v).includes(catalogoFilter)) : all;
+    const needle = normalizeCatalogSearch(catalogoFilter || '');
+    const filtered = needle ? all.filter(v=>normalizeCatalogSearch(v).includes(needle)) : all;
 
     if (!all.length){
       list.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">Cargando ${escapeHtml(currentTab)}…</div>`;
@@ -2745,11 +2758,8 @@ function renderCatalogo(){
     }
 
     list.innerHTML = filtered.map(v=>{
-      const isResp = (currentTab === 'responsable');
-      const c = isResp ? __getRespCount(v) : null;
-      const badge = isResp
-        ? `<span class="badge" data-resp="${encodeURIComponent(v)}" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`
-        : '';
+      const c = __getCatalogCount(currentTab, v);
+      const badge = `<span class="badge" data-tab="${escapeHtml(currentTab)}" data-value="${encodeURIComponent(v)}" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`;
       return `
       <div class="cat-row" role="button" tabindex="0"
            onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')"
@@ -3004,21 +3014,6 @@ function renderCatalogo(){
           else faltantes.push(email);
         }
       });
-
-      if(faltantes.length){
-        const uniq = Array.from(new Set(faltantes));
-        const inList = uniq.map(e=>`"${String(e).replace(/"/g,'\\"')}"`).join(',');
-        const url2 = `${SB_URL}/rest/v1/users?email=in.(${inList})&select=email,nombre`;
-        const r2 = await fetch(url2, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
-        if(r2.ok){
-          const u = await r2.json();
-          (u||[]).forEach(x=>{
-            const em = norm(x?.email).toLowerCase();
-            const nom = norm(x?.nombre);
-            if(em && nom && !map.has(em)) map.set(em, nom);
-          });
-        }
-      }
     }catch(e){
       console.warn("No se pudieron cargar nombres de usuarios:", e);
     }
@@ -3349,12 +3344,14 @@ function renderCatalogo(){
     const hasData = !!sessionInfo && Array.isArray(sessionEntries) && sessionEntries.length > 0;
     const allowed = (typeof canExportPdf === 'function' ? canExportPdf() : false);
     const allowedHist = (typeof canHist === 'function' ? canHist() : false);
+    const authorizedOrApplied = isSessionAutorizada(sessionInfo);
 
-    btn.disabled = !(allowed && allowedHist && hasData);
+    btn.disabled = !(allowed && allowedHist && hasData && authorizedOrApplied);
 
     if(!allowed) btn.title = 'No tienes permiso para imprimir/exportar PDF';
     else if(!allowedHist) btn.title = 'Sin permiso para Historial Resguardos';
     else if(!hasData) btn.title = 'Cargando sesión…';
+    else if(!authorizedOrApplied) btn.title = 'Solo puedes imprimir el PDF cuando la sesión esté autorizada o aplicada';
     else btn.title = 'Generar PDF de esta sesión';
   }
 
@@ -3379,6 +3376,10 @@ function renderCatalogo(){
         setSessionMsg('Esta sesión no tiene entradas para imprimir.');
         return;
       }
+      if(!isSessionAutorizada(sessionInfo)){
+        setSessionMsg('Solo puedes imprimir el PDF cuando la sesión esté autorizada o aplicada.');
+        return;
+      }
 
       // Delegar al generador PDF (definido en el bloque jsPDF)
       if(typeof window.imprimirResguardoSesionPdf !== 'function'){
@@ -3394,6 +3395,8 @@ function renderCatalogo(){
         nuevoResponsable: sessionInfo.nuevoResponsable,
         nuevaUbicacion: sessionInfo.nuevaUbicacion,
         nuevaLocalizacion: sessionInfo.nuevaLocalizacion,
+        autorizada: sessionInfo.autorizada,
+        aplicada: sessionInfo.aplicada,
         entries: sessionEntries
       });
 
@@ -4790,6 +4793,9 @@ function fitText2Lines(text, maxW, baseSize, minSize){
     // Permiso (mismo que Android: imprimir/exportar PDF)
     if(typeof canExportPdf === 'function' && !canExportPdf()){
       throw new Error('No tienes permiso para imprimir/exportar PDF.');
+    }
+    if(!isSessionAutorizada(payload)){
+      throw new Error('Solo puedes imprimir el PDF cuando la sesión esté autorizada o aplicada.');
     }
     if(!empresaNombre || !sessionId) throw new Error('Faltan datos para generar el PDF.');
     if(!entries.length) throw new Error('Esta sesión no tiene entradas para imprimir.');
