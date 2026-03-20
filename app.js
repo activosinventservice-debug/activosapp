@@ -2208,7 +2208,7 @@ function resetChipFiltroUI(){
     const desc   = getv(i,'descripcion');
     const marca  = getv(i,'marca');
     const modelo = getv(i,'modelo');
-    const serie  = getv(i,'serie');
+    const serie  = getv(i,'numero_serie','serie');
     const genero = getv(i,'genero');
     const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
     const costoFmt = fmtMoney(costoRaw);
