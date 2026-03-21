@@ -4499,7 +4499,7 @@ const headerLogo = branding?.header || null;
 
       doc.setFont("helvetica","bold"); doc.setFontSize(FONT_SIZE_HEADER);
       doc.text("CÓDIGO", col1X + 4, yTop(yPdf - 4));
-      doc.text("DESCRIPCIÓN", col2X + col2W/2, yTop(yPdf - 4), {align:"center"});
+      doc.text("DESCRIPCIÓN / MARCA / MODELO / SERIE", col2X + col2W/2, yTop(yPdf - 4), {align:"center"});
       doc.text("GÉNERO", col3X + col3W/2, yTop(yPdf - 4), {align:"center"});
       doc.text("UBICACIÓN", col4X + 4, yTop(yPdf - 4));
 
