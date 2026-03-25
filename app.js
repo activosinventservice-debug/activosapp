@@ -1538,6 +1538,9 @@ function toBool(v){
       return;
     }
 
+    const createdByEmail = (userEmail || window.userEmail || "").toString().trim() || null;
+    const createdByNombre = ((typeof getPerms === "function" ? (getPerms().usuarioNombre || "") : (window.__permsEffective?.usuarioNombre || "")) || window.sessionUserName || window.userName || "").toString().trim() || null;
+
     const objs = [];
     for(const r of dataRows){
       const sku = (r[mapIdx.sku]||"").trim();
@@ -1560,6 +1563,8 @@ function toBool(v){
         fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToIso(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
         baja_at: mapIdx.baja_at>=0 ? parseCsvDateToIso(r[mapIdx.baja_at]) : null,
+        creado_por_email: createdByEmail,
+        creado_por_nombre: createdByNombre,
       };
       objs.push(obj);
     }
