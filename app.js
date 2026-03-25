@@ -1251,27 +1251,26 @@ document.addEventListener('keydown', (e)=>{
     setSkusMsg("Exportando...");
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-
-      // Nota: Algunas BD no tienen la columna "serie". Intentamos con ella y si falla (42703), reintentamos sin "serie".
-      const baseCols = [
-        "sku","descripcion","cantidad","genero","codigo_barras","ubicacion","responsable","localizacion",
-        "costo","fecha_adquisicion","marca","modelo","serie","dado_de_baja","updated_at","created_at"
+      const selectCols = [
+        "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+        "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion","dado_de_baja","baja_at"
+      ];
+      const csvHeaders = [
+        "sku","Descripcion","Marca","Modelo","Serie","genero","ubicacion","localizacion",
+        "responsable","codigoBarras","cantidad","fechaRegistro","costo","fechaAdquisicion","dadoDeBaja","bajaAt"
       ];
 
-      async function fetchAll(cols){
+      async function fetchAll(){
         const limit = 1000;
         let offset = 0;
         let all = [];
         while(true){
-          const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(cols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
+          const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
           const res = await fetch(url, { headers });
           if(!res.ok){
             const t = await res.text().catch(()=> "");
-            let code = null;
-            try{ code = JSON.parse(t)?.code ?? null; }catch(_){}
-            const looksSerie = (t||"").includes("activos.serie") || (t||"").includes("serie does not exist") || (t||"").includes("column") && (t||"").includes("serie");
             const err = new Error("Export failed");
-            err._payload = { text: t, status: res.status, code, looksSerie };
+            err._payload = { text: t, status: res.status };
             throw err;
           }
           const rows = await res.json();
@@ -1282,24 +1281,29 @@ document.addEventListener('keydown', (e)=>{
         return all;
       }
 
-      let colsUsed = baseCols.slice();
-      let all = [];
-      try{
-        all = await fetchAll(colsUsed);
-      }catch(e){
-        const p = e?._payload || {};
-        if(p.code === "42703" || p.looksSerie){
-          colsUsed = baseCols.filter(c => c !== "serie");
-          all = await fetchAll(colsUsed);
-        }else{
-          throw e;
-        }
-      }
-
+      const all = await fetchAll();
       const out = [];
-      out.push(colsUsed.join(","));
+      out.push(csvHeaders.join(","));
       for(const r of all){
-        out.push(colsUsed.map(c => csvEscape(r?.[c])).join(","));
+        const row = [
+          r?.sku,
+          r?.descripcion,
+          r?.marca,
+          r?.modelo,
+          r?.numero_serie,
+          r?.genero,
+          r?.ubicacion,
+          r?.localizacion,
+          r?.responsable,
+          r?.codigo_barras,
+          r?.cantidad,
+          formatAndroidCsvDate(r?.created_at),
+          r?.costo,
+          formatAndroidCsvDate(r?.fecha_adquisicion),
+          (r?.dado_de_baja ? 1 : 0),
+          formatAndroidCsvDate(r?.baja_at)
+        ];
+        out.push(row.map(csvEscape).join(","));
       }
 
       const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
@@ -1314,8 +1318,7 @@ document.addEventListener('keydown', (e)=>{
     }
   }
 
-  
-  async function exportarSkusCsvFiltrado(){
+    async function exportarSkusCsvFiltrado(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
 
@@ -1332,48 +1335,42 @@ document.addEventListener('keydown', (e)=>{
     setSkusMsg("Exportando filtrado...");
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-
-      const baseCols = [
-        "sku","descripcion","cantidad","genero","codigo_barras","ubicacion","responsable","localizacion",
-        "costo","fecha_adquisicion","marca","modelo","serie","dado_de_baja","updated_at","created_at"
+      const selectCols = [
+        "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+        "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion","dado_de_baja","baja_at"
+      ];
+      const csvHeaders = [
+        "sku","Descripcion","Marca","Modelo","Serie","genero","ubicacion","localizacion",
+        "responsable","codigoBarras","cantidad","fechaRegistro","costo","fechaAdquisicion","dadoDeBaja","bajaAt"
       ];
 
-      function buildBaseUrl(cols){
-        let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(cols.join(","))}`;
-
-        // Export siempre ordenado por SKU para consistencia
+      function buildBaseUrl(){
+        let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}`;
         url += `&order=sku.asc`;
-
         if(q.length > 0){
           const qenc = encodeURIComponent(q);
           url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
         }
-
         if(soloBaja) url += `&dado_de_baja=eq.true`;
-
         if(hasExtra){
           const col = skuExtraFiltro.tipo;
           const val = encodeURIComponent(skuExtraFiltro.valor);
           url += `&${col}=eq.${val}`;
         }
-
         return url;
       }
 
-      async function fetchAll(cols){
+      async function fetchAll(){
         const limit = 1000;
         let offset = 0;
         let all = [];
         while(true){
-          const url = buildBaseUrl(cols) + `&limit=${limit}&offset=${offset}`;
+          const url = buildBaseUrl() + `&limit=${limit}&offset=${offset}`;
           const res = await fetch(url, { headers });
           if(!res.ok){
             const t = await res.text().catch(()=> "");
-            let code = null;
-            try{ code = JSON.parse(t)?.code ?? null; }catch(_){}
-            const looksSerie = (t||"").includes("activos.serie") || (t||"").includes("serie does not exist") || ((t||"").includes("column") && (t||"").includes("serie"));
             const err = new Error("Export failed");
-            err._payload = { text: t, status: res.status, code, looksSerie };
+            err._payload = { text: t, status: res.status };
             throw err;
           }
           const rows = await res.json();
@@ -1384,24 +1381,29 @@ document.addEventListener('keydown', (e)=>{
         return all;
       }
 
-      let colsUsed = baseCols.slice();
-      let all = [];
-      try{
-        all = await fetchAll(colsUsed);
-      }catch(e){
-        const p = e?._payload || {};
-        if(p.code === "42703" || p.looksSerie){
-          colsUsed = baseCols.filter(c => c !== "serie");
-          all = await fetchAll(colsUsed);
-        }else{
-          throw e;
-        }
-      }
-
+      const all = await fetchAll();
       const out = [];
-      out.push(colsUsed.join(","));
+      out.push(csvHeaders.join(","));
       for(const r of all){
-        out.push(colsUsed.map(c => csvEscape(r?.[c])).join(","));
+        const row = [
+          r?.sku,
+          r?.descripcion,
+          r?.marca,
+          r?.modelo,
+          r?.numero_serie,
+          r?.genero,
+          r?.ubicacion,
+          r?.localizacion,
+          r?.responsable,
+          r?.codigo_barras,
+          r?.cantidad,
+          formatAndroidCsvDate(r?.created_at),
+          r?.costo,
+          formatAndroidCsvDate(r?.fecha_adquisicion),
+          (r?.dado_de_baja ? 1 : 0),
+          formatAndroidCsvDate(r?.baja_at)
+        ];
+        out.push(row.map(csvEscape).join(","));
       }
 
       const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
@@ -1449,7 +1451,36 @@ function parseCsv(text){
     return rows.filter(r=>r.some(v=>(v||"").trim()!==""));
   }
 
-  function toBool(v){
+  
+function parseCsvDateToIso(value){
+  const s = (value ?? "").toString().trim();
+  if(!s) return null;
+  if(/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(s)) return s.replace(" ", "T");
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(m){
+    const [,dd,mm,yyyy,hh='00',mi='00',ss='00'] = m;
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  }
+  return s;
+}
+
+function formatAndroidCsvDate(value){
+  const s = (value ?? "").toString().trim();
+  if(!s) return "";
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(iso){
+    const [,yyyy,mm,dd,hh='00',mi='00'] = iso;
+    return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+  }
+  const d = new Date(s);
+  if(!Number.isNaN(d.getTime())){
+    const pad = n => String(n).padStart(2,'0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  return s;
+}
+
+function toBool(v){
     const s=(v??"").toString().trim().toLowerCase();
     return (s==="1"||s==="true"||s==="si"||s==="sí"||s==="yes");
   }
@@ -1476,22 +1507,30 @@ function parseCsv(text){
     const headerRow = table[0].map(normHeader);
     const dataRows = table.slice(1);
 
-    const idxOf = (name)=> headerRow.indexOf(normHeader(name));
+    const idxOfAny = (...names)=>{
+      for(const name of names){
+        const idx = headerRow.indexOf(normHeader(name));
+        if(idx >= 0) return idx;
+      }
+      return -1;
+    };
     const mapIdx = {
-      sku: idxOf("sku"),
-      descripcion: idxOf("descripcion"),
-      cantidad: idxOf("cantidad"),
-      genero: idxOf("genero"),
-      codigo_barras: idxOf("codigo_barras"),
-      ubicacion: idxOf("ubicacion"),
-      responsable: idxOf("responsable"),
-      localizacion: idxOf("localizacion"),
-      costo: idxOf("costo"),
-      fecha_adquisicion: idxOf("fecha_adquisicion"),
-      marca: idxOf("marca"),
-      modelo: idxOf("modelo"),
-      serie: idxOf("serie"),
-      dado_de_baja: idxOf("dado_de_baja"),
+      sku: idxOfAny("sku"),
+      descripcion: idxOfAny("Descripcion","descripcion"),
+      marca: idxOfAny("Marca","marca"),
+      modelo: idxOfAny("Modelo","modelo"),
+      serie: idxOfAny("Serie","serie","numero_serie"),
+      genero: idxOfAny("genero","Genero"),
+      ubicacion: idxOfAny("ubicacion","Ubicacion"),
+      localizacion: idxOfAny("localizacion","Localizacion"),
+      responsable: idxOfAny("responsable","Responsable"),
+      codigo_barras: idxOfAny("codigoBarras","CodigoBarras","codigo_barras"),
+      cantidad: idxOfAny("cantidad","Cantidad"),
+      fecha_registro: idxOfAny("fechaRegistro","FechaRegistro","created_at","fecha_registro"),
+      costo: idxOfAny("costo","Costo"),
+      fecha_adquisicion: idxOfAny("fechaAdquisicion","FechaAdquisicion","fecha_adquisicion"),
+      dado_de_baja: idxOfAny("dadoDeBaja","DadoDeBaja","dado_de_baja"),
+      baja_at: idxOfAny("bajaAt","BajaAt","baja_at")
     };
 
     if(mapIdx.sku < 0){
@@ -1499,7 +1538,6 @@ function parseCsv(text){
       return;
     }
 
-    // construir objetos
     const objs = [];
     for(const r of dataRows){
       const sku = (r[mapIdx.sku]||"").trim();
@@ -1508,19 +1546,21 @@ function parseCsv(text){
         empresa_id: empresaSeleccionada.id,
         sku,
         descripcion: mapIdx.descripcion>=0 ? (r[mapIdx.descripcion]||"").trim() : "",
-        cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"0").toString().trim())||0) : 0,
+        marca: mapIdx.marca>=0 ? ((r[mapIdx.marca]||"").trim() || null) : null,
+        modelo: mapIdx.modelo>=0 ? ((r[mapIdx.modelo]||"").trim() || null) : null,
+        numero_serie: mapIdx.serie>=0 ? ((r[mapIdx.serie]||"").trim() || null) : null,
         genero: mapIdx.genero>=0 ? (r[mapIdx.genero]||"").trim() : "",
-        codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
         ubicacion: mapIdx.ubicacion>=0 ? (r[mapIdx.ubicacion]||"").trim() : "",
-        responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
         localizacion: mapIdx.localizacion>=0 ? (r[mapIdx.localizacion]||"").trim() : "",
+        responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
+        codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
+        cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"0").toString().trim())||0) : 0,
+        created_at: mapIdx.fecha_registro>=0 ? parseCsvDateToIso(r[mapIdx.fecha_registro]) : null,
+        costo: mapIdx.costo>=0 ? toNum(r[mapIdx.costo]) : null,
+        fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToIso(r[mapIdx.fecha_adquisicion]) : null,
+        dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
+        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToIso(r[mapIdx.baja_at]) : null,
       };
-      if(mapIdx.costo>=0){ const n=toNum(r[mapIdx.costo]); if(n!==null) obj.costo=n; }
-      if(mapIdx.fecha_adquisicion>=0){ const v=(r[mapIdx.fecha_adquisicion]||"").trim(); if(v) obj.fecha_adquisicion=v; }
-      if(mapIdx.marca>=0){ const v=(r[mapIdx.marca]||"").trim(); if(v) obj.marca=v; }
-      if(mapIdx.modelo>=0){ const v=(r[mapIdx.modelo]||"").trim(); if(v) obj.modelo=v; }
-      if(mapIdx.serie>=0){ const v=(r[mapIdx.serie]||"").trim(); if(v) obj.serie=v; }
-      if(mapIdx.dado_de_baja>=0){ obj.dado_de_baja = toBool(r[mapIdx.dado_de_baja]); }
       objs.push(obj);
     }
 
