@@ -13,6 +13,10 @@ window.APP_CONFIG = {
     supabase: {
       SB_URL: "https://cfowmccvnzcrssgkabtt.supabase.co",
       SB_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmb3dtY2N2bnpjcnNzZ2thYnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMTQ1NDYsImV4cCI6MjA3OTU5MDU0Nn0.3OXJfFK_I-jnMhsMXQufeyHB1HE0vXaXTRhQnCYRH90"
+    },
+	prueba: {
+      SB_URL: "https://jlzxqgeqkgoevcuoflxe.supabase.co",
+      SB_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsenhxZ2Vxa2dvZXZjdW9mbHhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1Nzg4NTEsImV4cCI6MjA5MDE1NDg1MX0.Du8vzOVr1NP_bjspAXw5vy54SlP_A6sx-K8AZZV9_pg"
     }
   }
 };
@@ -31,6 +35,6 @@ window.getActiveSupabaseConfig = function(){
 
 
 // ✅ Versionado de la webapp para gate de servidor
-window.APP_VERSION_CODE = 7;
-window.APP_VERSION_NAME = "2026.03.25.7";
+window.APP_VERSION_CODE = 8;
+window.APP_VERSION_NAME = "2026.03.26.8";
 window.APP_PLATFORM = "web";

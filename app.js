@@ -75,8 +75,9 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
   const __backend = {
     status: BackendStatus.OFFLINE,
     detail: "",
-    okIntervalMs: 60000,
-    failIntervalMs: 20000,
+    okIntervalMs: 180000,
+    failIntervalMs: 60000,
+    hiddenIntervalMs: 300000,
     timeoutMs: 6000,
     timer: null,
     started: false
@@ -160,7 +161,7 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
 
   async function __tickBackend(){
     if(document.visibilityState === "hidden"){
-      __scheduleNext(__backend.okIntervalMs);
+      __scheduleNext(__backend.hiddenIntervalMs || __backend.okIntervalMs);
       return;
     }
 
@@ -2035,7 +2036,7 @@ async function cargarEmpresasAutorizadas(){
 
   function debouncedSearch(){
     if(searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce=setTimeout(()=>{ paginaActual=0; consultarSkus(); }, 280);
+    searchDebounce=setTimeout(()=>{ paginaActual=0; consultarSkus(); }, 500);
   }
 
   function reiniciarYBuscar(){ paginaActual=0; consultarSkus(); }
@@ -2116,14 +2117,18 @@ function resetChipFiltroUI(){
 
     const qInput = norm(qs('sku-search')?.value ?? "");
 
-    // ✅ Si no hay texto, ni filtros, ni solo-baja: no cargar nada
-    if (qInput.length < 1 && !skuExtraFiltro && !soloBaja) {
+    const minSearchChars = 2;
+
+    // ✅ Si no hay texto suficiente, ni filtros, ni solo-baja: no cargar nada
+    if (qInput.length < minSearchChars && !skuExtraFiltro && !soloBaja) {
       qs('rows').innerHTML = `
         <div style="text-align:center; padding:40px; color:var(--muted)">
           <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
-          <p>Escribe algo en el buscador para ver los activos</p>
+          <p>Escribe al menos ${minSearchChars} caracteres para ver los activos</p>
         </div>`;
       qs('pagination').innerHTML = "";
+      totalActivos = 0;
+      cacheSkus = [];
       updateExportCsvFilteredUI();
       return;
     }
@@ -2131,7 +2136,27 @@ function resetChipFiltroUI(){
     const q = qInput;
     const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
 
-    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=*`;
+    const skuListSelect = [
+      'id',
+      'sku',
+      'descripcion',
+      'codigo_barras',
+      'numero_serie',
+      'marca',
+      'modelo',
+      'genero',
+      'cantidad',
+      'costo',
+      'ubicacion',
+      'responsable',
+      'localizacion',
+      'fecha_adquisicion',
+      'created_at',
+      'updated_at',
+      'dado_de_baja'
+    ].join(',');
+
+    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=${encodeURIComponent(skuListSelect)}`;
 
     // Ordenamiento
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
@@ -2159,28 +2184,38 @@ function resetChipFiltroUI(){
 
     isLoading = true;
     try{
-      const res = await fetch(url, {
-        headers:{
-          'apikey':SB_KEY,
-          'Authorization':`Bearer ${sessionToken}`,
-          'Range': `${desde}-${hasta}`,
-          'Prefer':'count=planned'
-        }
-      });
+      const headers = {
+        'apikey':SB_KEY,
+        'Authorization':`Bearer ${sessionToken}`,
+        'Range': `${desde}-${hasta}`
+      };
+      const shouldRequestCount = (paginaActual === 0);
+      if (shouldRequestCount) headers['Prefer'] = 'count=planned';
+
+      const res = await fetch(url, { headers });
 
       if(!res.ok){
         const t = await res.text().catch(()=> "");
         throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
       }
 
-      const range = res.headers.get('Content-Range');
-      if(range) totalActivos = parseInt(range.split('/')[1] || "0",10);
 
       if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
       updatePrintButtonState();
       syncGlobals();
 
       cacheSkus = await res.json();
+      if (paginaActual === 0) {
+        const range = res.headers.get('Content-Range');
+        const totalPart = String((range || '').split('/')[1] || '').trim();
+        if (totalPart && totalPart !== '*') {
+          totalActivos = parseInt(totalPart || '0', 10);
+        } else {
+          totalActivos = cacheSkus.length;
+        }
+      } else if (cacheSkus.length === 0 && paginaActual > 0) {
+        totalActivos = Math.max(0, paginaActual * TAMANO_PAGINA);
+      }
       renderTabla();
       renderPaginacion();
     }catch(e){
@@ -3162,56 +3197,41 @@ function renderCatalogo(){
 
     try{
       const nombresMap = await cargarNombresUsuariosPorEmpresa();
-      const raw = await fetchSkusDashboardRaw(empresaSeleccionada.id);
-      const now = new Date();
-
-      let gHoyAlt=0,gHoyAct=0,gSemAlt=0,gSemAct=0,gMesAlt=0,gMesAct=0,gTotAlt=0,gTotAct=0;
-
-      const userMap = new Map();
-      function addToUser(email, period, altas, activos){
-        const safe = (email || '').trim() || 'Sin Asignar';
-        if(!userMap.has(safe)){
-          userMap.set(safe, { HOY:{altas:0,activos:0}, SEMANA:{altas:0,activos:0}, MES:{altas:0,activos:0}, TOTAL:{altas:0,activos:0} });
-        }
-        const o = userMap.get(safe);
-        o[period].altas += altas;
-        o[period].activos += activos;
-      }
-
-      for(const it of raw){
-        const dt = toDate(it.createdAt);
-        const activoInt = it.dadoDeBaja ? 0 : 1;
-
-        gTotAlt++; gTotAct += activoInt;
-        addToUser(it.email, 'TOTAL', 1, activoInt);
-
-        if(isSameDay(dt, now)){ gHoyAlt++; gHoyAct += activoInt; addToUser(it.email, 'HOY', 1, activoInt); }
-        if(isSameWeekLocal(dt, now)){ gSemAlt++; gSemAct += activoInt; addToUser(it.email, 'SEMANA', 1, activoInt); }
-        if(isSameMonth(dt, now)){ gMesAlt++; gMesAct += activoInt; addToUser(it.email, 'MES', 1, activoInt); }
-      }
+      const { globalRows, userRows, source } = await fetchSkusDashboardData(empresaSeleccionada.id);
+      const byPeriodo = new Map((globalRows || []).map(r => [String(r.periodo || '').toUpperCase(), r]));
+      const hoy = byPeriodo.get('HOY') || {};
+      const semana = byPeriodo.get('SEMANA') || {};
+      const mes = byPeriodo.get('MES') || {};
+      const total = byPeriodo.get('TOTAL') || {};
 
       grid.innerHTML = [
-        dashStatCardDual('Hoy', gHoyAlt, gHoyAct, 'today', 'Altas', 'Activos'),
-        dashStatCardDual('Esta Semana', gSemAlt, gSemAct, 'date_range', 'Altas', 'Activos'),
-        dashStatCardDual('Este Mes', gMesAlt, gMesAct, 'calendar_month', 'Altas', 'Activos'),
-        dashStatCardDual('Total Histórico', gTotAlt, gTotAct, 'all_inclusive', 'Altas', 'Activos'),
+        dashStatCardDual('Hoy', hoy.altas, hoy.activos, 'today', 'Altas', 'Activos'),
+        dashStatCardDual('Esta Semana', semana.altas, semana.activos, 'date_range', 'Altas', 'Activos'),
+        dashStatCardDual('Este Mes', mes.altas, mes.activos, 'calendar_month', 'Altas', 'Activos'),
+        dashStatCardDual('Total Histórico', total.altas, total.activos, 'all_inclusive', 'Altas', 'Activos'),
       ].join('');
 
-      const list = [...userMap.entries()]
-        .map(([email, p])=>({
-          email,
-          nombre: nombresMap.get(String(email).toLowerCase()) || '',
-          hoy: p.HOY,
-          sem: p.SEMANA,
-          mes: p.MES,
-          total: p.TOTAL
-        }))
+      const list = (userRows || [])
+        .map(r=>{
+          const email = (r.creador_email || 'Sin Asignar').trim() || 'Sin Asignar';
+          return {
+            email,
+            nombre: nombresMap.get(String(email).toLowerCase()) || '',
+            hoy: { altas:Number(r.hoy_altas||0), activos:Number(r.hoy_activos||0) },
+            sem: { altas:Number(r.semana_altas||0), activos:Number(r.semana_activos||0) },
+            mes: { altas:Number(r.mes_altas||0), activos:Number(r.mes_activos||0) },
+            total: { altas:Number(r.total_altas||0), activos:Number(r.total_activos||0) }
+          };
+        })
         .sort((a,b)=> (b.total.altas - a.total.altas));
 
       users.innerHTML = list.length
         ? list.map(u=>dashUserCardDual(u, 'Altas', 'Activos')).join('')
         : `<div class="chip" style="justify-content:center; width:100%;">Sin datos de SKUs.</div>`;
 
+      if(source === 'fallback'){
+        setSkusDashMsg('Dashboard de SKUs en modo compatible.');
+      }
     }catch(e){
       console.error(e);
       qs('skus-dash-global-grid').innerHTML = '';
@@ -3264,6 +3284,132 @@ function renderCatalogo(){
     }
 
     return out;
+  }
+
+
+  async function callRpc(name, payload){
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload || {})
+    });
+    if(!res.ok){
+      const t = await res.text().catch(()=> '');
+      throw new Error(`RPC ${name} HTTP ${res.status}. ${t||''}`);
+    }
+    return await res.json();
+  }
+
+  async function fetchSkusDashboardData(empresaId){
+    try{
+      const [globalRows, userRows] = await Promise.all([
+        callRpc('rpc_dashboard_skus_periodos', { p_empresa_id: empresaId, p_tz: 'America/Mexico_City' }),
+        callRpc('rpc_dashboard_skus_usuarios_periodos', { p_empresa_id: empresaId, p_tz: 'America/Mexico_City' })
+      ]);
+      return {
+        source: 'rpc',
+        globalRows: Array.isArray(globalRows) ? globalRows : [],
+        userRows: Array.isArray(userRows) ? userRows : []
+      };
+    }catch(err){
+      console.warn('RPC dashboard SKUs no disponible, usando fallback.', err);
+      const raw = await fetchSkusDashboardRaw(empresaId);
+      const now = new Date();
+      let gHoyAlt=0,gHoyAct=0,gSemAlt=0,gSemAct=0,gMesAlt=0,gMesAct=0,gTotAlt=0,gTotAct=0;
+      const userMap = new Map();
+      function addToUser(email, period, altas, activos){
+        const safe = (email || '').trim() || 'Sin Asignar';
+        if(!userMap.has(safe)) userMap.set(safe, { HOY:{altas:0,activos:0}, SEMANA:{altas:0,activos:0}, MES:{altas:0,activos:0}, TOTAL:{altas:0,activos:0} });
+        const o = userMap.get(safe);
+        o[period].altas += altas;
+        o[period].activos += activos;
+      }
+      for(const it of raw){
+        const dt = toDate(it.createdAt);
+        const activoInt = it.dadoDeBaja ? 0 : 1;
+        gTotAlt++; gTotAct += activoInt;
+        addToUser(it.email, 'TOTAL', 1, activoInt);
+        if(isSameDay(dt, now)){ gHoyAlt++; gHoyAct += activoInt; addToUser(it.email, 'HOY', 1, activoInt); }
+        if(isSameWeekLocal(dt, now)){ gSemAlt++; gSemAct += activoInt; addToUser(it.email, 'SEMANA', 1, activoInt); }
+        if(isSameMonth(dt, now)){ gMesAlt++; gMesAct += activoInt; addToUser(it.email, 'MES', 1, activoInt); }
+      }
+      return {
+        source: 'fallback',
+        globalRows: [
+          { periodo:'HOY', altas:gHoyAlt, activos:gHoyAct },
+          { periodo:'SEMANA', altas:gSemAlt, activos:gSemAct },
+          { periodo:'MES', altas:gMesAlt, activos:gMesAct },
+          { periodo:'TOTAL', altas:gTotAlt, activos:gTotAct }
+        ],
+        userRows: [...userMap.entries()].map(([email,p])=>(
+          {
+            creador_email: email,
+            hoy_altas:p.HOY.altas, hoy_activos:p.HOY.activos,
+            semana_altas:p.SEMANA.altas, semana_activos:p.SEMANA.activos,
+            mes_altas:p.MES.altas, mes_activos:p.MES.activos,
+            total_altas:p.TOTAL.altas, total_activos:p.TOTAL.activos
+          }
+        ))
+      };
+    }
+  }
+
+  async function fetchResguardoDashboardData(empresaId){
+    try{
+      const [globalRows, userRows] = await Promise.all([
+        callRpc('rpc_dashboard_resguardos_periodos', { p_empresa_id: empresaId, p_tz: 'America/Mexico_City' }),
+        callRpc('rpc_dashboard_resguardos_usuarios_periodos', { p_empresa_id: empresaId, p_tz: 'America/Mexico_City' })
+      ]);
+      return {
+        source: 'rpc',
+        globalRows: Array.isArray(globalRows) ? globalRows : [],
+        userRows: Array.isArray(userRows) ? userRows : []
+      };
+    }catch(err){
+      console.warn('RPC dashboard resguardos no disponible, usando fallback.', err);
+      const raw = await fetchResguardoDashboardRaw(empresaId);
+      const now = new Date();
+      let gHoyS=0,gHoyK=0,gSemS=0,gSemK=0,gMesS=0,gMesK=0,gTotS=0,gTotK=0;
+      const userMap = new Map();
+      function addToUser(email, period, s, k){
+        const safe = (email || '').trim() || 'Sin Asignar';
+        if(!userMap.has(safe)) userMap.set(safe, { HOY:{s:0,k:0}, SEMANA:{s:0,k:0}, MES:{s:0,k:0}, TOTAL:{s:0,k:0} });
+        const o = userMap.get(safe);
+        o[period].s += s;
+        o[period].k += k;
+      }
+      for(const it of raw){
+        const dt = toDate(it.createdAt);
+        const skus = Number(it.skuCount||0);
+        gTotS++; gTotK += skus;
+        addToUser(it.email, 'TOTAL', 1, skus);
+        if(isSameDay(dt, now)){ gHoyS++; gHoyK += skus; addToUser(it.email, 'HOY', 1, skus); }
+        if(isSameWeekLocal(dt, now)){ gSemS++; gSemK += skus; addToUser(it.email, 'SEMANA', 1, skus); }
+        if(isSameMonth(dt, now)){ gMesS++; gMesK += skus; addToUser(it.email, 'MES', 1, skus); }
+      }
+      return {
+        source: 'fallback',
+        globalRows: [
+          { periodo:'HOY', sesiones:gHoyS, skus:gHoyK },
+          { periodo:'SEMANA', sesiones:gSemS, skus:gSemK },
+          { periodo:'MES', sesiones:gMesS, skus:gMesK },
+          { periodo:'TOTAL', sesiones:gTotS, skus:gTotK }
+        ],
+        userRows: [...userMap.entries()].map(([email,p])=>(
+          {
+            creador_email: email,
+            hoy_sesiones:p.HOY.s, hoy_skus:p.HOY.k,
+            semana_sesiones:p.SEMANA.s, semana_skus:p.SEMANA.k,
+            mes_sesiones:p.MES.s, mes_skus:p.MES.k,
+            total_sesiones:p.TOTAL.s, total_skus:p.TOTAL.k
+          }
+        ))
+      };
+    }
   }
 
   function dashStatCardDual(title, a, b, icon, labelA, labelB){
