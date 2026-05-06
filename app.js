@@ -2631,13 +2631,34 @@ function resetChipFiltroUI(){
   // =========================
   // ✅ CATÁLOGOS (MEJORA): sin "distinct" (PostgREST), paginado + Set
   // =========================
-  function abrirCatalogos(){
+  function abrirCatalogos(opts){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     if(!canCatalogos()){ alert('No tienes permiso para acceder a Catálogos.'); return; }
+
+    const o = opts || {};
+    const reset = o.reset === true;
+
     switchView('view-catalogos');
-    currentTab = 'genero';
+
+    // Mantener memoria de Catálogos al regresar desde Gestión de SKUs:
+    // pestaña activa (Género/Ubicación/Localización/Responsable) + texto buscado.
+    // Solo reinicia cuando se llama explícitamente con abrirCatalogos({ reset:true }).
+    if(reset){
+      currentTab = 'genero';
+      catalogoFilter = '';
+    }
+
+    if(!['genero','ubicacion','localizacion','responsable'].includes(currentTab)){
+      currentTab = 'genero';
+    }
+
     marcarTab();
-    cargarCatalogoActual(true);
+    try{
+      const inp = qs('cat-search');
+      if(inp) inp.value = catalogoFilter || '';
+    }catch{}
+
+    cargarCatalogoActual(false);
   }
 
   let currentTab = 'genero';
