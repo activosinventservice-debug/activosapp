@@ -117,6 +117,51 @@
     .logo-mini.hidden{display:none !important}
     @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
+
+
+    /* Editor masivo tipo escritorio / hoja de trabajo */
+    body.editor-desktop .appbar-inner{max-width:none; padding-left:18px; padding-right:18px}
+    body.editor-desktop .container{max-width:none; width:100%; margin:10px auto; padding:0 10px}
+    #view-editor-activos.editor-full{padding:10px; margin:0; min-height:calc(100vh - 86px); border-radius:18px; display:flex; flex-direction:column; gap:10px; overflow:hidden}
+    #view-editor-activos.editor-full.hidden{display:none}
+    .editor-mainbar{position:sticky; top:0; z-index:16; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:rgba(255,255,255,.96); box-shadow:0 8px 20px rgba(15,23,42,.06)}
+    .editor-mainbar h2{font-size:1.15rem; margin:0}
+    .editor-status{font-size:.78rem; color:#64748B; font-weight:800}
+    .editor-actions{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
+    .editor-actions .btn{padding:9px 11px; border-radius:11px}
+    .editor-filterbar{display:grid; gap:8px; grid-template-columns:minmax(260px,2fr) repeat(4,minmax(135px,1fr)) auto; align-items:end; padding:10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 8px 18px rgba(0,40,100,.04)}
+    .editor-filterbar label{font-size:.68rem; color:#64748B; font-weight:900; text-transform:uppercase; display:block; margin-bottom:3px}
+    .editor-filterbar .select,.editor-filterbar .editor-input{height:38px}
+    .editor-check{height:38px; display:flex; align-items:center; gap:7px; white-space:nowrap; border:1px solid var(--border); border-radius:11px; padding:0 10px; font-weight:900; color:#0B4CB3; background:#F8FBFF}
+    .editor-check input{width:16px; height:16px}
+    .editor-wrap{flex:1 1 auto; min-height:0; overflow:auto; border-radius:16px; border:1px solid var(--border); background:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+    .editor-table{border-collapse:separate; border-spacing:0; min-width:1880px; width:max-content; font-size:.76rem; line-height:1.05; table-layout:fixed}
+    .editor-table th,.editor-table td{border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; white-space:nowrap; height:38px; overflow:hidden; text-overflow:ellipsis}
+    .editor-table thead th{position:sticky; top:0; z-index:8; background:#F8FAFC; font-size:.68rem; text-transform:uppercase; letter-spacing:.02em; color:#475569; height:32px; user-select:none}
+    .editor-th-sort{width:100%; border:0; background:transparent; color:inherit; font:inherit; font-weight:900; text-transform:uppercase; letter-spacing:.02em; display:flex; align-items:center; justify-content:space-between; gap:5px; padding:0 14px 0 0; cursor:pointer; text-align:left}
+    .editor-th-sort span:first-child{overflow:hidden; text-overflow:ellipsis}
+    .editor-sort-icon{font-size:16px; opacity:.78; flex:0 0 auto}
+    .editor-resize-handle{position:absolute; top:0; right:0; width:9px; height:100%; cursor:col-resize; z-index:20}
+    .editor-resize-handle:hover{background:rgba(11,110,243,.18)}
+    body.editor-resizing{cursor:col-resize !important; user-select:none}
+    .editor-sticky-select{position:sticky; left:0; z-index:10; background:#fff; min-width:var(--editor-select-w,44px); width:var(--editor-select-w,44px); box-shadow:1px 0 0 var(--border); text-align:center!important}
+    .editor-sticky-1{position:sticky; left:var(--editor-select-w,44px); z-index:9; background:#fff; min-width:var(--editor-sku-w,92px); width:var(--editor-sku-w,92px); box-shadow:1px 0 0 var(--border)}
+    .editor-sticky-2{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,92px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,420px); width:var(--editor-desc-w,420px); box-shadow:1px 0 0 var(--border)}
+    thead .editor-sticky-select, thead .editor-sticky-1, thead .editor-sticky-2{z-index:12; background:#EEF4FF}
+    .editor-input{width:100%; min-width:98px; border:1px solid var(--border); border-radius:9px; padding:6px 8px; font-weight:800; outline:none; background:#fff; font-size:.76rem}
+    .editor-filter-input{background:#fff; min-width:0}
+    .editor-filter-input::placeholder{color:#94A3B8; font-weight:800}
+    .editor-table .editor-input{height:29px}
+    .editor-input:focus{border-color:#8CB8FF; box-shadow:0 0 0 3px rgba(11,110,243,.12)}
+    .editor-modified{background:#FFF7D6 !important}
+    .editor-select-cell input{width:16px; height:16px}
+    .editor-row-baja td{background:#F8FAFC; color:#64748B}
+    .editor-readonly{color:#64748B; font-weight:900; overflow:hidden; text-overflow:ellipsis}
+    .editor-bottombar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 -6px 18px rgba(0,40,100,.04)}
+    .editor-bottombar .pagination{margin:0; justify-content:flex-end}
+    @media(max-width:1100px){.editor-filterbar{grid-template-columns:1fr 1fr}.editor-actions{justify-content:flex-start}.editor-mainbar{align-items:flex-start; flex-direction:column}.editor-table{font-size:.74rem}}
+    @media(max-width:700px){.editor-filterbar{grid-template-columns:1fr}.editor-table{font-size:.72rem}}
+
     .empresa-card{grid-template-columns:auto 1fr auto !important}
     .empresa-card .empresa-logo-wrap{display:flex; align-items:center; justify-content:center; width:52px}
     .sku{font-weight:900}
@@ -593,6 +638,94 @@
         <button id="btn-mode-dash" class="btn tonal" onclick="abrirDashboardResguardos()"><span class="material-symbols-rounded">dashboard</span> Dashboard Resguardos</button>
         <button id="btn-mode-skus-dash" class="btn tonal" onclick="abrirDashboardSkus()"><span class="material-symbols-rounded">monitoring</span> Dashboard SKUs</button>
         <button id="btn-mode-hist" class="btn tonal" onclick="abrirHistorialResguardos()"><span class="material-symbols-rounded">history</span> Historial Resguardos</button>
+        <button id="btn-mode-editor-activos" class="btn tonal" onclick="abrirEditorActivos()"><span class="material-symbols-rounded">edit_note</span> Editor masivo</button>
+      </div>
+    </div>
+
+
+
+    <!-- EDITOR MASIVO TIPO ESCRITORIO / EXCEL -->
+    <div id="view-editor-activos" class="card editor-full hidden">
+      <div class="editor-mainbar">
+        <div style="min-width:0">
+          <small style="color:#0B4CB3; font-weight:900; text-transform:uppercase;">PC / Excel</small>
+          <h2>Editor masivo de activos</h2>
+          <div class="editor-status" id="editor-activos-status">Pulsa Cargar activos para traer los activos de la empresa y editarlos en tabla.</div>
+        </div>
+        <div class="editor-actions">
+          <button class="btn" onclick="cargarEditorActivos()"><span class="material-symbols-rounded">download</span> Cargar activos</button>
+          <button class="btn secondary" id="btn-editor-activos-guardar" onclick="guardarEditorActivos()" disabled><span class="material-symbols-rounded">save</span> Guardar cambios</button>
+          <button class="btn tonal" id="btn-editor-activos-deshacer" onclick="deshacerEditorActivosTodos()" disabled><span class="material-symbols-rounded">undo</span> Deshacer todo</button>
+          <button class="btn tonal" id="btn-editor-activos-bulk" onclick="editorActivosBulkApply()" disabled><span class="material-symbols-rounded">playlist_add_check</span> Aplicar a seleccionados</button>
+          <button class="btn tonal" id="btn-editor-activos-deshacer-sel" onclick="deshacerEditorActivosSeleccionados()" disabled><span class="material-symbols-rounded">undo</span> Deshacer selección</button>
+          <button class="btn tonal" onclick="limpiarFiltrosEditorActivos()"><span class="material-symbols-rounded">filter_alt_off</span> Limpiar filtros</button>
+          <button class="btn tonal" onclick="editorActivosSeleccionarFiltrados()"><span class="material-symbols-rounded">select_all</span> Seleccionar filtrados</button>
+          <button class="btn tonal" onclick="editorActivosLimpiarSeleccion()"><span class="material-symbols-rounded">deselect</span> Limpiar selección</button>
+          <button class="btn tonal" onclick="editorActivosColumnasConfig()"><span class="material-symbols-rounded">view_column</span> Columnas</button>
+          <button class="btn tonal" onclick="editorActivosRestaurarColumnas()"><span class="material-symbols-rounded">restart_alt</span> Restaurar columnas</button>
+          <button class="btn tonal" onclick="exportarEditorActivosCsv()"><span class="material-symbols-rounded">table_view</span> Exportar CSV</button>
+          <input id="editor-activos-import" type="file" accept=".csv,text/csv" class="hidden" onchange="importarEditorActivosCsv(this.files && this.files[0]); this.value=''"/>
+          <button class="btn tonal" onclick="qs('editor-activos-import').click()"><span class="material-symbols-rounded">upload_file</span> Importar CSV</button>
+          <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
+        </div>
+      </div>
+
+      <div class="editor-filterbar">
+        <div>
+          <label>Buscar</label>
+          <input id="editor-activos-search" class="editor-input" placeholder="SKU, descripción, serie, ubicación, responsable o código..."/>
+        </div>
+        <div>
+          <label>Género</label>
+          <input id="editor-activos-genero" class="editor-input editor-filter-input" list="editor-activos-genero-list" placeholder="Todos / buscar género..." autocomplete="off"/>
+          <datalist id="editor-activos-genero-list"></datalist>
+        </div>
+        <div>
+          <label>Ubicación</label>
+          <input id="editor-activos-ubicacion" class="editor-input editor-filter-input" list="editor-activos-ubicacion-list" placeholder="Todos / buscar ubicación..." autocomplete="off"/>
+          <datalist id="editor-activos-ubicacion-list"></datalist>
+        </div>
+        <div>
+          <label>Responsable</label>
+          <input id="editor-activos-responsable" class="editor-input editor-filter-input" list="editor-activos-responsable-list" placeholder="Todos / buscar responsable..." autocomplete="off"/>
+          <datalist id="editor-activos-responsable-list"></datalist>
+        </div>
+        <div>
+          <label>Estado</label>
+          <select id="editor-activos-baja" class="select" style="width:100%">
+            <option value="">Todos</option><option value="activos">Solo activos</option><option value="baja">Solo baja</option>
+          </select>
+        </div>
+        <label class="editor-check" title="Muestra solamente filas con cambios sin guardar">
+          <input id="editor-activos-solo-modificados" type="checkbox"/> Solo modificados
+        </label>
+      </div>
+
+      <div class="editor-wrap">
+        <table class="editor-table">
+          <thead>
+            <tr>
+              <th class="editor-sticky-1">SKU</th><th class="editor-sticky-2">Descripción</th>
+              <th>Marca</th><th>Modelo</th><th>Serie</th><th>Género</th><th>Ubicación</th><th>Localización</th><th>Responsable</th>
+              <th>Código barras</th><th>Cantidad</th><th>Costo</th><th>Fecha adquisición</th><th>Dado de baja</th><th>Fecha baja</th>
+            </tr>
+          </thead>
+          <tbody id="editor-activos-body"><tr><td colspan="15" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Pulsa Cargar activos para iniciar.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="editor-bottombar">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+          <span class="chip" id="editor-activos-resumen">Sin datos cargados</span>
+          <span class="chip" style="background:#FFF7D6">Amarillo = modificado sin guardar</span>
+          <span class="chip">Ctrl+S = guardar · Ctrl+Z = deshacer todo</span>
+          <span class="chip">Clic en título = ordenar · arrastra borde = ancho</span>
+        </div>
+        <div class="pagination">
+          <button class="btn tonal" id="editor-activos-prev" onclick="editorActivosGoPage(-1)">Anterior</button>
+          <span class="chip" id="editor-activos-page">Página 1 de 1</span>
+          <button class="btn tonal" id="editor-activos-next" onclick="editorActivosGoPage(1)">Siguiente</button>
+        </div>
       </div>
     </div>
 
@@ -605,7 +738,7 @@
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
         <button id="btn-skus-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
-        <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end"><button class="btn" onclick="cargarEditorActivos()"><span class="material-symbols-rounded">download</span> Cargar activos</button><button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button></div>
 
         <span class="divider"></span>
 
@@ -726,7 +859,7 @@
       <div class="header-flex" style="margin-bottom:8px">
         <h2 style="margin:0">Catálogos</h2>
         <div class="btn-group">
-          <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end"><button class="btn" onclick="cargarEditorActivos()"><span class="material-symbols-rounded">download</span> Cargar activos</button><button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button></div>
           <button id="btn-cat-ir-skus" class="btn" onclick="switchView('view-skus')"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
         </div>
       </div>

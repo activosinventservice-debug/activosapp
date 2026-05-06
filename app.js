@@ -405,7 +405,8 @@ window.fetch = async function(input, init){
     puedeExportarResCvsPDF:false,
     puedeCambiarFechaResguardosHistorial:false,
     puedeDescargarFoto:false,
-    puedeImportarExportarSkusCsv:false
+    puedeImportarExportarSkusCsv:false,
+    puedeAccederEditorMasivo:false
   };
 
   const __PERMS_ALL = {
@@ -419,7 +420,8 @@ window.fetch = async function(input, init){
     puedeExportarResCvsPDF:true,
     puedeCambiarFechaResguardosHistorial:true,
     puedeDescargarFoto:true,
-    puedeImportarExportarSkusCsv:true
+    puedeImportarExportarSkusCsv:true,
+    puedeAccederEditorMasivo:true
   };
 
   let __isSuperAdminChecked = false;
@@ -466,7 +468,8 @@ window.fetch = async function(input, init){
       puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true
     ,
 
-      puedeImportarExportarSkusCsv: isSuper || esAdmin || raw?.puedeImportarExportarSkusCsv === true
+      puedeImportarExportarSkusCsv: isSuper || esAdmin || raw?.puedeImportarExportarSkusCsv === true,
+      puedeAccederEditorMasivo: isSuper || raw?.puedeAccederEditorMasivo === true
     };
   }
 
@@ -509,7 +512,8 @@ window.fetch = async function(input, init){
         "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
         "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
         "puedeDescargarFoto",
-        "puedeImportarExportarSkusCsv"
+        "puedeImportarExportarSkusCsv",
+        "puedeAccederEditorMasivo"
       ].join(",");
 
       const url = `${SB_URL}/rest/v1/empresa_user_permissions` +
@@ -540,6 +544,7 @@ window.fetch = async function(input, init){
 
   function getPerms(){ return window.__permsEffective || __permsEffective || __PERMS_NONE; }
   function canSkus(){ return !!getPerms().puedeAccederSkus; }
+  function canEditorActivos(){ return !!getPerms().puedeAccederEditorMasivo; }
   function canCatalogos(){ return !!getPerms().puedeAccederCatalogos; }
   function canDash(){ return !!getPerms().puedeAccederResguardoDashboard; }
   function canHist(){ return !!getPerms().puedeAccederResguardosHistorial; }
@@ -556,6 +561,12 @@ window.fetch = async function(input, init){
     if(enabled && disabledTitle && el.title === disabledTitle) el.title = "";
   }
 
+  function setBtnVisible(id, visible){
+    const el = qs(id);
+    if(!el) return;
+    el.style.display = visible ? "" : "none";
+  }
+
   function applyPermisosUI(){
     // Selector
     setBtnEnabled('btn-mode-skus', canSkus(), 'Sin permiso para SKUs');
@@ -563,6 +574,8 @@ window.fetch = async function(input, init){
     setBtnEnabled('btn-mode-dash', canDash(), 'Sin permiso para Dashboard Resguardos');
     setBtnEnabled('btn-mode-skus-dash', canDash(), 'Sin permiso para Dashboard SKUs');
     setBtnEnabled('btn-mode-hist', canHist(), 'Sin permiso para Historial Resguardos');
+    setBtnVisible('btn-mode-editor-activos', canEditorActivos());
+    setBtnEnabled('btn-mode-editor-activos', canEditorActivos(), 'Solo admin de empresa');
 
     // Navegación interna
     setBtnEnabled('btn-skus-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
@@ -820,6 +833,7 @@ function updatePrintButtonState(){
 
     // ✅ Catálogos: borrar caché por usuario/empresa
     try{ resetCatalogosState(); }catch{}
+    try{ resetEditorActivosState('Editor limpio.'); }catch{}
 
     // Sincronizar globals + deshabilitar PDF
     syncGlobals();
@@ -957,9 +971,14 @@ function bumpCtxVersion(){ __ctxVersion++; return __ctxVersion; }
 function getCtxVersion(){ return __ctxVersion; }
 
   function switchView(id){
+    try{
+      const editorVisible = !qs('view-editor-activos')?.classList.contains('hidden');
+      if(editorVisible && id !== 'view-editor-activos' && typeof editorActivosConfirmDiscard === 'function' && !editorActivosConfirmDiscard()){ return; }
+    }catch{}
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
     const el = qs(id);
     if(el) el.classList.remove('hidden');
+    try{ document.body.classList.toggle('editor-desktop', id === 'view-editor-activos'); }catch{}
 
     // Si entras a SKUs desde otro lado (no desde Catálogos→Responsable), limpia el filtro extra
     if(id === 'view-skus'){
@@ -1983,6 +2002,7 @@ async function cargarEmpresasAutorizadas(){
   }
 
   async function seleccionarEmpresa(id,nombre,razonSocial,legalText,controlLabel){
+  try{ if(typeof editorActivosConfirmDiscard === 'function' && !editorActivosConfirmDiscard('Tienes cambios sin guardar en el editor masivo.\n\n¿Cambiar de empresa y descartar esos cambios?')) return; }catch{}
   // ✅ Antes de cambiar: guardar snapshot de la empresa previa (por usuario)
   try{ saveEmpresaCache(); }catch{}
 
@@ -1992,6 +2012,10 @@ async function cargarEmpresasAutorizadas(){
 
   empresaSeleccionada = { id, nombre, razonSocial: (razonSocial||"").trim(), legalText: (legalText||"").trim(), controlLabel: (controlLabel||"").trim() };
   window.empresaSeleccionada = empresaSeleccionada || null;
+
+  // ✅ Editor masivo: nunca conservar filas/filtros de la empresa anterior.
+  // Al cambiar de empresa queda vacío hasta presionar “Cargar activos”.
+  try{ resetEditorActivosState('Editor limpio para la empresa seleccionada. Presiona “Cargar activos”.'); }catch{}
 
   // ✅ Evita arrastrar permisos de otra empresa mientras cargan
   setPermisosEfectivos(__PERMS_NONE);
@@ -2627,6 +2651,699 @@ function resetChipFiltroUI(){
       html5QrCode.stop().then(()=>{ html5QrCode.clear(); }).catch(()=>{});
     }
   }
+
+
+
+  // =========================
+  // ✅ EDITOR MASIVO DE ACTIVOS (tipo editor logístico / escritorio)
+  // =========================
+  let editorActivosRows = [];
+  let editorActivosFiltered = [];
+  let editorActivosModified = new Map();
+  let editorActivosOriginal = new Map();
+  let editorActivosSelected = new Set();
+  let editorActivosPendingImport = null;
+  let editorActivosPage = 1;
+  const editorActivosPageSize = 150;
+  let editorActivosLastSignature = '';
+  let editorActivosSort = { field: 'sku', dir: 'asc' };
+  let editorActivosColumnWidths = {};
+  let editorActivosHiddenColumns = new Set();
+
+  const EDITOR_ACTIVOS_COLUMNS = [
+    { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
+    { field:'sku', label:'SKU', sticky:'editor-sticky-1', width:92, min:72, readonly:true, always:true },
+    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:420, min:220, readonly:true, always:true },
+    { field:'marca', label:'Marca', width:135, min:90 },
+    { field:'modelo', label:'Modelo', width:135, min:90 },
+    { field:'numero_serie', label:'Serie', width:135, min:90 },
+    { field:'genero', label:'Género', width:150, min:100 },
+    { field:'ubicacion', label:'Ubicación', width:190, min:120 },
+    { field:'localizacion', label:'Localización', width:170, min:110 },
+    { field:'responsable', label:'Responsable', width:170, min:110 },
+    { field:'codigo_barras', label:'Código barras', width:145, min:100 },
+    { field:'cantidad', label:'Cantidad', width:105, min:85, type:'number' },
+    { field:'costo', label:'Costo', width:115, min:90, type:'number' },
+    { field:'fecha_adquisicion', label:'Fecha adquisición', width:150, min:125, type:'date' },
+    { field:'dado_de_baja', label:'Dado de baja', width:130, min:105, type:'bool' },
+    { field:'baja_at', label:'Fecha baja', width:135, min:115, type:'date' }
+  ];
+
+  const EDITOR_ACTIVOS_EDITABLES = [
+    'marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','dado_de_baja','baja_at'
+  ];
+  const EDITOR_ACTIVOS_CSV_FIELDS = ['sku','descripcion', ...EDITOR_ACTIVOS_EDITABLES, 'created_at'];
+  const EDITOR_ACTIVOS_CSV_LABELS = {
+    sku:'sku', descripcion:'Descripcion', marca:'Marca', modelo:'Modelo', numero_serie:'Serie', genero:'genero', ubicacion:'ubicacion', localizacion:'localizacion', responsable:'responsable', codigo_barras:'codigoBarras', cantidad:'cantidad', costo:'costo', fecha_adquisicion:'fechaAdquisicion', dado_de_baja:'dadoDeBaja', baja_at:'bajaAt', created_at:'fechaRegistro'
+  };
+
+  function editorActivosHasUnsaved(){ return editorActivosModified.size > 0; }
+  function editorActivosConfirmDiscard(msg){
+    if(!editorActivosHasUnsaved()) return true;
+    return confirm(msg || `Tienes ${editorActivosModified.size} activo(s) con cambios sin guardar.\n\n¿Quieres salir y descartar esos cambios?`);
+  }
+
+  function editorActivosLoadColumnWidths(){
+    try{ editorActivosColumnWidths = JSON.parse(localStorage.getItem('editorActivosColumnWidths') || '{}') || {}; }catch{ editorActivosColumnWidths = {}; }
+  }
+  function editorActivosSaveColumnWidths(){
+    try{ localStorage.setItem('editorActivosColumnWidths', JSON.stringify(editorActivosColumnWidths)); }catch{}
+  }
+  function editorActivosLoadHiddenColumns(){
+    try{ editorActivosHiddenColumns = new Set(JSON.parse(localStorage.getItem('editorActivosHiddenColumns') || '[]') || []); }catch{ editorActivosHiddenColumns = new Set(); }
+  }
+  function editorActivosSaveHiddenColumns(){
+    try{ localStorage.setItem('editorActivosHiddenColumns', JSON.stringify([...editorActivosHiddenColumns])); }catch{}
+  }
+  function editorActivosVisibleColumns(){
+    return EDITOR_ACTIVOS_COLUMNS.filter(c => c.always || !editorActivosHiddenColumns.has(c.field));
+  }
+  function editorActivosColumnWidth(col){
+    const saved = Number(editorActivosColumnWidths[col.field]);
+    return Number.isFinite(saved) && saved > 0 ? Math.max(col.min || 70, saved) : col.width;
+  }
+  function editorActivosApplyColumnWidths(){
+    const table = document.querySelector('#view-editor-activos .editor-table');
+    if(!table) return;
+    const visible = editorActivosVisibleColumns();
+    let total = 0;
+    visible.forEach(col => {
+      const w = editorActivosColumnWidth(col); total += w;
+      table.querySelectorAll(`[data-col="${col.field}"]`).forEach(el => { el.style.width = `${w}px`; el.style.minWidth = `${w}px`; });
+    });
+    document.documentElement.style.setProperty('--editor-select-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[0])}px`);
+    document.documentElement.style.setProperty('--editor-sku-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[1])}px`);
+    document.documentElement.style.setProperty('--editor-desc-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[2])}px`);
+    table.style.minWidth = `${Math.max(900,total)}px`;
+  }
+  function editorActivosSortIcon(field){
+    if(editorActivosSort.field !== field) return 'unfold_more';
+    return editorActivosSort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward';
+  }
+  function editorActivosInitColumnTools(){
+    const table = document.querySelector('#view-editor-activos .editor-table');
+    if(!table) return;
+    let colgroup = table.querySelector('colgroup');
+    const visible = editorActivosVisibleColumns();
+    const colHtml = visible.map(c => `<col data-col="${c.field}">`).join('');
+    if(!colgroup){
+      colgroup = document.createElement('colgroup');
+      table.insertBefore(colgroup, table.firstChild);
+    }
+    colgroup.innerHTML = colHtml;
+    const headRow = table.querySelector('thead tr');
+    if(headRow){
+      headRow.innerHTML = visible.map(col => {
+        if(col.field === '__select'){
+          return `<th data-col="__select" class="editor-sticky-select"><input type="checkbox" id="editor-activos-select-page" onchange="editorActivosTogglePage(this.checked)" title="Seleccionar visibles de la página"></th>`;
+        }
+        const sortButton = col.nosort ? `<span>${escapeHtml(col.label)}</span>` : `
+          <button type="button" class="editor-th-sort" onclick="editorActivosSetSort('${col.field}')" title="Ordenar por ${escapeHtml(col.label)}">
+            <span>${escapeHtml(col.label)}</span>
+            <span class="material-symbols-rounded editor-sort-icon">${editorActivosSortIcon(col.field)}</span>
+          </button>`;
+        return `<th data-col="${col.field}" data-field="${col.field}" class="${col.sticky || ''}">${sortButton}<span class="editor-resize-handle" onmousedown="editorActivosStartResize(event,'${col.field}')" title="Arrastra para cambiar ancho"></span></th>`;
+      }).join('');
+    }
+    editorActivosApplyColumnWidths();
+  }
+  function editorActivosSetSort(field){
+    if(field === '__select') return;
+    if(editorActivosSort.field === field) editorActivosSort.dir = editorActivosSort.dir === 'asc' ? 'desc' : 'asc';
+    else editorActivosSort = { field, dir:'asc' };
+    editorActivosLastSignature = '';
+    aplicarFiltrosEditorActivos();
+    editorActivosInitColumnTools();
+  }
+  function editorActivosSortValue(row, field){
+    const col = EDITOR_ACTIVOS_COLUMNS.find(c => c.field === field) || {};
+    const v = row?.[field];
+    if(col.type === 'number') return Number(v || 0);
+    if(col.type === 'date') return String(v || '');
+    if(col.type === 'bool') return row?.[field] ? 1 : 0;
+    if(field === 'sku'){
+      const n = Number(String(v||'').replace(/^0+/,''));
+      if(Number.isFinite(n)) return n;
+    }
+    return editorActivosNormFilter(v);
+  }
+  function editorActivosSortRows(rows){
+    const field = editorActivosSort.field || 'sku';
+    const dir = editorActivosSort.dir === 'desc' ? -1 : 1;
+    return rows.sort((a,b) => {
+      const va = editorActivosSortValue(a, field);
+      const vb = editorActivosSortValue(b, field);
+      let cmp = 0;
+      if(typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+      else cmp = String(va).localeCompare(String(vb), 'es', { numeric:true, sensitivity:'base' });
+      if(cmp === 0) cmp = String(a.sku||'').localeCompare(String(b.sku||''), 'es', { numeric:true, sensitivity:'base' });
+      return cmp * dir;
+    });
+  }
+  function editorActivosStartResize(ev, field){
+    ev.preventDefault(); ev.stopPropagation();
+    const col = EDITOR_ACTIVOS_COLUMNS.find(c => c.field === field);
+    if(!col) return;
+    const startX = ev.clientX;
+    const startW = editorActivosColumnWidth(col);
+    document.body.classList.add('editor-resizing');
+    const move = (e) => {
+      const w = Math.max(col.min || 70, startW + (e.clientX - startX));
+      editorActivosColumnWidths[field] = Math.round(w);
+      editorActivosApplyColumnWidths();
+    };
+    const up = () => {
+      document.body.classList.remove('editor-resizing');
+      editorActivosSaveColumnWidths();
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  }
+
+  function editorActivosStatus(msg){ const el=qs('editor-activos-status'); if(el) el.textContent = msg || ''; }
+
+  function resetEditorActivosState(message){
+    editorActivosRows = [];
+    editorActivosFiltered = [];
+    editorActivosModified = new Map();
+    editorActivosOriginal = new Map();
+    editorActivosSelected = new Set();
+    editorActivosPendingImport = null;
+    editorActivosPage = 1;
+    editorActivosLastSignature = '';
+
+    ['editor-activos-search','editor-activos-genero','editor-activos-ubicacion','editor-activos-responsable'].forEach(id => {
+      try{ const el = qs(id); if(el) el.value = ''; }catch{}
+    });
+    try{ const el = qs('editor-activos-baja'); if(el) el.value = ''; }catch{}
+    try{ const el = qs('editor-activos-solo-modificados'); if(el) el.checked = false; }catch{}
+    ['editor-activos-genero-list','editor-activos-ubicacion-list','editor-activos-responsable-list'].forEach(id => {
+      try{ const el = qs(id); if(el) el.innerHTML = ''; }catch{}
+    });
+
+    const body = qs('editor-activos-body');
+    if(body){
+      body.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Presiona “Cargar activos” para cargar la empresa actual.</td></tr>';
+    }
+    editorActivosStatus(message || 'Editor limpio. Presiona “Cargar activos”.');
+    editorActivosResumen();
+    try{ editorActivosInitColumnTools(); }catch{}
+  }
+
+  function editorActivosKey(row){ return String(row?.sku || '').trim(); }
+  function editorActivosBool(v){ return v === true || v === 1 || ['1','true','si','sí','yes','x'].includes(String(v||'').trim().toLowerCase()); }
+  function editorActivosToInputDate(v){ const d = parseCsvDateToDateOnly(v); return d || ''; }
+  function editorActivosSafeNumber(v){ const s=String(v??'').trim(); if(!s) return null; const n=Number(s.replace(/,/g,'')); return Number.isFinite(n) ? n : null; }
+  function editorActivosNormFilter(v){
+    return String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }
+  function editorActivosUpdateSearch(row){
+    row._search = [row.sku,row.descripcion,row.marca,row.modelo,row.numero_serie,row.genero,row.ubicacion,row.localizacion,row.responsable,row.codigo_barras]
+      .map(v => editorActivosNormFilter(v)).join(' | ');
+    return row;
+  }
+  function editorActivosCloneComparable(row){
+    const o = {};
+    EDITOR_ACTIVOS_EDITABLES.forEach(f => { o[f] = row[f]; });
+    return o;
+  }
+  function editorActivosValuesEqual(field, a, b){
+    if(field === 'dado_de_baja') return editorActivosBool(a) === editorActivosBool(b);
+    if(field === 'cantidad') return String(Number(a || 0)) === String(Number(b || 0));
+    if(field === 'costo') return String(editorActivosSafeNumber(a) ?? '') === String(editorActivosSafeNumber(b) ?? '');
+    if(field === 'fecha_adquisicion' || field === 'baja_at') return String(parseCsvDateToDateOnly(a) || '') === String(parseCsvDateToDateOnly(b) || '');
+    return String(a ?? '').trim() === String(b ?? '').trim();
+  }
+  function editorActivosSetModifiedField(key, field, val){
+    const original = editorActivosOriginal.get(key) || {};
+    const mod = editorActivosModified.get(key) || {};
+    if(editorActivosValuesEqual(field, val, original[field])) delete mod[field];
+    else mod[field] = val;
+    if(Object.keys(mod).length) editorActivosModified.set(key, mod);
+    else editorActivosModified.delete(key);
+  }
+
+  function abrirEditorActivos(){
+    if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
+    if(!canEditorActivos()){ alert('No tienes permiso de Editor Masivo para esta empresa.'); return; }
+    switchView('view-editor-activos');
+    setTimeout(()=>qs('editor-activos-search')?.focus(), 60);
+  }
+
+  function editorActivosPoblarSelect(id, values){
+    const input = qs(id);
+    const list = qs(`${id}-list`);
+    if(!input || !list) return;
+    const old = input.value || '';
+    const clean = [...new Set(values.map(v=>String(v||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    list.innerHTML = clean.map(v=>`<option value="${escapeHtml(v)}"></option>`).join('');
+    input.value = old;
+  }
+
+  function editorActivosActualizarFiltros(){
+    editorActivosPoblarSelect('editor-activos-genero', editorActivosRows.map(r=>r.genero));
+    editorActivosPoblarSelect('editor-activos-ubicacion', editorActivosRows.map(r=>r.ubicacion));
+    editorActivosPoblarSelect('editor-activos-responsable', editorActivosRows.map(r=>r.responsable));
+  }
+
+  async function cargarEditorActivos(){
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+    if(!editorActivosConfirmDiscard('Tienes cambios sin guardar.\n\n¿Quieres recargar los activos y descartar esos cambios?')) return;
+    const empresaIdCarga = String(empresaSeleccionada.id);
+    const ctxCarga = (typeof getCtxVersion === 'function') ? getCtxVersion() : 0;
+    const body = qs('editor-activos-body');
+    if(body) body.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Cargando activos...</td></tr>';
+    editorActivosStatus('Cargando activos de la empresa...');
+    editorActivosModified = new Map(); editorActivosSelected = new Set(); editorActivosOriginal = new Map();
+    try{
+      const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
+      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at'];
+      const limit = 1000;
+      let offset = 0;
+      let all = [];
+      while(true){
+        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(','))}&order=sku.asc&limit=${limit}&offset=${offset}`;
+        const res = await fetch(url, { headers });
+        if(!res.ok){ throw new Error(await res.text().catch(()=>`HTTP ${res.status}`)); }
+        const rows = await res.json();
+        if(Array.isArray(rows) && rows.length) all = all.concat(rows);
+        if(!Array.isArray(rows) || rows.length < limit) break;
+        offset += limit;
+      }
+      if(String(empresaSeleccionada?.id || '') !== empresaIdCarga || ((typeof getCtxVersion === 'function') && getCtxVersion() !== ctxCarga)) return;
+      editorActivosRows = all.map(r => editorActivosUpdateSearch({
+        sku: String(r.sku ?? '').trim(),
+        descripcion: String(r.descripcion ?? ''),
+        marca: r.marca ?? '', modelo: r.modelo ?? '', numero_serie: r.numero_serie ?? '',
+        genero: r.genero ?? '', ubicacion: r.ubicacion ?? '', localizacion: r.localizacion ?? '', responsable: r.responsable ?? '', codigo_barras: r.codigo_barras ?? '',
+        cantidad: r.cantidad ?? '', costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
+        dado_de_baja: !!r.dado_de_baja, baja_at: editorActivosToInputDate(r.baja_at), created_at: r.created_at ?? ''
+      }));
+      editorActivosRows.forEach(r => editorActivosOriginal.set(editorActivosKey(r), editorActivosCloneComparable(r)));
+      editorActivosActualizarFiltros();
+      editorActivosPage = 1;
+      editorActivosLastSignature = '';
+      editorActivosStatus(`Editor cargado: ${editorActivosRows.length} activo(s).`);
+      aplicarFiltrosEditorActivos();
+    }catch(e){
+      if(String(empresaSeleccionada?.id || '') !== empresaIdCarga || String(e?.name || '') === 'AbortError') return;
+      console.error(e);
+      editorActivosStatus('Error al cargar editor.');
+      if(body) body.innerHTML = `<tr><td colspan="99" style="text-align:center; padding:28px; color:#991B1B; font-weight:900">${escapeHtml(e.message || e)}</td></tr>`;
+    }
+  }
+
+  function aplicarFiltrosEditorActivos(){
+    const q = editorActivosNormFilter(qs('editor-activos-search')?.value || '');
+    const gen = editorActivosNormFilter(qs('editor-activos-genero')?.value || '');
+    const ubi = editorActivosNormFilter(qs('editor-activos-ubicacion')?.value || '');
+    const resp = editorActivosNormFilter(qs('editor-activos-responsable')?.value || '');
+    const baja = String(qs('editor-activos-baja')?.value || '').trim();
+    const soloMods = !!qs('editor-activos-solo-modificados')?.checked;
+    const signature = [q,gen,ubi,resp,baja,soloMods ? 'mods' : 'all', editorActivosSort.field, editorActivosSort.dir, [...editorActivosHiddenColumns].join(',')].join('|');
+    if(signature !== editorActivosLastSignature){ editorActivosPage = 1; editorActivosLastSignature = signature; }
+    editorActivosFiltered = editorActivosRows.filter(r => {
+      if(q && !r._search.includes(q)) return false;
+      if(gen && !editorActivosNormFilter(r.genero).includes(gen)) return false;
+      if(ubi && !editorActivosNormFilter(r.ubicacion).includes(ubi)) return false;
+      if(resp && !editorActivosNormFilter(r.responsable).includes(resp)) return false;
+      if(baja === 'activos' && r.dado_de_baja) return false;
+      if(baja === 'baja' && !r.dado_de_baja) return false;
+      if(soloMods && !editorActivosModified.has(editorActivosKey(r))) return false;
+      return true;
+    });
+    editorActivosSortRows(editorActivosFiltered);
+    renderEditorActivos();
+  }
+
+  function editorActivosResumen(){
+    const total = editorActivosRows.length;
+    const visibles = editorActivosFiltered.length;
+    const mods = editorActivosModified.size;
+    const selected = editorActivosSelected.size;
+    const pages = Math.max(1, Math.ceil(visibles / editorActivosPageSize));
+    if(editorActivosPage > pages) editorActivosPage = pages;
+    if(qs('editor-activos-resumen')) qs('editor-activos-resumen').textContent = `${total} cargados · ${visibles} visibles · ${selected} seleccionados · ${mods} modificados`;
+    if(qs('editor-activos-page')) qs('editor-activos-page').textContent = `Página ${editorActivosPage} de ${pages}`;
+    if(qs('editor-activos-prev')) qs('editor-activos-prev').disabled = editorActivosPage <= 1;
+    if(qs('editor-activos-next')) qs('editor-activos-next').disabled = editorActivosPage >= pages;
+    if(qs('btn-editor-activos-guardar')) qs('btn-editor-activos-guardar').disabled = mods <= 0;
+    if(qs('btn-editor-activos-deshacer')) qs('btn-editor-activos-deshacer').disabled = mods <= 0;
+    if(qs('btn-editor-activos-bulk')) qs('btn-editor-activos-bulk').disabled = selected <= 0;
+    if(qs('btn-editor-activos-deshacer-sel')) qs('btn-editor-activos-deshacer-sel').disabled = selected <= 0;
+  }
+
+  function editorActivosCell(row, field, type='text'){
+    const key = editorActivosKey(row);
+    const modified = !!(editorActivosModified.get(key) || {})[field];
+    const cls = modified ? 'editor-input editor-modified' : 'editor-input';
+    if(field === 'dado_de_baja'){
+      return `<td data-col="${field}" class="${modified ? 'editor-modified' : ''}"><select class="${cls}" data-key="${escapeHtml(key)}" data-field="${field}" onchange="editorActivosOnInput(this)"><option value="0" ${!row[field]?'selected':''}>No</option><option value="1" ${row[field]?'selected':''}>Sí</option></select></td>`;
+    }
+    return `<td data-col="${field}" class="${modified ? 'editor-modified' : ''}"><input class="${cls}" type="${type}" data-key="${escapeHtml(key)}" data-field="${field}" value="${escapeHtml(row[field] ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
+  }
+
+  function editorActivosTd(row, col){
+    const key = editorActivosKey(row);
+    if(col.field === '__select') return `<td data-col="__select" class="editor-sticky-select editor-select-cell"><input type="checkbox" ${editorActivosSelected.has(key)?'checked':''} onchange="editorActivosToggleRow('${escapeHtml(key)}', this.checked)"></td>`;
+    if(col.field === 'sku') return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><b>${escapeHtml(row.sku)}</b></td>`;
+    if(col.field === 'descripcion') return `<td data-col="descripcion" class="editor-sticky-2 editor-readonly" title="${escapeHtml(row.descripcion)}">${escapeHtml(row.descripcion)}</td>`;
+    return editorActivosCell(row, col.field, col.type === 'date' ? 'date' : (col.type === 'number' ? 'number' : 'text'));
+  }
+
+  function renderEditorActivos(){
+    const body = qs('editor-activos-body'); if(!body) return;
+    editorActivosInitColumnTools();
+    const visibleCols = editorActivosVisibleColumns();
+    if(!editorActivosRows.length){
+      body.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Pulsa Cargar para iniciar.</td></tr>';
+      editorActivosResumen(); return;
+    }
+    if(!editorActivosFiltered.length){
+      body.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Sin resultados con esos filtros.</td></tr>';
+      editorActivosResumen(); return;
+    }
+    const start = (editorActivosPage - 1) * editorActivosPageSize;
+    const rows = editorActivosFiltered.slice(start, start + editorActivosPageSize);
+    body.innerHTML = rows.map(row => `<tr class="${row.dado_de_baja?'editor-row-baja':''}">${visibleCols.map(col => editorActivosTd(row,col)).join('')}</tr>`).join('');
+    const cb = qs('editor-activos-select-page');
+    if(cb){ cb.checked = rows.length > 0 && rows.every(r => editorActivosSelected.has(editorActivosKey(r))); }
+    editorActivosResumen();
+    editorActivosApplyColumnWidths();
+  }
+
+  function editorActivosOnInput(input){
+    const key = input.dataset.key;
+    const field = input.dataset.field;
+    const row = editorActivosRows.find(r => editorActivosKey(r) === key);
+    if(!row) return;
+    let val = input.value;
+    if(field === 'dado_de_baja') val = input.value === '1';
+    if(field === 'fecha_adquisicion' || field === 'baja_at') val = parseCsvDateToDateOnly(val) || '';
+    row[field] = val;
+    editorActivosSetModifiedField(key, field, val);
+    editorActivosUpdateSearch(row);
+    const isMod = !!(editorActivosModified.get(key) || {})[field];
+    input.classList.toggle('editor-modified', isMod);
+    input.closest('td')?.classList.toggle('editor-modified', isMod);
+    editorActivosResumen();
+  }
+
+  function editorActivosToggleRow(key, checked){
+    if(checked) editorActivosSelected.add(String(key)); else editorActivosSelected.delete(String(key));
+    editorActivosResumen();
+  }
+  function editorActivosTogglePage(checked){
+    const start = (editorActivosPage - 1) * editorActivosPageSize;
+    editorActivosFiltered.slice(start, start + editorActivosPageSize).forEach(r => {
+      const key = editorActivosKey(r);
+      if(checked) editorActivosSelected.add(key); else editorActivosSelected.delete(key);
+    });
+    renderEditorActivos();
+  }
+  function editorActivosSeleccionarFiltrados(){
+    editorActivosFiltered.forEach(r => editorActivosSelected.add(editorActivosKey(r)));
+    renderEditorActivos();
+  }
+  function editorActivosLimpiarSeleccion(){
+    editorActivosSelected = new Set();
+    renderEditorActivos();
+  }
+
+  function editorActivosGoPage(delta){
+    const pages = Math.max(1, Math.ceil(editorActivosFiltered.length / editorActivosPageSize));
+    editorActivosPage = Math.min(pages, Math.max(1, editorActivosPage + delta));
+    renderEditorActivos();
+  }
+
+  function limpiarFiltrosEditorActivos(){
+    ['editor-activos-search','editor-activos-genero','editor-activos-ubicacion','editor-activos-responsable','editor-activos-baja'].forEach(id=>{ const el=qs(id); if(el) el.value=''; });
+    const solo = qs('editor-activos-solo-modificados'); if(solo) solo.checked = false;
+    aplicarFiltrosEditorActivos();
+  }
+
+  function editorActivosRestoreRow(key){
+    const row = editorActivosRows.find(r => editorActivosKey(r) === key);
+    const orig = editorActivosOriginal.get(key);
+    if(!row || !orig) return;
+    EDITOR_ACTIVOS_EDITABLES.forEach(f => { row[f] = orig[f]; });
+    editorActivosModified.delete(key);
+    editorActivosUpdateSearch(row);
+  }
+  function deshacerEditorActivosTodos(){
+    if(!editorActivosModified.size) return;
+    if(!confirm(`¿Descartar todos los cambios pendientes (${editorActivosModified.size})?`)) return;
+    [...editorActivosModified.keys()].forEach(editorActivosRestoreRow);
+    editorActivosStatus('Cambios descartados.');
+    aplicarFiltrosEditorActivos();
+  }
+  function deshacerEditorActivosSeleccionados(){
+    if(!editorActivosSelected.size) return;
+    const keys = [...editorActivosSelected].filter(k => editorActivosModified.has(k));
+    if(!keys.length){ alert('Las filas seleccionadas no tienen cambios pendientes.'); return; }
+    if(!confirm(`¿Descartar cambios de ${keys.length} activo(s) seleccionado(s)?`)) return;
+    keys.forEach(editorActivosRestoreRow);
+    editorActivosStatus(`Cambios descartados en seleccionados: ${keys.length}.`);
+    aplicarFiltrosEditorActivos();
+  }
+
+  function editorActivosBulkApply(){
+    if(!editorActivosSelected.size){ alert('Selecciona primero una o más filas.'); return; }
+    const labels = EDITOR_ACTIVOS_EDITABLES.map((f,i)=>`${i+1}. ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===f)?.label || f}`).join('\n');
+    const op = prompt(`Campo a modificar en ${editorActivosSelected.size} activo(s):\n\n${labels}\n\nEscribe el número o nombre del campo:`);
+    if(!op) return;
+    let field = EDITOR_ACTIVOS_EDITABLES[Number(op)-1] || EDITOR_ACTIVOS_EDITABLES.find(f => editorActivosNormFilter(f) === editorActivosNormFilter(op)) || EDITOR_ACTIVOS_COLUMNS.find(c => editorActivosNormFilter(c.label) === editorActivosNormFilter(op))?.field;
+    if(!EDITOR_ACTIVOS_EDITABLES.includes(field)){ alert('Campo no válido.'); return; }
+    let val = prompt(`Nuevo valor para ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===field)?.label || field}:\n\nPara Dado de baja usa Sí/No o 1/0.\nPara fecha usa AAAA-MM-DD o DD/MM/AAAA.`);
+    if(val === null) return;
+    if(field === 'dado_de_baja') val = editorActivosBool(val);
+    if(field === 'fecha_adquisicion' || field === 'baja_at'){
+      val = parseCsvDateToDateOnly(val) || '';
+      if(!val && !confirm('La fecha quedó vacía o no fue reconocida. ¿Continuar?')) return;
+    }
+    if(field === 'cantidad'){
+      const n = Number(String(val).replace(/,/g,''));
+      if(!Number.isFinite(n)){ alert('Cantidad inválida.'); return; }
+      val = n;
+    }
+    if(field === 'costo'){
+      const n = editorActivosSafeNumber(val);
+      if(n === null && String(val).trim() !== ''){ alert('Costo inválido.'); return; }
+      val = n;
+    }
+    const selectedRows = editorActivosRows.filter(r => editorActivosSelected.has(editorActivosKey(r)));
+    if(!confirm(`¿Aplicar el cambio a ${selectedRows.length} activo(s) seleccionado(s)?`)) return;
+    selectedRows.forEach(row => {
+      const key = editorActivosKey(row);
+      row[field] = val;
+      editorActivosSetModifiedField(key, field, val);
+      editorActivosUpdateSearch(row);
+    });
+    editorActivosStatus(`Edición masiva aplicada: ${selectedRows.length} activo(s). Revisa amarillo y guarda cambios.`);
+    aplicarFiltrosEditorActivos();
+  }
+
+  function editorActivosColumnasConfig(){
+    const optional = EDITOR_ACTIVOS_COLUMNS.filter(c => !c.always);
+    const txt = optional.map((c,i)=>`${i+1}. [${editorActivosHiddenColumns.has(c.field)?'oculta':'visible'}] ${c.label}`).join('\n');
+    const ans = prompt(`Configurar columnas\n\nEscribe números de columnas a OCULTAR separados por coma.\nDeja vacío para mostrar todas.\n\n${txt}`,[...editorActivosHiddenColumns].map(f => optional.findIndex(c=>c.field===f)+1).filter(n=>n>0).join(','));
+    if(ans === null) return;
+    editorActivosHiddenColumns = new Set();
+    String(ans).split(',').map(x=>Number(x.trim())).filter(n=>Number.isFinite(n) && n>=1 && n<=optional.length).forEach(n => editorActivosHiddenColumns.add(optional[n-1].field));
+    editorActivosSaveHiddenColumns();
+    editorActivosLastSignature = '';
+    editorActivosStatus('Configuración de columnas actualizada.');
+    aplicarFiltrosEditorActivos();
+  }
+  function editorActivosRestaurarColumnas(){
+    if(!confirm('¿Restaurar columnas visibles y anchos originales?')) return;
+    editorActivosHiddenColumns = new Set();
+    editorActivosColumnWidths = {};
+    editorActivosSaveHiddenColumns(); editorActivosSaveColumnWidths();
+    editorActivosStatus('Columnas restauradas.');
+    aplicarFiltrosEditorActivos();
+  }
+
+  function editorActivosValidatePayload(sku, changes){
+    const errors = [];
+    if(!String(sku || '').trim()) errors.push('SKU vacío');
+    if(Object.prototype.hasOwnProperty.call(changes,'cantidad')){
+      const n = Number(String(changes.cantidad ?? '').replace(/,/g,''));
+      if(!Number.isFinite(n)) errors.push('Cantidad inválida');
+      if(n < 0) errors.push('Cantidad negativa');
+    }
+    if(Object.prototype.hasOwnProperty.call(changes,'costo')){
+      const raw = String(changes.costo ?? '').trim();
+      const n = editorActivosSafeNumber(raw);
+      if(raw && n === null) errors.push('Costo inválido');
+      if(n !== null && n < 0) errors.push('Costo negativo');
+    }
+    ['fecha_adquisicion','baja_at'].forEach(f => {
+      if(Object.prototype.hasOwnProperty.call(changes,f)){
+        const raw = String(changes[f] ?? '').trim();
+        if(raw && !parseCsvDateToDateOnly(raw)) errors.push(`${f} inválida`);
+      }
+    });
+    return errors;
+  }
+
+  async function guardarEditorActivos(){
+    if(!editorActivosModified.size) return;
+    const validation = [];
+    for(const [sku, changes] of editorActivosModified.entries()){
+      const errs = editorActivosValidatePayload(sku, changes);
+      if(errs.length) validation.push(`${sku}: ${errs.join(', ')}`);
+    }
+    if(validation.length){ alert('No se puede guardar. Corrige estos errores:\n\n' + validation.slice(0,12).join('\n') + (validation.length>12?'\n...':'')); return; }
+    if(!confirm(`¿Guardar ${editorActivosModified.size} activo(s) modificado(s)?`)) return;
+    editorActivosStatus('Guardando cambios...');
+    const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}`, 'Content-Type':'application/json', Prefer:'return=minimal' };
+    let ok=0, fail=0; const errores=[];
+    for(const [sku, changes] of editorActivosModified.entries()){
+      const payload = {};
+      for(const field of EDITOR_ACTIVOS_EDITABLES){
+        if(!Object.prototype.hasOwnProperty.call(changes, field)) continue;
+        let val = changes[field];
+        if(['cantidad'].includes(field)) val = Number(String(val ?? '').trim()) || 0;
+        else if(['costo'].includes(field)) val = editorActivosSafeNumber(val);
+        else if(['fecha_adquisicion','baja_at'].includes(field)) val = parseCsvDateToDateOnly(val) || null;
+        else if(field === 'dado_de_baja') val = editorActivosBool(val);
+        else val = String(val ?? '').trim();
+        payload[field] = val;
+      }
+      if(!Object.keys(payload).length) continue;
+      try{
+        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}`;
+        const res = await fetch(url, { method:'PATCH', headers, body: JSON.stringify(payload) });
+        if(!res.ok) throw new Error(await res.text().catch(()=>`HTTP ${res.status}`));
+        ok++;
+        const row = editorActivosRows.find(r => editorActivosKey(r) === sku);
+        if(row) editorActivosOriginal.set(sku, editorActivosCloneComparable(row));
+        editorActivosModified.delete(sku);
+      }catch(e){ console.error('Error guardando', sku, e); fail++; errores.push(`${sku}: ${e.message || e}`); }
+    }
+    editorActivosRows.forEach(editorActivosUpdateSearch);
+    editorActivosActualizarFiltros();
+    editorActivosStatus(`Guardado terminado. OK: ${ok}. Error: ${fail}.`);
+    aplicarFiltrosEditorActivos();
+    if(fail) alert(`Guardado con errores.\n\nOK: ${ok}\nError: ${fail}\n\n${errores.slice(0,10).join('\n')}`);
+    else alert(`Guardado correcto.\n\nActivos actualizados: ${ok}`);
+  }
+
+  function exportarEditorActivosCsv(){
+    const rows = editorActivosFiltered.length ? editorActivosFiltered : editorActivosRows;
+    if(!rows.length){ alert('Primero carga el editor.'); return; }
+    const headers = EDITOR_ACTIVOS_CSV_FIELDS.map(f => EDITOR_ACTIVOS_CSV_LABELS[f] || f);
+    const lines = [headers.map(csvEscape).join(',')];
+    rows.forEach(r => {
+      lines.push(EDITOR_ACTIVOS_CSV_FIELDS.map(f => {
+        if(f === 'fecha_adquisicion' || f === 'baja_at' || f === 'created_at') return csvEscape(formatCsvDateOnly(r[f]));
+        if(f === 'dado_de_baja') return csvEscape(r[f] ? 1 : 0);
+        return csvEscape(r[f] ?? '');
+      }).join(','));
+    });
+    const emp = (empresaSeleccionada?.nombre || 'empresa').toString().trim().replace(/\s+/g,'_');
+    downloadTextFile(`editor_activos_${emp}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    editorActivosStatus(`CSV exportado: ${rows.length} activo(s).`);
+  }
+
+  function editorActivosHeaderToField(h){
+    const n = normHeader(h);
+    const aliases = { descripcion:'descripcion', serie:'numero_serie', numero_serie:'numero_serie', codigobarras:'codigo_barras', codigo_barras:'codigo_barras', codigo_barras_:'codigo_barras', fechadquisicion:'fecha_adquisicion', fechaadquisicion:'fecha_adquisicion', fecha_adquisicion:'fecha_adquisicion', dadodebaja:'dado_de_baja', dado_de_baja:'dado_de_baja', bajaat:'baja_at', baja_at:'baja_at', fecharegistro:'created_at', fecha_registro:'created_at' };
+    return aliases[n] || n;
+  }
+
+  async function importarEditorActivosCsv(file){
+    if(!file) return;
+    if(!editorActivosRows.length){ alert('Primero carga el editor para comparar contra los activos existentes.'); return; }
+    try{
+      const table = parseCsv(await file.text());
+      if(table.length < 2){ alert('El CSV no tiene registros.'); return; }
+      const headers = table[0].map(editorActivosHeaderToField);
+      const idxSku = headers.indexOf('sku');
+      if(idxSku < 0){ alert('El CSV debe incluir columna sku.'); return; }
+      const importables = headers.map((field,index)=>({field,index})).filter(x => EDITOR_ACTIVOS_EDITABLES.includes(x.field));
+      if(!importables.length){ alert('No hay columnas editables para importar.'); return; }
+      const map = new Map(editorActivosRows.map(r => [editorActivosKey(r).toLowerCase(), r]));
+      let actualizados=0, omitidos=0, sinCambios=0, errores=0, repetidos=0;
+      const seen = new Set(); const changes=[]; const errorLines=[];
+      for(let i=1;i<table.length;i++){
+        const cols = table[i];
+        const sku = String(cols[idxSku]||'').trim();
+        if(!sku) continue;
+        const lower = sku.toLowerCase();
+        if(seen.has(lower)){ repetidos++; errorLines.push(`Fila ${i+1}: SKU repetido en CSV (${sku})`); continue; }
+        seen.add(lower);
+        const row = map.get(lower);
+        if(!row){ omitidos++; continue; }
+        const change = {};
+        for(const {field,index} of importables){
+          let val = String(cols[index] ?? '').trim();
+          if(field === 'dado_de_baja') val = editorActivosBool(val);
+          if(field === 'fecha_adquisicion' || field === 'baja_at'){
+            if(val && !parseCsvDateToDateOnly(val)){ errores++; errorLines.push(`Fila ${i+1} SKU ${sku}: fecha inválida en ${field}`); continue; }
+            val = parseCsvDateToDateOnly(val) || '';
+          }
+          if(field === 'cantidad'){
+            const n = Number(String(val).replace(/,/g,''));
+            if(val !== '' && !Number.isFinite(n)){ errores++; errorLines.push(`Fila ${i+1} SKU ${sku}: cantidad inválida`); continue; }
+            val = val === '' ? '' : n;
+          }
+          if(field === 'costo'){
+            const n = editorActivosSafeNumber(val);
+            if(val !== '' && n === null){ errores++; errorLines.push(`Fila ${i+1} SKU ${sku}: costo inválido`); continue; }
+            val = val === '' ? '' : n;
+          }
+          if(!editorActivosValuesEqual(field, row[field], val)) change[field] = val;
+        }
+        if(Object.keys(change).length){ changes.push({sku, change}); actualizados++; } else sinCambios++;
+      }
+      const summary = `Prevalidación de CSV\n\nCambios por aplicar: ${actualizados}\nSin cambios: ${sinCambios}\nOmitidos no encontrados: ${omitidos}\nSKUs repetidos en CSV: ${repetidos}\nErrores: ${errores}\n\n${errorLines.slice(0,12).join('\n')}${errorLines.length>12?'\n...':''}`;
+      if(errorLines.length){ alert(summary + '\n\nCorrige el CSV antes de importar.'); return; }
+      if(!changes.length){ alert(summary + '\n\nNo hay cambios para aplicar.'); return; }
+      if(!confirm(summary + '\n\n¿Aplicar estos cambios en pantalla? Todavía tendrás que presionar Guardar cambios para subirlos.')) return;
+      changes.forEach(({sku, change}) => {
+        const row = map.get(String(sku).toLowerCase());
+        if(!row) return;
+        const key = editorActivosKey(row);
+        Object.entries(change).forEach(([field,val]) => {
+          row[field] = val;
+          editorActivosSetModifiedField(key, field, val);
+        });
+        editorActivosUpdateSearch(row);
+      });
+      editorActivosStatus(`CSV aplicado en pantalla. Con cambios: ${actualizados}. Omitidos: ${omitidos}.`);
+      aplicarFiltrosEditorActivos();
+    }catch(e){ alert('Error al importar CSV: ' + (e.message || e)); }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    editorActivosLoadColumnWidths();
+    editorActivosLoadHiddenColumns();
+    editorActivosInitColumnTools();
+    let t = null;
+    qs('editor-activos-search')?.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(aplicarFiltrosEditorActivos, 180); });
+    ['editor-activos-genero','editor-activos-ubicacion','editor-activos-responsable'].forEach(id => {
+      const el = qs(id);
+      if(!el) return;
+      el.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(aplicarFiltrosEditorActivos, 120); });
+      el.addEventListener('change', aplicarFiltrosEditorActivos);
+    });
+    ['editor-activos-baja','editor-activos-solo-modificados'].forEach(id => qs(id)?.addEventListener('change', aplicarFiltrosEditorActivos));
+    document.addEventListener('keydown', (ev) => {
+      const inEditor = !qs('view-editor-activos')?.classList.contains('hidden');
+      if((ev.ctrlKey || ev.metaKey) && String(ev.key || '').toLowerCase() === 's' && inEditor){ ev.preventDefault(); guardarEditorActivos(); }
+      if((ev.ctrlKey || ev.metaKey) && String(ev.key || '').toLowerCase() === 'z' && inEditor){ ev.preventDefault(); deshacerEditorActivosTodos(); }
+    });
+    window.addEventListener('beforeunload', (ev) => {
+      if(editorActivosHasUnsaved()){
+        ev.preventDefault();
+        ev.returnValue = '';
+      }
+    });
+  });
 
   // =========================
   // ✅ CATÁLOGOS (MEJORA): sin "distinct" (PostgREST), paginado + Set
