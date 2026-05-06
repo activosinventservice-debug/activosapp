@@ -1298,11 +1298,11 @@ document.addEventListener('keydown', (e)=>{
           r?.responsable,
           r?.codigo_barras,
           r?.cantidad,
-          formatAndroidCsvDate(r?.created_at),
+          formatCsvDateOnly(r?.created_at),
           r?.costo,
-          formatAndroidCsvDate(r?.fecha_adquisicion),
+          formatCsvDateOnly(r?.fecha_adquisicion),
           (r?.dado_de_baja ? 1 : 0),
-          formatAndroidCsvDate(r?.baja_at)
+          formatCsvDateOnly(r?.baja_at)
         ];
         out.push(row.map(csvEscape).join(","));
       }
@@ -1398,11 +1398,11 @@ document.addEventListener('keydown', (e)=>{
           r?.responsable,
           r?.codigo_barras,
           r?.cantidad,
-          formatAndroidCsvDate(r?.created_at),
+          formatCsvDateOnly(r?.created_at),
           r?.costo,
-          formatAndroidCsvDate(r?.fecha_adquisicion),
+          formatCsvDateOnly(r?.fecha_adquisicion),
           (r?.dado_de_baja ? 1 : 0),
-          formatAndroidCsvDate(r?.baja_at)
+          formatCsvDateOnly(r?.baja_at)
         ];
         out.push(row.map(csvEscape).join(","));
       }
@@ -1461,6 +1461,48 @@ function parseCsvDateToIso(value){
   if(m){
     const [,dd,mm,yyyy,hh='00',mi='00',ss='00'] = m;
     return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  }
+  return s;
+}
+
+function parseCsvDateToDateOnly(value){
+  const s = (value ?? "").toString().trim();
+  if(!s) return null;
+
+  // Acepta CSV exportado como dd/mm/yyyy o dd/mm/yyyy HH:mm, pero sube solo la fecha.
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+  if(m){
+    const [,dd,mm,yyyy] = m;
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  }
+
+  // Acepta ISO yyyy-mm-dd, yyyy-mm-dd HH:mm o yyyy-mm-ddTHH:mm:ss, pero conserva solo yyyy-mm-dd.
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T].*)?$/);
+  if(m){
+    const [,yyyy,mm,dd] = m;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const d = new Date(s);
+  if(!Number.isNaN(d.getTime())){
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  return s;
+}
+
+function formatCsvDateOnly(value){
+  const s = (value ?? "").toString().trim();
+  if(!s) return "";
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T].*)?$/);
+  if(iso){
+    const [,yyyy,mm,dd] = iso;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  const d = new Date(s);
+  if(!Number.isNaN(d.getTime())){
+    const pad = n => String(n).padStart(2,'0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
   }
   return s;
 }
@@ -1559,11 +1601,11 @@ function toBool(v){
         responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
         codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
         cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"0").toString().trim())||0) : 0,
-        created_at: mapIdx.fecha_registro>=0 ? parseCsvDateToIso(r[mapIdx.fecha_registro]) : null,
+        created_at: mapIdx.fecha_registro>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_registro]) : null,
         costo: mapIdx.costo>=0 ? toNum(r[mapIdx.costo]) : null,
-        fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToIso(r[mapIdx.fecha_adquisicion]) : null,
+        fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
-        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToIso(r[mapIdx.baja_at]) : null,
+        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToDateOnly(r[mapIdx.baja_at]) : null,
         creado_por_email: createdByEmail,
         creado_por_nombre: createdByNombre,
       };
