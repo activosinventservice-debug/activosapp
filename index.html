@@ -6,6 +6,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https:; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https:; connect-src 'self' https://api.inventariosactivosfijos.org https://cfowmccvnzcrssgkabtt.supabase.co https:; upgrade-insecure-requests">
 <title>Inventario Activos Fijos - Web</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" />
 
   
@@ -157,6 +158,10 @@
     .editor-select-cell input{width:16px; height:16px}
     .editor-row-baja td{background:#F8FAFC; color:#64748B}
     .editor-readonly{color:#64748B; font-weight:900; overflow:hidden; text-overflow:ellipsis}
+    .editor-sku-link{border:0; background:transparent; color:#0B4CB3; font:inherit; font-weight:950; display:flex; align-items:center; gap:5px; width:100%; padding:0; cursor:pointer; text-align:left; overflow:hidden}
+    .editor-sku-link b{overflow:hidden; text-overflow:ellipsis}
+    .editor-sku-link .material-symbols-rounded{font-size:16px; opacity:.72; flex:0 0 auto}
+    .editor-sku-link:hover{text-decoration:underline}
     .editor-bottombar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 -6px 18px rgba(0,40,100,.04)}
     .editor-bottombar .pagination{margin:0; justify-content:flex-end}
     @media(max-width:1100px){.editor-filterbar{grid-template-columns:1fr 1fr}.editor-actions{justify-content:flex-start}.editor-mainbar{align-items:flex-start; flex-direction:column}.editor-table{font-size:.74rem}}
@@ -664,6 +669,7 @@
           <button class="btn tonal" onclick="editorActivosColumnasConfig()"><span class="material-symbols-rounded">view_column</span> Columnas</button>
           <button class="btn tonal" onclick="editorActivosRestaurarColumnas()"><span class="material-symbols-rounded">restart_alt</span> Restaurar columnas</button>
           <button class="btn tonal" onclick="exportarEditorActivosCsv()"><span class="material-symbols-rounded">table_view</span> Exportar CSV</button>
+          <button class="btn tonal" id="btn-editor-activos-fotos" onclick="editorActivosDescargarFotosSeleccionadas()" disabled><span class="material-symbols-rounded">photo_library</span> Bajar fotos selección</button>
           <input id="editor-activos-import" type="file" accept=".csv,text/csv" class="hidden" onchange="importarEditorActivosCsv(this.files && this.files[0]); this.value=''"/>
           <button class="btn tonal" onclick="qs('editor-activos-import').click()"><span class="material-symbols-rounded">upload_file</span> Importar CSV</button>
           <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
