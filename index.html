@@ -137,7 +137,7 @@
     .editor-check input{width:16px; height:16px}
     .editor-wrap{flex:1 1 auto; min-height:0; overflow:auto; border-radius:16px; border:1px solid var(--border); background:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
     .editor-table{border-collapse:separate; border-spacing:0; min-width:1880px; width:max-content; font-size:.76rem; line-height:1.05; table-layout:fixed}
-    .editor-table th,.editor-table td{border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; white-space:nowrap; height:38px; overflow:hidden; text-overflow:ellipsis}
+    .editor-table th,.editor-table td{border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; white-space:nowrap; height:38px; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box; max-width:0}
     .editor-table thead th{position:sticky; top:0; z-index:8; background:#F8FAFC; font-size:.68rem; text-transform:uppercase; letter-spacing:.02em; color:#475569; height:32px; user-select:none}
     .editor-th-sort{width:100%; border:0; background:transparent; color:inherit; font:inherit; font-weight:900; text-transform:uppercase; letter-spacing:.02em; display:flex; align-items:center; justify-content:space-between; gap:5px; padding:0 14px 0 0; cursor:pointer; text-align:left}
     .editor-th-sort span:first-child{overflow:hidden; text-overflow:ellipsis}
@@ -147,7 +147,7 @@
     body.editor-resizing{cursor:col-resize !important; user-select:none}
     .editor-sticky-select{position:sticky; left:0; z-index:10; background:#fff; min-width:var(--editor-select-w,44px); width:var(--editor-select-w,44px); box-shadow:1px 0 0 var(--border); text-align:center!important}
     .editor-sticky-1{position:sticky; left:var(--editor-select-w,44px); z-index:9; background:#fff; min-width:var(--editor-sku-w,92px); width:var(--editor-sku-w,92px); box-shadow:1px 0 0 var(--border)}
-    .editor-sticky-2{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,92px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,420px); width:var(--editor-desc-w,420px); box-shadow:1px 0 0 var(--border)}
+    .editor-sticky-2{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,92px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,280px); width:var(--editor-desc-w,280px); max-width:var(--editor-desc-w,280px); box-shadow:1px 0 0 var(--border)}
     thead .editor-sticky-select, thead .editor-sticky-1, thead .editor-sticky-2{z-index:12; background:#EEF4FF}
     .editor-input{width:100%; min-width:98px; border:1px solid var(--border); border-radius:9px; padding:6px 8px; font-weight:800; outline:none; background:#fff; font-size:.76rem}
     .editor-filter-input{background:#fff; min-width:0}

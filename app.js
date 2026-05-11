@@ -2673,7 +2673,7 @@ function resetChipFiltroUI(){
   const EDITOR_ACTIVOS_COLUMNS = [
     { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
     { field:'sku', label:'SKU', sticky:'editor-sticky-1', width:92, min:72, readonly:true, always:true },
-    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:420, min:220, readonly:true, always:true },
+    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:280, min:80, max:520, readonly:true, always:true },
     { field:'marca', label:'Marca', width:135, min:90 },
     { field:'modelo', label:'Modelo', width:135, min:90 },
     { field:'numero_serie', label:'Serie', width:135, min:90 },
@@ -2705,6 +2705,15 @@ function resetChipFiltroUI(){
 
   function editorActivosLoadColumnWidths(){
     try{ editorActivosColumnWidths = JSON.parse(localStorage.getItem('editorActivosColumnWidths') || '{}') || {}; }catch{ editorActivosColumnWidths = {}; }
+    // Evita que un ancho guardado demasiado grande deje inaccesible el borde para redimensionar.
+    EDITOR_ACTIVOS_COLUMNS.forEach(col => {
+      const saved = Number(editorActivosColumnWidths[col.field]);
+      if(!Number.isFinite(saved) || saved <= 0) return;
+      const min = col.min || 70;
+      const max = col.max || 900;
+      editorActivosColumnWidths[col.field] = Math.min(max, Math.max(min, saved));
+    });
+    editorActivosSaveColumnWidths();
   }
   function editorActivosSaveColumnWidths(){
     try{ localStorage.setItem('editorActivosColumnWidths', JSON.stringify(editorActivosColumnWidths)); }catch{}
@@ -2720,7 +2729,10 @@ function resetChipFiltroUI(){
   }
   function editorActivosColumnWidth(col){
     const saved = Number(editorActivosColumnWidths[col.field]);
-    return Number.isFinite(saved) && saved > 0 ? Math.max(col.min || 70, saved) : col.width;
+    const min = col.min || 70;
+    const max = col.max || 900;
+    const base = Number.isFinite(saved) && saved > 0 ? saved : col.width;
+    return Math.min(max, Math.max(min, base));
   }
   function editorActivosApplyColumnWidths(){
     const table = document.querySelector('#view-editor-activos .editor-table');
@@ -2808,7 +2820,9 @@ function resetChipFiltroUI(){
     const startW = editorActivosColumnWidth(col);
     document.body.classList.add('editor-resizing');
     const move = (e) => {
-      const w = Math.max(col.min || 70, startW + (e.clientX - startX));
+      const min = col.min || 70;
+      const max = col.max || 900;
+      const w = Math.min(max, Math.max(min, startW + (e.clientX - startX)));
       editorActivosColumnWidths[field] = Math.round(w);
       editorActivosApplyColumnWidths();
     };
