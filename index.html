@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https:; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https:; connect-src 'self' https://api.inventariosactivosfijos.org https://cfowmccvnzcrssgkabtt.supabase.co https:; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: blob: data:; base-uri 'self'; object-src 'self' blob: data: https:; frame-src 'self' blob: data: https:; child-src 'self' blob: data: https:; frame-ancestors 'none'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https:; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https:; connect-src 'self' https://api.inventariosactivosfijos.org https://cfowmccvnzcrssgkabtt.supabase.co https:; worker-src 'self' blob: data:; upgrade-insecure-requests">
 <title>Inventario Activos Fijos - Web</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -32,7 +32,7 @@
 
     .container{width:100%; max-width:1100px; margin:16px auto; padding:0 16px}
     .card{background:var(--surface); border-radius:var(--radius); border:1px solid var(--border); box-shadow:var(--shadow); padding:16px; margin-bottom:16px}
-    .hidden{display:none}
+    .hidden{display:none !important}
     .header-flex{display:flex; align-items:center; justify-content:space-between; gap:12px}
 
     /* ✅ mensajes */
@@ -109,8 +109,9 @@
 
     /* List */
     .list{display:grid; gap:8px}
-    .row{display:grid; grid-template-columns:160px 1fr auto; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; transition:.15s border-color,.15s transform}
+    .row{display:grid; grid-template-columns:160px 1fr auto; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; transition:.15s border-color,.15s transform,.15s box-shadow,.15s background}
     .row:hover{border-color:#D6E3FF; transform:translateY(-1px)}
+    .row.return-focus{border-color:#0B4CB3; background:#F0F6FF; box-shadow:0 0 0 3px rgba(11,76,179,.14)}
 
     /* Branding logos (discreto y bonito) */
     .logo-mini{width:44px; height:44px; border-radius:12px; object-fit:contain; background:#fff; border:1px solid var(--border); padding:6px; box-shadow:0 6px 14px rgba(10,40,100,.06)}
@@ -124,7 +125,7 @@
     body.editor-desktop .appbar-inner{max-width:none; padding-left:18px; padding-right:18px}
     body.editor-desktop .container{max-width:none; width:100%; margin:10px auto; padding:0 10px}
     #view-editor-activos.editor-full{padding:10px; margin:0; min-height:calc(100vh - 86px); border-radius:18px; display:flex; flex-direction:column; gap:10px; overflow:hidden}
-    #view-editor-activos.editor-full.hidden{display:none}
+    #view-editor-activos.editor-full.hidden{display:none !important}
     .editor-mainbar{position:sticky; top:0; z-index:16; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:rgba(255,255,255,.96); box-shadow:0 8px 20px rgba(15,23,42,.06)}
     .editor-mainbar h2{font-size:1.15rem; margin:0}
     .editor-status{font-size:.78rem; color:#64748B; font-weight:800}
@@ -170,6 +171,12 @@
     .empresa-card{grid-template-columns:auto 1fr auto !important}
     .empresa-card .empresa-logo-wrap{display:flex; align-items:center; justify-content:center; width:52px}
     .sku{font-weight:900}
+    .sku-line{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+    .asset-icons{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+    .asset-icon{display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:999px; border:1px solid #D7E5FF; background:#EFF6FF; color:#0B4CB3}
+    .asset-icon .material-symbols-rounded{font-size:18px}
+    .asset-icon.photo{background:#EEF7FF; border-color:#BFDBFE; color:#1D4ED8}
+    .asset-icon.pdf{background:#FEF2F2; border-color:#FECACA; color:#B91C1C}
     .barcode{font-family:'Courier New',monospace; background:#F4F7FF; padding:4px 8px; border-radius:8px; border:1px dashed #CAD7F1; display:inline-block; color:#0B4CB3; max-width:100%; overflow:hidden; text-overflow:ellipsis}
     .desc{color:#0F172A; font-size:.95rem; line-height:1.25rem; word-break:break-word}
     .meta{color:#6B7280; font-size:.8rem; display:flex; gap:14px; flex-wrap:wrap}
@@ -513,6 +520,16 @@
     .action-go{ color:var(--muted); margin-top:2px; }
 
     .modal-hint{ margin-top:2px; font-size:12px; color:var(--muted); padding:4px 2px 0 2px; }
+
+    /* Visor PDF interno */
+    .pdf-modal{ align-items:center; padding:10px; }
+    .pdf-modal .modal-card{ width:min(1100px, 98vw); height:min(92vh, 900px); display:flex; flex-direction:column; }
+    .pdf-modal .modal-head{ flex:0 0 auto; }
+    .pdf-viewer-body{ flex:1; min-height:0; padding:0; background:#111827; }
+    .pdf-viewer-frame{ width:100%; height:100%; border:0; background:#fff; display:block; }
+    .pdf-viewer-empty{ color:#fff; padding:18px; font-size:14px; }
+    html.is-mobile .pdf-modal{ align-items:center; padding:6px; }
+    html.is-mobile .pdf-modal .modal-card{ width:100vw; height:94vh; border-radius:14px; }
 .menu-item{
       width:100%;
       display:flex; align-items:flex-start; gap:12px;
@@ -738,13 +755,13 @@
     <!-- SKUS -->
     <div id="view-skus" class="card hidden">
       <div class="header-flex" style="margin-bottom:10px">
-        <h2 style="margin:0">Activos</h2>
+        <h2 style="margin:0">Gestión de SKUs</h2>
       </div>
 
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="toggleScannerPanel(true)"><span class="material-symbols-rounded">qr_code_scanner</span> Escáner</button>
         <button id="btn-skus-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end"><button class="btn" onclick="cargarEditorActivos()"><span class="material-symbols-rounded">download</span> Cargar activos</button><button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button></div>
+        <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
 
         <span class="divider"></span>
 
@@ -764,7 +781,7 @@
 
         <button id="chip-baja" class="chip-filter" onclick="toggleSoloBaja()"><span class="material-symbols-rounded">inventory_2</span> Solo baja</button>
 
-        <button id="btn-print-resguardo" class="btn tonal" disabled onclick="imprimirResguardoResponsable()">
+        <button id="btn-print-resguardo" class="btn tonal hidden" disabled onclick="imprimirResguardoResponsable()">
           <span class="material-symbols-rounded">print</span> Imprimir resguardo
         </button>
 
@@ -811,7 +828,7 @@
     <!-- DETALLE SKU -->
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
-        <button class="btn tonal" onclick="switchView('view-skus')"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
+        <button class="btn tonal" onclick="volverASkusDesdeDetalle()"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
         <button id="btn-detalle-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
 
         <span class="divider"></span>
@@ -865,7 +882,7 @@
       <div class="header-flex" style="margin-bottom:8px">
         <h2 style="margin:0">Catálogos</h2>
         <div class="btn-group">
-          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end"><button class="btn" onclick="cargarEditorActivos()"><span class="material-symbols-rounded">download</span> Cargar activos</button><button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button></div>
+          <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
           <button id="btn-cat-ir-skus" class="btn" onclick="switchView('view-skus')"><span class="material-symbols-rounded">list</span> Ir a SKUs</button>
         </div>
       </div>
@@ -1068,6 +1085,30 @@
   </div><!-- /container -->
 
   <!-- LIGHTBOX -->
+  <!-- VISOR PDF INTERNO -->
+  <div class="modal pdf-modal hidden" id="pdf-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="pdf-viewer-title">
+    <div class="modal-backdrop" onclick="closePdfViewer()"></div>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="pdf-viewer-title">Visor PDF</div>
+          <div class="modal-sub" id="pdf-viewer-sub">Vista previa sin descargar</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="icon-btn" type="button" onclick="openPdfViewerNewTab()" title="Abrir en pestaña">
+            <span class="material-symbols-rounded">open_in_new</span>
+          </button>
+          <button class="icon-btn" type="button" onclick="closePdfViewer()" title="Cerrar">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+      </div>
+      <div class="pdf-viewer-body" id="pdf-viewer-body">
+        <iframe id="pdf-viewer-frame" class="pdf-viewer-frame" title="Visor PDF"></iframe>
+      </div>
+    </div>
+  </div>
+
   <div id="lightbox" class="lightbox" role="dialog" aria-modal="true">
     <div class="lightbox-content">
       <img id="lightbox-img" class="lightbox-img" alt="Vista previa"/>

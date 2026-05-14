@@ -603,6 +603,10 @@ window.fetch = async function(input, init){
   }
 
   let cacheSkus = [], paginaActual = 0, totalActivos = 0, indiceActual = -1;
+  let skuRetornoDetalle = '';
+  let skuAdjuntosMap = new Map();
+  let skuAdjuntosPendientes = new Set();
+  let skusConsultaSeq = 0;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
 // =========================
@@ -760,6 +764,10 @@ function updatePrintButtonState(){
   const allowed = canExportPdf(); // permiso (empresa_user_permissions)
 
   const ok = !!(resp && hasBase && allowed);
+
+  // En Gestión de SKUs el botón solo debe aparecer cuando realmente aplica:
+  // flujo Catálogos -> Responsable + sesión/empresa válida + permiso PDF.
+  btn.classList.toggle('hidden', !ok);
   btn.disabled = !ok;
 
   if(!allowed){
@@ -2178,6 +2186,7 @@ function resetChipFiltroUI(){
   }
 
   async function consultarSkus(){
+    const consultaSeq = ++skusConsultaSeq;
     setSkusMsg("");
     if(!empresaSeleccionada) return;
 
@@ -2217,6 +2226,8 @@ function resetChipFiltroUI(){
       'responsable',
       'localizacion',
       'fecha_adquisicion',
+      'has_foto',
+      'has_factura_pdf',
       'created_at',
       'updated_at',
       'dado_de_baja'
@@ -2270,7 +2281,18 @@ function resetChipFiltroUI(){
       updatePrintButtonState();
       syncGlobals();
 
-      cacheSkus = await res.json();
+      const dataSkus = await res.json();
+      if(consultaSeq !== skusConsultaSeq) return;
+      cacheSkus = dataSkus;
+      guardarIndicadoresDesdeActivos(cacheSkus);
+      // Primero pinta la lista con lo que ya esté en cache, y luego refresca indicadores.
+      // Así al cambiar de página o volver atrás no se pierden los iconos por un render intermedio.
+      renderTabla();
+      cargarIndicadoresAdjuntosSkus(cacheSkus).then(() => {
+        if(consultaSeq === skusConsultaSeq) renderTabla();
+      }).catch(err => {
+        console.warn('No se pudieron refrescar los indicadores de foto/PDF en SKUs.', err);
+      });
       if (paginaActual === 0) {
         const range = res.headers.get('Content-Range');
         const totalPart = String((range || '').split('/')[1] || '').trim();
@@ -2282,7 +2304,6 @@ function resetChipFiltroUI(){
       } else if (cacheSkus.length === 0 && paginaActual > 0) {
         totalActivos = Math.max(0, paginaActual * TAMANO_PAGINA);
       }
-      renderTabla();
       renderPaginacion();
     }catch(e){
       console.error(e);
@@ -2292,6 +2313,122 @@ function resetChipFiltroUI(){
     }finally{
       isLoading=false;
     }
+  }
+
+
+  function guardarIndicadoresDesdeActivo(row){
+    const sku = String(getv(row,'sku') || '').trim();
+    if(!sku || !empresaSeleccionada) return;
+    const empresaKey = String(empresaSeleccionada?.id || empresaSeleccionada?.nombre || '').trim();
+    const cacheKey = `${empresaKey}|${sku}`;
+    const current = skuAdjuntosMap.get(cacheKey) || { foto:false, pdf:false };
+
+    // Igual que la app Android SkusScreen: tomar primero las banderas persistidas en activos.
+    // Esto permite que los iconos salgan desde la primera búsqueda, sin esperar otra consulta a adjuntos.
+    const hasFoto = isTrue(getRaw(row,'has_foto','hasFoto'));
+    const hasPdf  = isTrue(getRaw(row,'has_factura_pdf','hasFacturaPdf','hasFacturaPDF'));
+
+    if(hasFoto || hasPdf){
+      skuAdjuntosMap.set(cacheKey, {
+        foto: current.foto || hasFoto,
+        pdf: current.pdf || hasPdf
+      });
+    }else if(!skuAdjuntosMap.has(cacheKey)){
+      skuAdjuntosMap.set(cacheKey, current);
+    }
+  }
+
+  function guardarIndicadoresDesdeActivos(rows){
+    (rows || []).forEach(guardarIndicadoresDesdeActivo);
+  }
+
+  async function cargarIndicadoresAdjuntosSkus(rows){
+    const skus = [...new Set((rows || []).map(r => String(getv(r,'sku') || '').trim()).filter(Boolean))];
+    if(!skus.length || !empresaSeleccionada) return;
+
+    const empresaKey = String(empresaSeleccionada?.id || empresaSeleccionada?.nombre || '').trim();
+    const toFetch = skus.filter(sku => {
+      const cacheKey = `${empresaKey}|${sku}`;
+      return !skuAdjuntosMap.has(cacheKey) && !skuAdjuntosPendientes.has(cacheKey);
+    });
+    if(!toFetch.length) return;
+
+    toFetch.forEach(sku => skuAdjuntosPendientes.add(`${empresaKey}|${sku}`));
+
+    const chunks = editorActivosChunkArray(toFetch, 120);
+    const adjHeaders = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${sessionToken}`
+    };
+    const getData = async (url) => {
+      const res = await fetch(url, { headers: adjHeaders });
+      if(!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    };
+
+    try{
+      for(const chunk of chunks){
+        const inList = editorActivosPostgrestInList(chunk);
+        if(!inList) continue;
+
+        // Marcar todos como consultados; si no llegan adjuntos se quedan en false.
+        chunk.forEach(sku => {
+          const cacheKey = `${empresaKey}|${sku}`;
+          if(!skuAdjuntosMap.has(cacheKey)) skuAdjuntosMap.set(cacheKey, { foto:false, pdf:false });
+        });
+
+        const selectCols = 'sku,tipo';
+        const urls = [];
+        if(empresaSeleccionada?.id){
+          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&tipo=in.(foto,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
+        }
+        if(empresaSeleccionada?.nombre){
+          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})&tipo=in.(foto,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
+        }
+
+        const rowsAdj = [];
+        for(const url of urls){
+          try{
+            const data = await getData(url);
+            if(data.length) rowsAdj.push(...data);
+          }catch(err){
+            console.warn('Consulta de indicadores adjuntos falló para una ruta.', err);
+          }
+        }
+
+        rowsAdj.forEach(item => {
+          const sku = String(item?.sku || '').trim();
+          const tipo = String(item?.tipo || '').trim().toLowerCase();
+          if(!sku) return;
+          const cacheKey = `${empresaKey}|${sku}`;
+          const meta = skuAdjuntosMap.get(cacheKey) || { foto:false, pdf:false };
+          if(tipo === 'foto') meta.foto = true;
+          if(tipo === 'factura' || tipo === 'pdf') meta.pdf = true;
+          skuAdjuntosMap.set(cacheKey, meta);
+        });
+      }
+    }finally{
+      toFetch.forEach(sku => skuAdjuntosPendientes.delete(`${empresaKey}|${sku}`));
+    }
+  }
+
+  function getSkuAdjuntosIndicadores(sku){
+    const empresaKey = String(empresaSeleccionada?.id || empresaSeleccionada?.nombre || '').trim();
+    const key = `${empresaKey}|${String(sku || '').trim()}`;
+    return skuAdjuntosMap.get(key) || { foto:false, pdf:false };
+  }
+
+  function renderSkuAdjuntosIndicadores(sku){
+    const meta = getSkuAdjuntosIndicadores(sku);
+    const icons = [];
+    if(meta?.foto){
+      icons.push(`<span class="asset-icon photo" title="Tiene foto" aria-label="Tiene foto"><span class="material-symbols-rounded">photo_camera</span></span>`);
+    }
+    if(meta?.pdf){
+      icons.push(`<span class="asset-icon pdf" title="Tiene PDF o factura" aria-label="Tiene PDF o factura"><span class="material-symbols-rounded">picture_as_pdf</span></span>`);
+    }
+    return icons.length ? `<div class="asset-icons">${icons.join('')}</div>` : '';
   }
 
   function renderTabla(){
@@ -2310,9 +2447,14 @@ function resetChipFiltroUI(){
         costoFmt && `<span><b>Costo:</b> ${escapeHtml(costoFmt)}</span>`
       ].filter(Boolean).join('');
 
-      return `<div class="row">
+      const adjuntosIcons = renderSkuAdjuntosIndicadores(sku);
+
+      return `<div class="row" data-sku="${escapeHtml(sku)}">
         <div>
-          <div class="sku">${escapeHtml(sku)}</div>
+          <div class="sku-line">
+            <div class="sku">${escapeHtml(sku)}</div>
+            ${adjuntosIcons}
+          </div>
           ${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}
         </div>
         <div>
@@ -2344,12 +2486,43 @@ function resetChipFiltroUI(){
 
   function irAPagina(p){ paginaActual=p; consultarSkus(); }
 
+
+  function enfocarSkuEnLista(sku){
+    const targetSku = String(sku || skuRetornoDetalle || '').trim();
+    if(!targetSku) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const rows = Array.from(document.querySelectorAll('#rows .row'));
+        const row = rows.find(el => String(el?.dataset?.sku || '').trim() === targetSku);
+        if(!row) return;
+
+        try{
+          row.scrollIntoView({ behavior:'smooth', block:'center', inline:'nearest' });
+        }catch{
+          row.scrollIntoView(true);
+        }
+
+        row.classList.add('return-focus');
+        window.setTimeout(() => row.classList.remove('return-focus'), 1800);
+      });
+    });
+  }
+
+  function volverASkusDesdeDetalle(){
+    const skuActual = String(getv(cacheSkus[indiceActual] || {}, 'sku') || skuRetornoDetalle || '').trim();
+    if(skuActual) skuRetornoDetalle = skuActual;
+    switchView('view-skus');
+    enfocarSkuEnLista(skuActual);
+  }
+
   function verDetalleByIndex(idx){
     indiceActual = idx;
     const i = cacheSkus[idx];
     switchView('view-detalle');
 
     const sku    = getv(i,'sku');
+    skuRetornoDetalle = String(sku || '').trim();
     const cb     = getv(i,'codigo_barras','codigoBarras');
     const desc   = getv(i,'descripcion');
     const marca  = getv(i,'marca');
@@ -2393,30 +2566,136 @@ function resetChipFiltroUI(){
     if(n>=0 && n<cacheSkus.length) verDetalleByIndex(n);
   }
 
+  async function cargarAdjuntosDetalleSku(sku){
+    if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return [];
+    const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
+    const selectCols = encodeURIComponent('sku,tipo,bucket,path,filename,mime');
+    const urls = [];
+
+    if(empresaSeleccionada?.id){
+      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
+    }
+    if(empresaSeleccionada?.nombre){
+      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
+    }
+
+    const all = [];
+    for(const url of urls){
+      try{
+        const r = await fetch(url, { headers });
+        if(!r.ok) continue;
+        const data = await r.json();
+        if(Array.isArray(data) && data.length) all.push(...data);
+      }catch(e){
+        console.warn('No se pudieron consultar adjuntos de detalle.', e);
+      }
+    }
+
+    const seen = new Set();
+    return all.filter(a => {
+      const key = `${a?.bucket || ''}|${a?.path || ''}|${a?.tipo || ''}`;
+      if(!String(a?.bucket || '').trim() || !String(a?.path || '').trim() || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function adjuntoTipo(a){
+    return String(a?.tipo || a?.mime || a?.filename || a?.path || '').trim().toLowerCase();
+  }
+
+  function isFotoAdjunto(a){
+    const t = adjuntoTipo(a);
+    return ['foto','image','img','jpg','jpeg','png','webp'].includes(t) || t.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(String(a?.path || a?.filename || ''));
+  }
+
+  function isPdfAdjunto(a){
+    const t = adjuntoTipo(a);
+    return ['pdf','factura','factura_pdf','documento_pdf'].includes(t) || t === 'application/pdf' || /\.pdf$/i.test(String(a?.path || a?.filename || ''));
+  }
+
+  function adjuntoNombre(a, fallback){
+    const name = String(a?.filename || a?.path || fallback || '').split('/').pop();
+    return name || fallback || 'Archivo';
+  }
+
+  let pdfViewerObjectUrl = '';
+  let pdfViewerNombre = '';
+
+  function storageObjectUrl(bucket, path){
+    const b = encodeURIComponent(String(bucket || '').trim());
+    const p = String(path || '').split('/').map(s => encodeURIComponent(s)).join('/');
+    return `${SB_URL}/storage/v1/object/authenticated/${b}/${p}`;
+  }
+
+  function closePdfViewer(){
+    const modal = qs('pdf-viewer-modal');
+    const frame = qs('pdf-viewer-frame');
+    if(frame) frame.src = 'about:blank';
+    if(modal) modal.classList.add('hidden');
+    if(pdfViewerObjectUrl){
+      URL.revokeObjectURL(pdfViewerObjectUrl);
+      pdfViewerObjectUrl = '';
+    }
+    pdfViewerNombre = '';
+  }
+
+  function openPdfViewerNewTab(){
+    if(pdfViewerObjectUrl) openNewTab(pdfViewerObjectUrl);
+  }
+
+  async function abrirPdfEnVisor(a, headers, nombreError){
+    const bucket = String(a?.bucket || '').trim();
+    const path = String(a?.path || '').trim();
+    if(!bucket || !path) throw new Error(`${nombreError || 'PDF'} sin ruta de Storage.`);
+
+    const rf = await fetch(storageObjectUrl(bucket, path), { headers });
+    if(!rf.ok) throw new Error(`No se pudo abrir ${nombreError || 'PDF'} (HTTP ${rf.status})`);
+
+    const rawBlob = await rf.blob();
+    const blob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type:'application/pdf' });
+    const url = URL.createObjectURL(blob);
+
+    closePdfViewer();
+    pdfViewerObjectUrl = url;
+    pdfViewerNombre = adjuntoNombre(a, 'PDF');
+
+    safeSetText('pdf-viewer-title', pdfViewerNombre || 'Visor PDF');
+    safeSetText('pdf-viewer-sub', 'Vista previa sin descargar');
+    const frame = qs('pdf-viewer-frame');
+    const modal = qs('pdf-viewer-modal');
+    if(frame) frame.src = `${url}#toolbar=1&navpanes=0&view=FitH`;
+    if(modal) modal.classList.remove('hidden');
+  }
+
+  async function abrirAdjuntoStorage(a, headers, nombreError){
+    // Se conserva como respaldo para otros tipos de archivo.
+    const bucket = String(a?.bucket || '').trim();
+    const path = String(a?.path || '').trim();
+    if(!bucket || !path) throw new Error(`${nombreError || 'Archivo'} sin ruta de Storage.`);
+    const rf = await fetch(storageObjectUrl(bucket, path), { headers });
+    if(!rf.ok) throw new Error(`No se pudo abrir ${nombreError || 'archivo'} (HTTP ${rf.status})`);
+    const blob = await rf.blob();
+    const url = URL.createObjectURL(blob);
+    openNewTab(url);
+    setTimeout(()=>URL.revokeObjectURL(url), 60_000);
+  }
+
   async function cargarFotos(sku){
     const div = qs('det-fotos');
-    div.innerHTML = "";
-    if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return;
-
+    div.innerHTML = '';
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
-      const urlV2 = `${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.foto&select=bucket,path`;
-      const r2 = await fetch(urlV2, { headers });
-      let fotos = r2.ok ? await r2.json() : [];
-
-      if(!Array.isArray(fotos) || !fotos.length){
-        const urlLegacy = `${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.foto&select=bucket,path`;
-        const rL = await fetch(urlLegacy, { headers });
-        fotos = rL.ok ? await rL.json() : [];
-      }
-
-      for(const f of (fotos||[])){
+      const adjuntos = await cargarAdjuntosDetalleSku(sku);
+      const fotos = adjuntos.filter(isFotoAdjunto);
+      for(const f of fotos){
         const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
         if(!rf.ok) continue;
         const b = await rf.blob();
         const img = document.createElement('img');
         img.src = URL.createObjectURL(b);
-        img.alt = "Foto del activo";
+        img.alt = 'Foto del activo';
+        img.title = adjuntoNombre(f, 'Foto del activo');
         img.onclick = () => openLb(img.src);
         div.appendChild(img);
       }
@@ -2425,42 +2704,41 @@ function resetChipFiltroUI(){
 
   async function cargarFacturas(sku){
     const cont = qs('det-facturas');
-    cont.innerHTML = "";
-    if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return;
-
+    cont.innerHTML = '';
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
-      const urlV2 = `${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.factura&select=bucket,path`;
-      const r2 = await fetch(urlV2, { headers });
-      let files = r2.ok ? await r2.json() : [];
+      const adjuntos = await cargarAdjuntosDetalleSku(sku);
+      const files = adjuntos.filter(isPdfAdjunto);
 
-      if(!Array.isArray(files) || !files.length){
-        const urlLegacy = `${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&tipo=eq.factura&select=bucket,path`;
-        const rL = await fetch(urlLegacy, { headers });
-        files = rL.ok ? await rL.json() : [];
+      if(!files.length){
+        const actual = cacheSkus[indiceActual] || {};
+        if(isTrue(getRaw(actual,'has_factura_pdf','hasFacturaPdf','hasFacturaPDF'))){
+          cont.innerHTML = `<div class="chip" title="El activo está marcado con PDF, pero no se encontró el adjunto en Storage."><span class="material-symbols-rounded">info</span><span>PDF marcado, adjunto no localizado</span></div>`;
+        }
+        return;
       }
 
-      for(const f of (files||[])){
+      files.forEach((f, idx) => {
         const btn = document.createElement('button');
         btn.className = 'btn tonal';
         btn.type = 'button';
-        btn.innerHTML = `<span class="material-symbols-rounded">picture_as_pdf</span> Abrir factura`;
+        const nombre = adjuntoNombre(f, `PDF ${idx + 1}`);
+        btn.title = nombre;
+        btn.innerHTML = `<span class="material-symbols-rounded">preview</span> Ver PDF${files.length > 1 ? ' ' + (idx + 1) : ''}`;
         btn.onclick = async (ev)=>{
           ev.stopPropagation();
           try{
-            const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
-            if(!rf.ok) throw new Error(`No se pudo abrir factura (HTTP ${rf.status})`);
-            const blob = await rf.blob();
-            const url = URL.createObjectURL(blob);
-            openNewTab(url);
-            setTimeout(()=>URL.revokeObjectURL(url), 60_000);
+            await abrirPdfEnVisor(f, headers, 'PDF');
           }catch(e){
-            alert(e.message || "Error al abrir factura");
+            alert(e.message || 'Error al abrir PDF');
           }
         };
         cont.appendChild(btn);
-      }
-    }catch(e){ console.error(e); }
+      });
+    }catch(e){
+      console.error(e);
+      cont.innerHTML = `<div class="chip"><span class="material-symbols-rounded">error</span><span>No se pudo cargar el PDF</span></div>`;
+    }
   }
 
   // =========================
@@ -2924,6 +3202,7 @@ function resetChipFiltroUI(){
 
   async function cargarEditorActivos(){
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+    if(!canEditorActivos()){ alert('No tienes permiso de Editor Masivo para esta empresa.'); return; }
     if(!editorActivosConfirmDiscard('Tienes cambios sin guardar.\n\n¿Quieres recargar los activos y descartar esos cambios?')) return;
     const empresaIdCarga = String(empresaSeleccionada.id);
     const ctxCarga = (typeof getCtxVersion === 'function') ? getCtxVersion() : 0;
