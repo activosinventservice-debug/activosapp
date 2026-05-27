@@ -202,12 +202,14 @@
     .gallery{
       display:flex; gap:14px; overflow-x:auto; padding:12px 0;
       min-height:180px; border-bottom:1px solid var(--border); margin-bottom:12px;
-      justify-content:center; align-items:center;
+      justify-content:flex-start; align-items:center; -webkit-overflow-scrolling:touch;
     }
+    .photo-card{position:relative; flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:6px}
     .gallery img{
       height:260px; max-width:92vw; border-radius:14px; cursor:pointer; border:1px solid var(--border); object-fit:cover; transition:.15s transform
     }
     .gallery img:hover{transform:scale(1.02)}
+    .gallery-loading,.gallery-empty{width:100%; min-height:120px; display:flex; align-items:center; justify-content:center; gap:8px; color:#64748B; font-weight:800; text-align:center; padding:12px}
 
     /* Detail blocks */
     .section{display:grid; gap:10px; margin:8px 0}
@@ -427,7 +429,8 @@
     html.is-mobile .chip{ padding:7px 10px; border-radius:999px; flex:0 0 auto; }
 
     html.is-mobile .gallery{ min-height:120px; padding:10px 0; margin-bottom:10px; }
-    html.is-mobile .gallery img{height:200px}
+    html.is-mobile .gallery{ justify-content:flex-start; }
+    html.is-mobile .gallery img{height:200px; max-width:78vw}
 
     html.is-mobile .section{gap:8px; margin:6px 0}
     html.is-mobile .section:not(.full){ grid-template-columns:1fr 1fr; }
@@ -446,7 +449,7 @@
     @media (max-width: 380px){
       html.is-mobile .btn{padding:10px 11px}
       html.is-mobile .app-title{font-size:.95rem}
-      html.is-mobile .gallery img{height:185px}
+      html.is-mobile .gallery img{height:185px; max-width:78vw}
       html.is-mobile .select{min-width:140px}
     }
   

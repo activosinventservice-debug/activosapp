@@ -34,8 +34,8 @@
     })();
 
 const { SB_URL, SB_KEY } = (window.getActiveSupabaseConfig ? window.getActiveSupabaseConfig() : { SB_URL:"", SB_KEY:"" });
-const WEBAPP_VERSION_CODE = Number(window.APP_VERSION_CODE || 6);
-const WEBAPP_VERSION_NAME = String(window.APP_VERSION_NAME || "2026.03.17.web_v6");
+const WEBAPP_VERSION_CODE = Number(window.APP_VERSION_CODE || 15);
+const WEBAPP_VERSION_NAME = String(window.APP_VERSION_NAME || "2026.05.27.web_v6");
 const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
 
   
@@ -2381,10 +2381,10 @@ function resetChipFiltroUI(){
         const selectCols = 'sku,tipo';
         const urls = [];
         if(empresaSeleccionada?.id){
-          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&tipo=in.(foto,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
+          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&tipo=in.(foto,foto2,foto3,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
         }
         if(empresaSeleccionada?.nombre){
-          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})&tipo=in.(foto,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
+          urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})&tipo=in.(foto,foto2,foto3,factura,pdf)&select=${encodeURIComponent(selectCols)}`);
         }
 
         const rowsAdj = [];
@@ -2403,7 +2403,7 @@ function resetChipFiltroUI(){
           if(!sku) return;
           const cacheKey = `${empresaKey}|${sku}`;
           const meta = skuAdjuntosMap.get(cacheKey) || { foto:false, pdf:false };
-          if(tipo === 'foto') meta.foto = true;
+          if(['foto','foto2','foto3'].includes(tipo)) meta.foto = true;
           if(tipo === 'factura' || tipo === 'pdf') meta.pdf = true;
           skuAdjuntosMap.set(cacheKey, meta);
         });
@@ -2606,7 +2606,7 @@ function resetChipFiltroUI(){
 
   function isFotoAdjunto(a){
     const t = adjuntoTipo(a);
-    return ['foto','image','img','jpg','jpeg','png','webp'].includes(t) || t.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(String(a?.path || a?.filename || ''));
+    return ['foto','foto2','foto3','image','img','jpg','jpeg','png','webp'].includes(t) || t.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(String(a?.path || a?.filename || ''));
   }
 
   function isPdfAdjunto(a){
@@ -2681,25 +2681,71 @@ function resetChipFiltroUI(){
     setTimeout(()=>URL.revokeObjectURL(url), 60_000);
   }
 
+  function fotoOrdenAdjunto(a){
+    const t = adjuntoTipo(a);
+    if(t === 'foto') return 1;
+    if(t === 'foto2') return 2;
+    if(t === 'foto3') return 3;
+    const src = String(a?.filename || a?.path || '').toLowerCase();
+    if(/[_-]3\.(jpg|jpeg|png|webp)$/.test(src)) return 3;
+    if(/[_-]2\.(jpg|jpeg|png|webp)$/.test(src)) return 2;
+    return 1;
+  }
+
   async function cargarFotos(sku){
     const div = qs('det-fotos');
-    div.innerHTML = '';
+    div.innerHTML = `<div class="gallery-loading"><span class="material-symbols-rounded">hourglass_top</span><span>Cargando fotos...</span></div>`;
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
       const adjuntos = await cargarAdjuntosDetalleSku(sku);
-      const fotos = adjuntos.filter(isFotoAdjunto);
-      for(const f of fotos){
-        const rf = await fetch(`${SB_URL}/storage/v1/object/authenticated/${f.bucket}/${f.path}`, { headers });
+      const fotos = adjuntos
+        .filter(isFotoAdjunto)
+        .sort((a,b) => {
+          const oa = fotoOrdenAdjunto(a);
+          const ob = fotoOrdenAdjunto(b);
+          if(oa !== ob) return oa - ob;
+          const ta = Date.parse(a.created_at || a.inserted_at || a.updated_at || '') || 0;
+          const tb = Date.parse(b.created_at || b.inserted_at || b.updated_at || '') || 0;
+          return tb - ta;
+        })
+        .slice(0, 3);
+
+      div.innerHTML = '';
+
+      if(!fotos.length){
+        const actual = cacheSkus[indiceActual] || {};
+        if(isTrue(getRaw(actual,'has_foto','hasFoto'))){
+          div.innerHTML = `<div class="gallery-empty"><span class="material-symbols-rounded">info</span><span>El activo está marcado con foto, pero no se encontró el adjunto en Storage.</span></div>`;
+        }
+        return;
+      }
+
+      for(const [idx, f] of fotos.entries()){
+        const rf = await fetch(storageObjectUrl(f.bucket, f.path), { headers });
         if(!rf.ok) continue;
         const b = await rf.blob();
+        const url = URL.createObjectURL(b);
+
+        const card = document.createElement('div');
+        card.className = 'photo-card';
+
         const img = document.createElement('img');
-        img.src = URL.createObjectURL(b);
-        img.alt = 'Foto del activo';
-        img.title = adjuntoNombre(f, 'Foto del activo');
+        img.src = url;
+        img.alt = `Foto ${idx + 1} del activo`;
+        img.title = adjuntoNombre(f, `Foto ${idx + 1} del activo`);
         img.onclick = () => openLb(img.src);
-        div.appendChild(img);
+
+        card.appendChild(img);
+        div.appendChild(card);
       }
-    }catch(e){ console.error(e); }
+
+      if(!div.children.length){
+        div.innerHTML = `<div class="gallery-empty"><span class="material-symbols-rounded">broken_image</span><span>No se pudieron cargar las fotos.</span></div>`;
+      }
+    }catch(e){
+      console.error(e);
+      div.innerHTML = `<div class="gallery-empty"><span class="material-symbols-rounded">error</span><span>No se pudieron cargar las fotos.</span></div>`;
+    }
   }
 
   async function cargarFacturas(sku){
@@ -3710,10 +3756,10 @@ function resetChipFiltroUI(){
       const order = withOrder ? '&order=sku.asc,created_at.desc' : '&order=sku.asc';
       const urls = [];
       if(empresaSeleccionada?.id){
-        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&tipo=eq.foto&select=${encodeURIComponent(selectCols)}${order}`);
+        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&tipo=in.(foto,foto2,foto3)&select=${encodeURIComponent(selectCols)}${order}`);
       }
       if(empresaSeleccionada?.nombre){
-        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})&tipo=eq.foto&select=${encodeURIComponent(selectCols)}${order}`);
+        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})&tipo=in.(foto,foto2,foto3)&select=${encodeURIComponent(selectCols)}${order}`);
       }
 
       let all = [];
