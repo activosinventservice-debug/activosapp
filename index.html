@@ -321,6 +321,43 @@
       text-align:left;
     }
     .dash-table tr:last-child td{border-bottom:none}
+    .dash-chart-trigger{cursor:pointer; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; outline:none}
+    .dash-chart-trigger:hover,.dash-chart-trigger:focus-visible{transform:translateY(-1px); border-color:#8FB7FF; box-shadow:0 8px 22px rgba(37,99,235,.10)}
+    .dash-chart-action{margin-top:10px; display:flex; align-items:center; gap:6px; color:#0B4CB3; font-weight:900; font-size:.82rem}
+    .dash-chart-action .material-symbols-rounded{font-size:18px}
+    .dash-chart-row{cursor:pointer; transition:background .15s ease; outline:none}
+    .dash-chart-row:hover,.dash-chart-row:focus-visible{background:#EEF5FF}
+    .dash-row-chart-icon{font-size:16px; color:#0B4CB3; vertical-align:-3px; margin-left:4px}
+    .dash-user-hint{display:flex; align-items:center; justify-content:flex-end; gap:5px; margin-top:8px; color:#64748B; font-size:.76rem; font-weight:800}
+    .dash-user-hint .material-symbols-rounded{font-size:16px}
+
+    .sku-chart-modal .modal-card{width:min(1040px, 98vw); max-height:92vh; display:flex; flex-direction:column}
+    .sku-chart-modal .modal-body{overflow:auto; min-height:260px}
+    .sku-chart-summary{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px}
+    .sku-chart-kpi{display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:12px; padding:10px; background:#F8FAFC; min-width:0}
+    .sku-chart-kpi>.material-symbols-rounded{color:#0B4CB3; flex:0 0 auto}
+    .sku-chart-kpi small{display:block; color:#64748B; font-size:.72rem; font-weight:850; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .sku-chart-kpi b{display:block; color:#0F172A; font-size:1.02rem; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .sku-chart-kpi.good{background:#ECFDF3; border-color:#A7F3D0}.sku-chart-kpi.good>.material-symbols-rounded{color:#047857}
+    .sku-chart-kpi.warn{background:#FFF7ED; border-color:#FDBA74}.sku-chart-kpi.warn>.material-symbols-rounded{color:#C2410C}
+    .sku-chart-kpi.neutral{background:#F8FAFC}
+    .sku-chart-axis-caption{font-size:.78rem; font-weight:900; color:#64748B; margin:12px 2px 4px}
+    .sku-chart-scroll{overflow-x:auto; overflow-y:hidden; border:1px solid var(--border); border-radius:14px; background:linear-gradient(180deg,#fff 0%,#F8FAFC 100%); padding:14px 12px 8px; -webkit-overflow-scrolling:touch}
+    .sku-chart-bars{height:226px; display:flex; align-items:flex-end; gap:8px; min-width:max-content; border-bottom:1px solid #CBD5E1; padding:0 4px}
+    .sku-chart-item{width:48px; flex:0 0 48px; height:218px; display:grid; grid-template-rows:24px 174px 20px; align-items:end; justify-items:center}
+    .sku-chart-value{font-size:.72rem; font-weight:900; color:#334155; align-self:center}
+    .sku-chart-bar-wrap{height:174px; width:100%; display:flex; align-items:flex-end; justify-content:center}
+    .sku-chart-bar{width:26px; min-height:3px; border-radius:7px 7px 2px 2px; background:#7EA7F8; box-shadow:inset 0 0 0 1px rgba(11,76,179,.12)}
+    .sku-chart-bar.peak{background:#0B4CB3}
+    .sku-chart-label{font-size:.68rem; font-weight:850; color:#64748B; white-space:nowrap; align-self:end}
+    .sku-chart-loading,.sku-chart-empty{min-height:220px; display:flex; align-items:center; justify-content:center; gap:8px; color:#64748B; font-weight:850}
+    .sku-chart-source{text-align:right; color:#94A3B8; font-size:.7rem; font-weight:800; margin-top:6px}
+    .spin{animation:skuSpin 1s linear infinite}@keyframes skuSpin{to{transform:rotate(360deg)}}
+    html.is-mobile .sku-chart-modal{padding:8px; align-items:flex-end}
+    html.is-mobile .sku-chart-modal .modal-card{width:100%; max-height:94vh}
+    html.is-mobile .sku-chart-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    html.is-mobile .sku-chart-kpi:last-child{grid-column:1/-1}
+    html.is-mobile .sku-chart-item{width:42px; flex-basis:42px}
 
     /* ===== Historial Resguardos + Detalle ===== */
     .hist-toolbar{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center}
@@ -1136,6 +1173,31 @@
 
 
 
+
+  <!-- Gráfica de productividad del Dashboard SKUs -->
+  <div class="modal sku-chart-modal hidden" id="skus-chart-modal" role="dialog" aria-modal="true" aria-labelledby="skus-chart-title">
+    <div class="modal-backdrop" onclick="cerrarGraficaSkus()"></div>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div style="min-width:0">
+          <div class="modal-title" id="skus-chart-title">Actividad de SKUs</div>
+          <div class="modal-sub" id="skus-chart-sub">—</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center">
+          <button class="icon-btn" onclick="refrescarGraficaSkus()" aria-label="Actualizar gráfica" title="Actualizar">
+            <span class="material-symbols-rounded">refresh</span>
+          </button>
+          <button class="icon-btn" onclick="cerrarGraficaSkus()" aria-label="Cerrar">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="skus-chart-msg" class="error-msg hidden"></div>
+        <div id="skus-chart-content"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- CSV Modal (SKUs) -->
   <div class="modal hidden" id="csv-modal" role="dialog" aria-modal="true" aria-labelledby="csv-modal-title">

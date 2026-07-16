@@ -987,6 +987,10 @@ function getCtxVersion(){ return __ctxVersion; }
     const el = qs(id);
     if(el) el.classList.remove('hidden');
     try{ document.body.classList.toggle('editor-desktop', id === 'view-editor-activos'); }catch{}
+    if(id !== 'view-skus-dashboard'){
+      try{ detenerDashboardSkusAuto(); }catch{}
+      try{ if(!qs('skus-chart-modal')?.classList.contains('hidden')) cerrarGraficaSkus(); }catch{}
+    }
 
     // Si entras a SKUs desde otro lado (no desde Catálogos→Responsable), limpia el filtro extra
     if(id === 'view-skus'){
@@ -4661,23 +4665,48 @@ function renderCatalogo(){
     el.classList.remove('hidden');
   }
 
+  let skusDashboardTimer = null;
+  let skusDashboardLoading = false;
+  let skusDashboardLoadedOnce = false;
+
+  function detenerDashboardSkusAuto(){
+    if(skusDashboardTimer){
+      clearInterval(skusDashboardTimer);
+      skusDashboardTimer = null;
+    }
+  }
+
+  function iniciarDashboardSkusAuto(){
+    detenerDashboardSkusAuto();
+    skusDashboardTimer = setInterval(()=>{
+      const visible = !qs('view-skus-dashboard')?.classList.contains('hidden');
+      if(visible) cargarDashboardSkus(false);
+    }, 10_000);
+  }
+
   function abrirDashboardSkus(){
     if(!empresaSeleccionada){ alert('Selecciona una empresa'); return; }
     if(!canDash()){ alert('No tienes permiso para acceder al Dashboard de SKUs.'); return; }
     qs('skus-dash-title').innerText = `SKUs · ${empresaSeleccionada.nombre}`;
     switchView('view-skus-dashboard');
     cargarDashboardSkus(false);
+    iniciarDashboardSkusAuto();
   }
 
   async function cargarDashboardSkus(forceRefresh){
+    if(skusDashboardLoading) return;
     setSkusDashMsg('');
     if(!empresaSeleccionada?.id) return;
 
     const grid = qs('skus-dash-global-grid');
     const users = qs('skus-dash-users');
-    grid.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
-    users.innerHTML = '';
+    const hadData = skusDashboardLoadedOnce && !!grid?.children?.length;
+    if(forceRefresh || !hadData){
+      grid.innerHTML = `<div class="chip" style="justify-content:center; width:100%;">Consultando servidor…</div>`;
+      users.innerHTML = '';
+    }
 
+    skusDashboardLoading = true;
     try{
       const nombresMap = await cargarNombresUsuariosPorEmpresa();
       const { globalRows, userRows, source } = await fetchSkusDashboardData(empresaSeleccionada.id);
@@ -4688,10 +4717,10 @@ function renderCatalogo(){
       const total = byPeriodo.get('TOTAL') || {};
 
       grid.innerHTML = [
-        dashStatCardDual('Hoy', hoy.altas, hoy.activos, 'today', 'Altas', 'Activos'),
-        dashStatCardDual('Esta Semana', semana.altas, semana.activos, 'date_range', 'Altas', 'Activos'),
-        dashStatCardDual('Este Mes', mes.altas, mes.activos, 'calendar_month', 'Altas', 'Activos'),
-        dashStatCardDual('Total Histórico', total.altas, total.activos, 'all_inclusive', 'Altas', 'Activos'),
+        dashStatCardDual('Hoy', hoy.altas, hoy.activos, 'today', 'Altas', 'Activos', 'HOY', 'Ver por hora'),
+        dashStatCardDual('Esta Semana', semana.altas, semana.activos, 'date_range', 'Altas', 'Activos', 'SEMANA', 'Ver por día'),
+        dashStatCardDual('Este Mes', mes.altas, mes.activos, 'calendar_month', 'Altas', 'Activos', 'MES', 'Ver por día'),
+        dashStatCardDual('Total Histórico', total.altas, total.activos, 'all_inclusive', 'Altas', 'Activos', 'HISTORICO', 'Ver por mes'),
       ].join('');
 
       const list = (userRows || [])
@@ -4712,14 +4741,20 @@ function renderCatalogo(){
         ? list.map(u=>dashUserCardDual(u, 'Altas', 'Activos')).join('')
         : `<div class="chip" style="justify-content:center; width:100%;">Sin datos de SKUs.</div>`;
 
+      bindSkuDashboardChartClicks();
+      skusDashboardLoadedOnce = true;
       if(source === 'fallback'){
-        setSkusDashMsg('Dashboard de SKUs en modo compatible.');
+        setSkusDashMsg('Dashboard de SKUs en modo compatible. Las gráficas usarán cálculo local si el RPC no está disponible.');
       }
     }catch(e){
       console.error(e);
-      qs('skus-dash-global-grid').innerHTML = '';
-      qs('skus-dash-users').innerHTML = '';
+      if(!hadData){
+        qs('skus-dash-global-grid').innerHTML = '';
+        qs('skus-dash-users').innerHTML = '';
+      }
       setSkusDashMsg(e.message || 'Error cargando dashboard de SKUs.');
+    }finally{
+      skusDashboardLoading = false;
     }
   }
 
@@ -4895,9 +4930,12 @@ function renderCatalogo(){
     }
   }
 
-  function dashStatCardDual(title, a, b, icon, labelA, labelB){
+  function dashStatCardDual(title, a, b, icon, labelA, labelB, chartPeriod, actionLabel){
+    const chartAttrs = chartPeriod
+      ? ` role="button" tabindex="0" data-sku-chart-period="${escapeHtml(chartPeriod)}" data-sku-chart-email="" data-sku-chart-name="Todos los usuarios"`
+      : '';
     return `
-      <div class="dash-card">
+      <div class="dash-card ${chartPeriod ? 'dash-chart-trigger' : ''}"${chartAttrs}>
         <div class="t"><span class="material-symbols-rounded" style="vertical-align:-4px; margin-right:6px; color:#0B4CB3">${icon}</span>${escapeHtml(title)}</div>
         <div class="dash-kpis">
           <div class="dash-kpi">
@@ -4909,12 +4947,14 @@ function renderCatalogo(){
             <div><small>${escapeHtml(labelB)}</small>${Number(b||0)}</div>
           </div>
         </div>
+        ${chartPeriod ? `<div class="dash-chart-action"><span class="material-symbols-rounded">bar_chart</span>${escapeHtml(actionLabel || 'Ver gráfica')}</div>` : ''}
       </div>
     `;
   }
 
   function dashUserCardDual(u, labelA, labelB){
     const hasNombre = (u.nombre||'').trim().length>0;
+    const displayName = hasNombre ? u.nombre.trim() : u.email;
     const head = hasNombre
       ? `<div class="dash-user-name">${escapeHtml(u.nombre)}</div><div class="dash-user-email">${escapeHtml(u.email)}</div>`
       : `<div class="dash-user-name">${escapeHtml(u.email)}</div>`;
@@ -4935,23 +4975,306 @@ function renderCatalogo(){
             </tr>
           </thead>
           <tbody>
-            ${dashRowDual('Hoy', u.hoy)}
-            ${dashRowDual('Semana', u.sem)}
-            ${dashRowDual('Mes', u.mes)}
-            ${dashRowDual('Total', u.total, true)}
+            ${dashRowDual('Hoy', u.hoy, false, 'HOY', u.email, displayName)}
+            ${dashRowDual('Semana', u.sem, false, 'SEMANA', u.email, displayName)}
+            ${dashRowDual('Mes', u.mes, false, 'MES', u.email, displayName)}
+            ${dashRowDual('Total', u.total, true, 'HISTORICO', u.email, displayName)}
           </tbody>
         </table>
+        <div class="dash-user-hint"><span class="material-symbols-rounded">touch_app</span>Toca un periodo para ver su gráfica</div>
       </div>
     `;
   }
 
-  function dashRowDual(label, st, bold){
+  function dashRowDual(label, st, bold, chartPeriod, email, displayName){
     const fw = bold ? 'font-weight:900' : '';
-    return `<tr style="${fw}">
-      <td style="text-align:left">${escapeHtml(label)}</td>
+    return `<tr class="dash-chart-row" style="${fw}" role="button" tabindex="0"
+      data-sku-chart-period="${escapeHtml(chartPeriod || '')}"
+      data-sku-chart-email="${escapeHtml(email || '')}"
+      data-sku-chart-name="${escapeHtml(displayName || email || 'Usuario')}">
+      <td style="text-align:left">${escapeHtml(label)} <span class="material-symbols-rounded dash-row-chart-icon">bar_chart</span></td>
       <td>${Number(st?.altas||0)}</td>
       <td>${Number(st?.activos||0)}</td>
     </tr>`;
+  }
+
+  const SKU_CHART_PERIOD_META = {
+    HOY: {
+      title:'Altas de SKUs por hora', caption:'Hoy', average:'Prom./h activa', peak:'Hora pico', active:'Última actividad', previous:'Vs. ayer', refreshMs:10_000
+    },
+    SEMANA: {
+      title:'Altas de SKUs esta semana', caption:'Semana actual', average:'Prom./día activo', peak:'Mejor día', active:'Días activos', previous:'Vs. semana anterior', refreshMs:60_000
+    },
+    MES: {
+      title:'Altas de SKUs este mes', caption:'Mes actual', average:'Prom./día activo', peak:'Mejor día', active:'Días activos', previous:'Vs. mes anterior', refreshMs:60_000
+    },
+    HISTORICO: {
+      title:'Histórico de altas de SKUs', caption:'Histórico completo', average:'Prom./mes activo', peak:'Mejor mes', active:'Meses activos', previous:null, refreshMs:null
+    }
+  };
+
+  let skuChartSelection = null;
+  let skuChartTimer = null;
+  let skuChartLoading = false;
+  let skuChartHasData = false;
+
+  function bindSkuDashboardChartClicks(){
+    const root = qs('view-skus-dashboard');
+    if(!root) return;
+    root.querySelectorAll('[data-sku-chart-period]').forEach(el=>{
+      const open = ()=>{
+        const period = String(el.dataset.skuChartPeriod || '').toUpperCase();
+        const email = String(el.dataset.skuChartEmail || '').trim() || null;
+        const name = String(el.dataset.skuChartName || '').trim() || 'Todos los usuarios';
+        abrirGraficaSkus(period, email, name);
+      };
+      el.onclick = open;
+      el.onkeydown = ev=>{
+        if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); open(); }
+      };
+    });
+  }
+
+  function abrirGraficaSkus(period, email, displayName){
+    const p = String(period || '').toUpperCase();
+    const meta = SKU_CHART_PERIOD_META[p];
+    if(!meta) return;
+    skuChartSelection = { period:p, email:email || null, displayName:displayName || 'Todos los usuarios' };
+    skuChartHasData = false;
+    qs('skus-chart-title').innerText = meta.title;
+    qs('skus-chart-sub').innerText = `${meta.caption} · ${skuChartSelection.displayName}`;
+    qs('skus-chart-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    cargarGraficaSkus(false);
+    iniciarGraficaSkusAuto();
+  }
+
+  function cerrarGraficaSkus(){
+    if(skuChartTimer){ clearInterval(skuChartTimer); skuChartTimer = null; }
+    skuChartSelection = null;
+    skuChartLoading = false;
+    qs('skus-chart-modal')?.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function iniciarGraficaSkusAuto(){
+    if(skuChartTimer){ clearInterval(skuChartTimer); skuChartTimer = null; }
+    const meta = SKU_CHART_PERIOD_META[skuChartSelection?.period];
+    if(!meta?.refreshMs) return;
+    skuChartTimer = setInterval(()=>{
+      if(skuChartSelection && !qs('skus-chart-modal')?.classList.contains('hidden')) cargarGraficaSkus(false);
+    }, meta.refreshMs);
+  }
+
+  function refrescarGraficaSkus(){ cargarGraficaSkus(true); }
+
+  async function cargarGraficaSkus(manual){
+    if(!skuChartSelection || skuChartLoading || !empresaSeleccionada?.id) return;
+    skuChartLoading = true;
+    const msg = qs('skus-chart-msg');
+    const body = qs('skus-chart-content');
+    if(msg){ msg.classList.add('hidden'); msg.innerText = ''; }
+    if(manual || !skuChartHasData){
+      body.innerHTML = `<div class="sku-chart-loading"><span class="material-symbols-rounded spin">progress_activity</span> Consultando actividad…</div>`;
+    }
+    try{
+      const result = await fetchSkuChartPeriodData(
+        empresaSeleccionada.id,
+        skuChartSelection.period,
+        skuChartSelection.email
+      );
+      renderSkuChart(result.rows, result.source);
+      skuChartHasData = true;
+    }catch(e){
+      console.error(e);
+      if(!skuChartHasData) body.innerHTML = '';
+      if(msg){ msg.innerText = e?.message || 'No se pudo cargar la gráfica.'; msg.classList.remove('hidden'); }
+    }finally{
+      skuChartLoading = false;
+    }
+  }
+
+  async function fetchSkuChartPeriodData(empresaId, period, email){
+    try{
+      const rows = await callRpc('rpc_dashboard_skus_grafica_periodo', {
+        p_empresa_id:empresaId,
+        p_periodo:period,
+        p_creador_email:email || null,
+        p_tz:'America/Mexico_City'
+      });
+      return { source:'rpc', rows:Array.isArray(rows) ? rows : [] };
+    }catch(err){
+      console.warn('RPC de gráfica SKUs no disponible; usando cálculo local.', err);
+      const raw = await fetchSkusDashboardRaw(empresaId);
+      return { source:'fallback', rows:buildSkuChartFallback(raw, period, email) };
+    }
+  }
+
+  function mexicoDateParts(value){
+    const d = toDate(value);
+    if(!d || Number.isNaN(d.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'America/Mexico_City', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', hourCycle:'h23'
+    }).formatToParts(d);
+    const map = {};
+    parts.forEach(p=>{ if(p.type !== 'literal') map[p.type] = p.value; });
+    return { y:Number(map.year), m:Number(map.month), d:Number(map.day), h:Number(map.hour) };
+  }
+
+  function ymdKey(p){ return `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`; }
+  function utcDateFromParts(p){ return new Date(Date.UTC(p.y, p.m-1, p.d)); }
+  function addUtcDays(date, days){ const d = new Date(date.getTime()); d.setUTCDate(d.getUTCDate()+days); return d; }
+  function utcYmd(date){ return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`; }
+  function monthLabel(y,m){ return `${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} ${y}`; }
+
+  function buildSkuChartFallback(raw, period, email){
+    const target = String(email || '').trim().toLowerCase();
+    const filtered = (raw || []).filter(it=>{
+      const creator = String(it.email || it.nombre || 'Sin Asignar').trim().toLowerCase();
+      return !target || creator === target;
+    }).map(it=>({ ...it, p:mexicoDateParts(it.createdAt) })).filter(it=>it.p);
+
+    const now = mexicoDateParts(new Date());
+    const todayKey = ymdKey(now);
+    const todayUtc = utcDateFromParts(now);
+    const dayOfWeek = todayUtc.getUTCDay();
+    const monday = addUtcDays(todayUtc, -((dayOfWeek + 6) % 7));
+    const monthStart = new Date(Date.UTC(now.y, now.m-1, 1));
+    const nextMonth = new Date(Date.UTC(now.y, now.m, 1));
+    const previousMonthStart = new Date(Date.UTC(now.y, now.m-2, 1));
+
+    if(period === 'HOY'){
+      const prevKey = utcYmd(addUtcDays(todayUtc, -1));
+      const counts = Array(24).fill(0);
+      let total = 0, previous = 0;
+      filtered.forEach(it=>{
+        const key = ymdKey(it.p);
+        if(key === todayKey){ counts[it.p.h]++; total++; }
+        else if(key === prevKey) previous++;
+      });
+      return counts.map((n,i)=>({ indice:i, clave:String(i).padStart(2,'0'), etiqueta:String(i).padStart(2,'0'), fecha_inicio:todayKey, altas:n, total_periodo:total, total_anterior:previous }));
+    }
+
+    if(period === 'SEMANA'){
+      const prevMonday = addUtcDays(monday, -7);
+      const keys = Array.from({length:7},(_,i)=>utcYmd(addUtcDays(monday,i)));
+      const prevKeys = new Set(Array.from({length:7},(_,i)=>utcYmd(addUtcDays(prevMonday,i))));
+      const counts = Array(7).fill(0);
+      let previous = 0;
+      filtered.forEach(it=>{
+        const key = ymdKey(it.p);
+        const idx = keys.indexOf(key);
+        if(idx >= 0) counts[idx]++;
+        else if(prevKeys.has(key)) previous++;
+      });
+      const total = counts.reduce((a,b)=>a+b,0);
+      const labels = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
+      return counts.map((n,i)=>({ indice:i, clave:keys[i], etiqueta:`${labels[i]} ${keys[i].slice(-2)}`, fecha_inicio:keys[i], altas:n, total_periodo:total, total_anterior:previous }));
+    }
+
+    if(period === 'MES'){
+      const days = Math.round((nextMonth-monthStart)/86400000);
+      const counts = Array(days).fill(0);
+      let previous = 0;
+      filtered.forEach(it=>{
+        const key = ymdKey(it.p);
+        const date = new Date(`${key}T00:00:00Z`);
+        if(date >= monthStart && date < nextMonth) counts[it.p.d-1]++;
+        else if(date >= previousMonthStart && date < monthStart) previous++;
+      });
+      const total = counts.reduce((a,b)=>a+b,0);
+      return counts.map((n,i)=>{
+        const d = new Date(Date.UTC(now.y, now.m-1, i+1));
+        return { indice:i, clave:utcYmd(d), etiqueta:String(i+1).padStart(2,'0'), fecha_inicio:utcYmd(d), altas:n, total_periodo:total, total_anterior:previous };
+      });
+    }
+
+    const monthMap = new Map();
+    filtered.forEach(it=>{
+      const key = `${it.p.y}-${String(it.p.m).padStart(2,'0')}`;
+      monthMap.set(key, (monthMap.get(key)||0)+1);
+    });
+    const currentKey = `${now.y}-${String(now.m).padStart(2,'0')}`;
+    let firstKey = [...monthMap.keys()].sort()[0] || currentKey;
+    let cursor = new Date(`${firstKey}-01T00:00:00Z`);
+    const end = new Date(`${currentKey}-01T00:00:00Z`);
+    const rows = [];
+    let index = 0;
+    const total = filtered.length;
+    while(cursor <= end){
+      const y = cursor.getUTCFullYear(), m = cursor.getUTCMonth()+1;
+      const key = `${y}-${String(m).padStart(2,'0')}`;
+      rows.push({ indice:index++, clave:key, etiqueta:monthLabel(y,m), fecha_inicio:`${key}-01`, altas:monthMap.get(key)||0, total_periodo:total, total_anterior:null });
+      cursor = new Date(Date.UTC(y, m, 1));
+    }
+    return rows;
+  }
+
+  function renderSkuChart(rows, source){
+    const meta = SKU_CHART_PERIOD_META[skuChartSelection?.period] || SKU_CHART_PERIOD_META.HOY;
+    const list = (Array.isArray(rows) ? rows : []).map((r,i)=>({
+      index:Number(r.indice ?? i), key:String(r.clave ?? i), label:String(r.etiqueta ?? r.clave ?? i), count:Math.max(0, Number(r.altas||0)),
+      total:Number(r.total_periodo ?? 0), previous:r.total_anterior == null ? null : Number(r.total_anterior)
+    })).sort((a,b)=>a.index-b.index);
+    const total = list.length ? Number(list[0].total || list.reduce((a,b)=>a+b.count,0)) : 0;
+    const previous = list.length ? list[0].previous : null;
+    const active = list.filter(x=>x.count>0);
+    const average = active.length ? total/active.length : 0;
+    const peak = active.reduce((best,x)=>!best || x.count>best.count ? x : best, null);
+    const last = active.length ? active[active.length-1] : null;
+    const max = Math.max(1, ...list.map(x=>x.count));
+
+    let activeValue = String(active.length);
+    if(skuChartSelection?.period === 'HOY') activeValue = last ? `${last.label}:00` : '—';
+    const compare = previous == null ? null : formatSkuChartComparison(total, previous);
+
+    const summary = `
+      <div class="sku-chart-summary">
+        ${skuChartSummaryCard('Total', total, 'inventory_2')}
+        ${skuChartSummaryCard(meta.average, average.toFixed(active.length ? 1 : 0), 'speed')}
+        ${skuChartSummaryCard(meta.peak, peak ? `${peak.label} · ${peak.count}` : '—', 'workspace_premium')}
+        ${skuChartSummaryCard(meta.active, activeValue, 'schedule')}
+        ${meta.previous ? skuChartSummaryCard(meta.previous, compare?.text || '—', compare?.icon || 'compare_arrows', compare?.className || '') : ''}
+      </div>`;
+
+    const bars = list.length ? list.map(x=>{
+      const height = x.count > 0 ? Math.max(12, Math.round((x.count/max)*168)) : 3;
+      return `<div class="sku-chart-item" title="${escapeHtml(x.label)}: ${x.count}">
+        <div class="sku-chart-value">${x.count}</div>
+        <div class="sku-chart-bar-wrap"><div class="sku-chart-bar ${x.count===max && x.count>0 ? 'peak' : ''}" style="height:${height}px"></div></div>
+        <div class="sku-chart-label">${escapeHtml(x.label)}</div>
+      </div>`;
+    }).join('') : `<div class="sku-chart-empty">Sin actividad en este periodo.</div>`;
+
+    qs('skus-chart-content').innerHTML = `${summary}
+      <div class="sku-chart-axis-caption">Altas · ${escapeHtml(meta.caption)}</div>
+      <div class="sku-chart-scroll"><div class="sku-chart-bars">${bars}</div></div>
+      ${source === 'fallback' ? '<div class="sku-chart-source">Modo compatible: cálculo local.</div>' : ''}`;
+
+    const scroll = qs('skus-chart-content')?.querySelector('.sku-chart-scroll');
+    if(scroll && skuChartSelection?.period === 'HOY'){
+      const currentHour = mexicoDateParts(new Date())?.h || 0;
+      const item = scroll.querySelectorAll('.sku-chart-item')[Math.max(0,currentHour-2)];
+      if(item) setTimeout(()=>item.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' }), 50);
+    }else if(scroll){
+      setTimeout(()=>{ scroll.scrollLeft = scroll.scrollWidth; }, 50);
+    }
+  }
+
+  function skuChartSummaryCard(label, value, icon, className=''){
+    return `<div class="sku-chart-kpi ${escapeHtml(className)}"><span class="material-symbols-rounded">${icon}</span><div><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></div></div>`;
+  }
+
+  function formatSkuChartComparison(current, previous){
+    const diff = current - previous;
+    if(previous === 0){
+      if(current === 0) return { text:'Sin cambio', icon:'remove', className:'neutral' };
+      return { text:`+${current} · Nuevo`, icon:'trending_up', className:'good' };
+    }
+    const pct = Math.round((diff/previous)*100);
+    if(diff > 0) return { text:`+${diff} · +${pct}%`, icon:'trending_up', className:'good' };
+    if(diff < 0) return { text:`${diff} · ${pct}%`, icon:'trending_down', className:'warn' };
+    return { text:'Sin cambio', icon:'remove', className:'neutral' };
   }
 
   // =========================
