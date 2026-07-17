@@ -4490,19 +4490,60 @@ function renderCatalogo(){
     return new Date(0);
   }
 
+  // Zona operativa del dashboard (igual que app Android y RPCs).
+  // Importante: NO usar getDate()/getDay() del navegador (desfase en dispositivos
+  // con zona distinta a México o al comparar con la gráfica America/Mexico_City).
+  const DASHBOARD_TZ = 'America/Mexico_City';
+
+  function dashboardDateParts(value){
+    const d = (value instanceof Date) ? value : toDate(value);
+    if(!d || Number.isNaN(d.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: DASHBOARD_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(d);
+    const map = {};
+    parts.forEach(p=>{ if(p.type !== 'literal') map[p.type] = p.value; });
+    return {
+      y: Number(map.year),
+      m: Number(map.month),
+      d: Number(map.day),
+      h: Number(map.hour)
+    };
+  }
+
+  /** Mismo día civil en America/Mexico_City */
   function isSameDay(d, now){
-    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate();
+    const a = dashboardDateParts(d);
+    const b = dashboardDateParts(now);
+    return !!(a && b && a.y === b.y && a.m === b.m && a.d === b.d);
   }
+  /** Mismo mes civil en America/Mexico_City */
   function isSameMonth(d, now){
-    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+    const a = dashboardDateParts(d);
+    const b = dashboardDateParts(now);
+    return !!(a && b && a.y === b.y && a.m === b.m);
   }
+  /**
+   * Misma semana ISO (lunes–domingo) en America/Mexico_City,
+   * alineada con date_trunc('week', ...) de Postgres.
+   */
   function isSameWeekLocal(d, now){
-    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const day = (x)=> (x.getDay()+6)%7;
-    const startA = new Date(a); startA.setDate(a.getDate()-day(a));
-    const startB = new Date(b); startB.setDate(b.getDate()-day(b));
-    return startA.getTime() === startB.getTime();
+    const a = dashboardDateParts(d);
+    const b = dashboardDateParts(now);
+    if(!a || !b) return false;
+    const toUtcMs = (p)=> Date.UTC(p.y, p.m - 1, p.d);
+    const mondayStartMs = (p)=>{
+      const t = toUtcMs(p);
+      const wd = new Date(t).getUTCDay(); // 0=domingo
+      const monOffset = (wd + 6) % 7;     // lunes=0
+      return t - monOffset * 86400000;
+    };
+    return mondayStartMs(a) === mondayStartMs(b);
   }
 
   async function fetchResguardoDashboardRaw(empresaId){
@@ -4744,7 +4785,7 @@ function renderCatalogo(){
       bindSkuDashboardChartClicks();
       skusDashboardLoadedOnce = true;
       if(source === 'fallback'){
-        setSkusDashMsg('Dashboard de SKUs en modo compatible. Las gráficas usarán cálculo local si el RPC no está disponible.');
+        setSkusDashMsg('Dashboard de SKUs en modo compatible (America/Mexico_City). Las gráficas usarán cálculo local si el RPC no está disponible.');
       }
     }catch(e){
       console.error(e);
@@ -5042,7 +5083,7 @@ function renderCatalogo(){
     skuChartSelection = { period:p, email:email || null, displayName:displayName || 'Todos los usuarios' };
     skuChartHasData = false;
     qs('skus-chart-title').innerText = meta.title;
-    qs('skus-chart-sub').innerText = `${meta.caption} · ${skuChartSelection.displayName}`;
+    qs('skus-chart-sub').innerText = `${meta.caption} · ${skuChartSelection.displayName} · America/Mexico_City`;
     qs('skus-chart-modal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     cargarGraficaSkus(false);
@@ -5111,14 +5152,8 @@ function renderCatalogo(){
   }
 
   function mexicoDateParts(value){
-    const d = toDate(value);
-    if(!d || Number.isNaN(d.getTime())) return null;
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone:'America/Mexico_City', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', hourCycle:'h23'
-    }).formatToParts(d);
-    const map = {};
-    parts.forEach(p=>{ if(p.type !== 'literal') map[p.type] = p.value; });
-    return { y:Number(map.year), m:Number(map.month), d:Number(map.day), h:Number(map.hour) };
+    // Reutiliza la misma zona del dashboard para tarjetas y gráficas.
+    return dashboardDateParts(value);
   }
 
   function ymdKey(p){ return `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`; }
