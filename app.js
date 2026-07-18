@@ -1484,20 +1484,60 @@ function parseCsv(text){
   }
 
   
-function parseCsvDateToIso(value){
-  const s = (value ?? "").toString().trim();
-  if(!s) return null;
-  if(/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(s)) return s.replace(" ", "T");
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+/**
+ * baja_at en Supabase es BIGINT (epoch ms), igual que Android Room/LocalStore.
+ * Nunca enviar ISO string a esa columna → error 22P02.
+ */
+function parseCsvDateToEpochMs(value){
+  if(value === null || value === undefined || value === '') return null;
+  if(typeof value === 'number' && Number.isFinite(value)){
+    if(value > 1e12) return Math.trunc(value);           // ya es ms
+    if(value > 1e9) return Math.trunc(value * 1000);     // segundos
+    return null;
+  }
+  const s = String(value).trim();
+  if(!s || s.toLowerCase() === 'null') return null;
+
+  // Epoch puro (ms o s)
+  if(/^\d{13,}$/.test(s)) return Number(s);
+  if(/^\d{12}$/.test(s)) return Number(s); // ms típico 1e12–1e13
+  if(/^\d{10}$/.test(s)) return Number(s) * 1000;
+  // 11 dígitos raros: tratar como ms si es grande
+  if(/^\d{11}$/.test(s)){
+    const n = Number(s);
+    return n > 1e12 ? n : n * 1000;
+  }
+
+  // dd/MM/yyyy [HH:mm[:ss]] → México -06:00 (paridad Android)
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if(m){
     const [,dd,mm,yyyy,hh='00',mi='00',ss='00'] = m;
-    // Hora de México (igual que Android) con offset fijo -06:00 (sin DST)
-    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}-06:00`;
+    const iso = `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}-06:00`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
   }
-  // Epoch ms (CSV Android viejo de bajaAt)
-  if(/^\d{12,}$/.test(s)) return new Date(Number(s)).toISOString();
-  if(/^\d{10}$/.test(s)) return new Date(Number(s) * 1000).toISOString();
-  return s;
+
+  // yyyy-mm-dd [HH:mm[:ss]] (sin zona) → fecha local/México
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(m){
+    const [,yyyy,mm,dd,hh='00',mi='00',ss='00'] = m;
+    const iso = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-06:00`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  // ISO con Z / offset / fracciones (Supabase timestamptz style)
+  const d = new Date(s);
+  if(!Number.isNaN(d.getTime())) return d.getTime();
+  return null;
+}
+
+function parseCsvDateToIso(value){
+  // Conservado para campos timestamptz (si hiciera falta).
+  // Para baja_at usar SIEMPRE parseCsvDateToEpochMs.
+  const ms = parseCsvDateToEpochMs(value);
+  if(ms == null) return null;
+  try{ return new Date(ms).toISOString(); }catch{ return null; }
 }
 
 function parseCsvDateToDateOnly(value){
@@ -1682,13 +1722,13 @@ function toBool(v){
         costo: mapIdx.costo>=0 ? toNum(r[mapIdx.costo]) : null,
         fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
-        // Timestamptz: dd/MM/yyyy HH:mm (México) o epoch viejo
-        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToIso(r[mapIdx.baja_at]) : null,
+        // baja_at = BIGINT epoch ms (NO ISO string → 22P02)
+        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToEpochMs(r[mapIdx.baja_at]) : null,
         creado_por_email: createdByEmail,
         creado_por_nombre: createdByNombre,
       };
-      // Normalizar baja_at vacío → null
-      if(obj.baja_at === '' || obj.baja_at === undefined) obj.baja_at = null;
+      // Normalizar baja_at vacío / NaN → null
+      if(obj.baja_at === '' || obj.baja_at === undefined || !Number.isFinite(obj.baja_at)) obj.baja_at = null;
 
       objs.push(obj);
     }
@@ -3129,10 +3169,30 @@ function resetChipFiltroUI(){
   const EDITOR_ACTIVOS_EDITABLES = [
     'descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','dado_de_baja','baja_at'
   ];
-  // CSV: sku + editables + fecha registro (solo lectura en export)
-  const EDITOR_ACTIVOS_CSV_FIELDS = ['sku', ...EDITOR_ACTIVOS_EDITABLES, 'created_at'];
+  // CSV: MISMO orden y nombres que Gestión SKUs / Android (ANDROID_ACTIVOS_CSV_HEADERS)
+  // sku,Descripcion,Marca,Modelo,Serie,genero,ubicacion,localizacion,responsable,
+  // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt
+  const EDITOR_ACTIVOS_CSV_FIELDS = [
+    'sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable',
+    'codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at'
+  ];
   const EDITOR_ACTIVOS_CSV_LABELS = {
-    sku:'sku', descripcion:'Descripcion', marca:'Marca', modelo:'Modelo', numero_serie:'Serie', genero:'genero', ubicacion:'ubicacion', localizacion:'localizacion', responsable:'responsable', codigo_barras:'codigoBarras', cantidad:'cantidad', costo:'costo', fecha_adquisicion:'fechaAdquisicion', dado_de_baja:'dadoDeBaja', baja_at:'bajaAt', created_at:'fechaRegistro'
+    sku:'sku',
+    descripcion:'Descripcion',
+    marca:'Marca',
+    modelo:'Modelo',
+    numero_serie:'Serie',
+    genero:'genero',
+    ubicacion:'ubicacion',
+    localizacion:'localizacion',
+    responsable:'responsable',
+    codigo_barras:'codigoBarras',
+    cantidad:'cantidad',
+    created_at:'fechaRegistro',
+    costo:'costo',
+    fecha_adquisicion:'fechaAdquisicion',
+    dado_de_baja:'dadoDeBaja',
+    baja_at:'bajaAt'
   };
 
   function editorActivosHasUnsaved(){ return editorActivosModified.size > 0; }
@@ -3307,7 +3367,38 @@ function resetChipFiltroUI(){
 
   function editorActivosKey(row){ return String(row?.sku || '').trim(); }
   function editorActivosBool(v){ return v === true || v === 1 || ['1','true','si','sí','yes','x'].includes(String(v||'').trim().toLowerCase()); }
-  function editorActivosToInputDate(v){ const d = parseCsvDateToDateOnly(v); return d || ''; }
+  function editorActivosToInputDate(v){
+    // Acepta date-only, ISO o epoch ms (baja_at bigint de Supabase)
+    if(v === null || v === undefined || v === '') return '';
+    if(typeof v === 'number' && Number.isFinite(v)){
+      const ms = v > 1e12 ? v : (v > 1e9 ? v * 1000 : NaN);
+      if(Number.isFinite(ms)){
+        const d = new Date(ms);
+        if(!Number.isNaN(d.getTime())){
+          const pad = n => String(n).padStart(2,'0');
+          // date input: yyyy-mm-dd en zona México (coherente con CSV)
+          try{
+            const parts = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Mexico_City',
+              year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(d);
+            const map = {};
+            parts.forEach(p => { if(p.type !== 'literal') map[p.type] = p.value; });
+            return `${map.year}-${map.month}-${map.day}`;
+          }catch{
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+          }
+        }
+      }
+    }
+    const s = String(v).trim();
+    if(/^\d{10,}$/.test(s)){
+      const ms = parseCsvDateToEpochMs(s);
+      if(ms != null) return editorActivosToInputDate(ms);
+    }
+    const d = parseCsvDateToDateOnly(v);
+    return d || '';
+  }
   function editorActivosSafeNumber(v){ const s=String(v??'').trim(); if(!s) return null; const n=Number(s.replace(/,/g,'')); return Number.isFinite(n) ? n : null; }
   function editorActivosNormFilter(v){
     return String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -3781,7 +3872,8 @@ function resetChipFiltroUI(){
         let val = changes[field];
         if(['cantidad'].includes(field)) val = Number(String(val ?? '').trim()) || 0;
         else if(['costo'].includes(field)) val = editorActivosSafeNumber(val);
-        else if(['fecha_adquisicion','baja_at'].includes(field)) val = parseCsvDateToDateOnly(val) || null;
+        else if(field === 'fecha_adquisicion') val = parseCsvDateToDateOnly(val) || null;
+        else if(field === 'baja_at') val = parseCsvDateToEpochMs(val); // BIGINT epoch ms
         else if(field === 'dado_de_baja') val = editorActivosBool(val);
         else val = String(val ?? '').trim();
         payload[field] = val;
@@ -4706,18 +4798,44 @@ function resetChipFiltroUI(){
   function exportarEditorActivosCsv(){
     const rows = editorActivosFiltered.length ? editorActivosFiltered : editorActivosRows;
     if(!rows.length){ alert('Primero carga el editor.'); return; }
-    const headers = EDITOR_ACTIVOS_CSV_FIELDS.map(f => EDITOR_ACTIVOS_CSV_LABELS[f] || f);
-    const lines = [headers.map(csvEscape).join(',')];
+    // Cabeceras y formato idénticos a exportarSkusCsv / Android
+    const headers = (typeof ANDROID_ACTIVOS_CSV_HEADERS !== 'undefined' && ANDROID_ACTIVOS_CSV_HEADERS.length)
+      ? ANDROID_ACTIVOS_CSV_HEADERS.slice()
+      : EDITOR_ACTIVOS_CSV_FIELDS.map(f => EDITOR_ACTIVOS_CSV_LABELS[f] || f);
+    const lines = [headers.join(',')];
     rows.forEach(r => {
+      // Reutiliza el mismo serializador que Gestión SKUs
+      if(typeof activoRowToAndroidCsv === 'function'){
+        lines.push(activoRowToAndroidCsv({
+          sku: r.sku,
+          descripcion: r.descripcion,
+          marca: r.marca,
+          modelo: r.modelo,
+          numero_serie: r.numero_serie,
+          genero: r.genero,
+          ubicacion: r.ubicacion,
+          localizacion: r.localizacion,
+          responsable: r.responsable,
+          codigo_barras: r.codigo_barras,
+          cantidad: r.cantidad,
+          created_at: r.created_at,
+          costo: r.costo,
+          fecha_adquisicion: r.fecha_adquisicion,
+          dado_de_baja: r.dado_de_baja,
+          baja_at: r.baja_at
+        }));
+        return;
+      }
       lines.push(EDITOR_ACTIVOS_CSV_FIELDS.map(f => {
-        if(f === 'fecha_adquisicion' || f === 'baja_at' || f === 'created_at') return csvEscape(formatCsvDateOnly(r[f]));
+        if(f === 'fecha_adquisicion') return csvEscape(formatCsvDateOnly(r[f]));
+        if(f === 'baja_at' || f === 'created_at') return csvEscape(formatCsvDateTimeMexico(r[f]));
         if(f === 'dado_de_baja') return csvEscape(r[f] ? 1 : 0);
         return csvEscape(r[f] ?? '');
       }).join(','));
     });
     const emp = (empresaSeleccionada?.nombre || 'empresa').toString().trim().replace(/\s+/g,'_');
     downloadTextFile(`editor_activos_${emp}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
-    editorActivosStatus(`CSV exportado: ${rows.length} activo(s).`);
+    editorActivosStatus(`CSV exportado: ${rows.length} activo(s). Columnas = Gestión SKUs / Android.`);
   }
 
   function editorActivosHeaderToField(h){
