@@ -227,6 +227,17 @@
     .lightbox-toolbar .btn{background:rgba(255,255,255,.15); color:#fff; box-shadow:none; border:1px solid rgba(255,255,255,.25)}
     .lightbox-toolbar .btn:hover{background:rgba(255,255,255,.25)}
     .lightbox-close{position:absolute; top:10px; right:10px}
+    .lightbox-counter{position:absolute; top:10px; left:10px; background:rgba(15,23,42,.7); color:#fff; font-weight:800; font-size:13px; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.2)}
+    .lightbox-nav{position:absolute; top:50%; transform:translateY(-50%); background:rgba(15,23,42,.55); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:999px; width:42px; height:42px; display:none; align-items:center; justify-content:center; cursor:pointer}
+    .lightbox-nav.show{display:flex}
+    .lightbox-nav:hover{background:rgba(15,23,42,.8)}
+    .lightbox-nav.prev{left:10px}
+    .lightbox-nav.next{right:10px}
+    .editor-foto-badge{display:inline-flex; align-items:center; gap:2px; margin-left:6px; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:900; vertical-align:middle; border:1px solid transparent}
+    .editor-foto-badge.n1{background:#E0F2FE; color:#0369A1; border-color:#BAE6FD}
+    .editor-foto-badge.n2{background:#FEF3C7; color:#B45309; border-color:#FDE68A}
+    .editor-foto-badge.n3{background:#DCFCE7; color:#15803D; border-color:#BBF7D0}
+    .editor-foto-badge .material-symbols-rounded{font-size:14px}
 
     /* ✅ skeleton (DESACTIVADO COMPLETAMENTE: sin shimmer y se oculta) */
     .skeleton{display:none !important;}
@@ -759,6 +770,16 @@
             <option value="">Todos</option><option value="activos">Solo activos</option><option value="baja">Solo baja</option>
           </select>
         </div>
+        <div>
+          <label>Fotos</label>
+          <select id="editor-activos-fotos-filtro" class="select" style="width:100%" title="Filtrar por cantidad de fotos del SKU">
+            <option value="">Todas</option>
+            <option value="con">Con foto (1–3)</option>
+            <option value="multi">2 o 3 fotos</option>
+            <option value="3">Solo 3 fotos</option>
+            <option value="sin">Sin foto</option>
+          </select>
+        </div>
         <label class="editor-check" title="Muestra solamente filas con cambios sin guardar">
           <input id="editor-activos-solo-modificados" type="checkbox"/> Solo modificados
         </label>
@@ -1152,6 +1173,13 @@
   <div id="lightbox" class="lightbox" role="dialog" aria-modal="true">
     <div class="lightbox-content">
       <img id="lightbox-img" class="lightbox-img" alt="Vista previa"/>
+      <div id="lightbox-counter" class="lightbox-counter hidden">1 / 1</div>
+      <button type="button" id="lightbox-prev" class="lightbox-nav prev" onclick="lbPrev()" title="Foto anterior" aria-label="Foto anterior">
+        <span class="material-symbols-rounded">chevron_left</span>
+      </button>
+      <button type="button" id="lightbox-next" class="lightbox-nav next" onclick="lbNext()" title="Foto siguiente" aria-label="Foto siguiente">
+        <span class="material-symbols-rounded">chevron_right</span>
+      </button>
       <div class="lightbox-toolbar">
         <button class="btn" onclick="zoomOutLb()"><span class="material-symbols-rounded">zoom_out</span></button>
         <button class="btn" onclick="zoomInLb()"><span class="material-symbols-rounded">zoom_in</span></button>

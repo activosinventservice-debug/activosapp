@@ -1071,7 +1071,14 @@ document.addEventListener('keydown', (e)=>{
   }
 
   function downloadTextFile(filename, text, mime="text/plain"){
-    const blob = new Blob([text], {type:mime});
+    // UTF-8 + BOM en CSV: Excel (Windows) muestra bien acentos/ñ.
+    // Sin BOM interpreta como Windows-1252 y sale "JosÃ©", "ubicaciÃ³n", etc.
+    const isCsv = /csv/i.test(String(mime||'')) || /\.csv$/i.test(String(filename||''));
+    const payload = isCsv ? ('\uFEFF' + String(text ?? '')) : String(text ?? '');
+    const type = isCsv
+      ? (String(mime||'').includes('charset') ? mime : 'text/csv;charset=utf-8')
+      : mime;
+    const blob = new Blob([payload], {type});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -1223,6 +1230,41 @@ document.addEventListener('keydown', (e)=>{
 
 
 
+  // Columnas idénticas a Android LocalStore.exportActivosCsv (compatibilidad cruzada).
+  // Sin has_foto / has_factura_pdf: los adjuntos no dependen del CSV.
+  const ANDROID_ACTIVOS_CSV_HEADERS = [
+    "sku","Descripcion","Marca","Modelo","Serie",
+    "genero","ubicacion","localizacion","responsable",
+    "codigoBarras","cantidad","fechaRegistro",
+    "costo","fechaAdquisicion","dadoDeBaja","bajaAt"
+  ];
+  const ANDROID_ACTIVOS_SELECT_COLS = [
+    "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+    "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion",
+    "dado_de_baja","baja_at"
+  ];
+
+  function activoRowToAndroidCsv(r){
+    return [
+      r?.sku,
+      r?.descripcion,
+      r?.marca,
+      r?.modelo,
+      r?.numero_serie,
+      r?.genero,
+      r?.ubicacion,
+      r?.localizacion,
+      r?.responsable,
+      r?.codigo_barras,
+      r?.cantidad,
+      formatCsvDateTimeMexico(r?.created_at),
+      (r?.costo ?? ""),
+      formatCsvDateOnly(r?.fecha_adquisicion),
+      (r?.dado_de_baja ? 1 : 0),
+      formatCsvDateTimeMexico(r?.baja_at)
+    ].map(csvEscape).join(",");
+  }
+
     async function descargarMachoteSkus(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
@@ -1243,12 +1285,8 @@ document.addEventListener('keydown', (e)=>{
 
       const filas = 50;
 
-      const headers = [
-        "sku","Descripcion","Marca","Modelo","Serie",
-        "genero","ubicacion","localizacion","responsable",
-        "codigoBarras","cantidad","fechaRegistro",
-        "costo","fechaAdquisicion","dadoDeBaja","bajaAt"
-      ];
+      // Mismas columnas que Android (LocalStore.exportActivosCsv)
+      const headers = ANDROID_ACTIVOS_CSV_HEADERS.slice();
 
       const out = [];
       out.push(headers.join(","));
@@ -1256,10 +1294,13 @@ document.addEventListener('keydown', (e)=>{
       for(let i=0;i<filas;i++){
         const n = start + i;
         const sku = String(n).padStart(6,'0');
+        // 16 columnas = ANDROID_ACTIVOS_CSV_HEADERS (sin has_foto / has_factura_pdf)
+        // sku,Descripcion,Marca,Modelo,Serie,genero,ubicacion,localizacion,responsable,
+        // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt
         const row = [
           sku, "", "", "", "",
           "", "", "", "",
-          "", "1", _todayYMD(),
+          "", "1", "",
           "", "", "0", ""
         ];
         out.push(row.map(csvEscape).join(","));
@@ -1283,14 +1324,7 @@ document.addEventListener('keydown', (e)=>{
     setSkusMsg("Exportando...");
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = [
-        "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
-        "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion","dado_de_baja","baja_at"
-      ];
-      const csvHeaders = [
-        "sku","Descripcion","Marca","Modelo","Serie","genero","ubicacion","localizacion",
-        "responsable","codigoBarras","cantidad","fechaRegistro","costo","fechaAdquisicion","dadoDeBaja","bajaAt"
-      ];
+      const selectCols = ANDROID_ACTIVOS_SELECT_COLS;
 
       async function fetchAll(){
         const limit = 1000;
@@ -1314,29 +1348,8 @@ document.addEventListener('keydown', (e)=>{
       }
 
       const all = await fetchAll();
-      const out = [];
-      out.push(csvHeaders.join(","));
-      for(const r of all){
-        const row = [
-          r?.sku,
-          r?.descripcion,
-          r?.marca,
-          r?.modelo,
-          r?.numero_serie,
-          r?.genero,
-          r?.ubicacion,
-          r?.localizacion,
-          r?.responsable,
-          r?.codigo_barras,
-          r?.cantidad,
-          formatCsvDateOnly(r?.created_at),
-          r?.costo,
-          formatCsvDateOnly(r?.fecha_adquisicion),
-          (r?.dado_de_baja ? 1 : 0),
-          formatCsvDateOnly(r?.baja_at)
-        ];
-        out.push(row.map(csvEscape).join(","));
-      }
+      const out = [ANDROID_ACTIVOS_CSV_HEADERS.join(",")];
+      for(const r of all) out.push(activoRowToAndroidCsv(r));
 
       const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
         .toString().trim().replace(/\s+/g,'_');
@@ -1367,14 +1380,7 @@ document.addEventListener('keydown', (e)=>{
     setSkusMsg("Exportando filtrado...");
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = [
-        "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
-        "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion","dado_de_baja","baja_at"
-      ];
-      const csvHeaders = [
-        "sku","Descripcion","Marca","Modelo","Serie","genero","ubicacion","localizacion",
-        "responsable","codigoBarras","cantidad","fechaRegistro","costo","fechaAdquisicion","dadoDeBaja","bajaAt"
-      ];
+      const selectCols = ANDROID_ACTIVOS_SELECT_COLS;
 
       function buildBaseUrl(){
         let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}`;
@@ -1414,29 +1420,8 @@ document.addEventListener('keydown', (e)=>{
       }
 
       const all = await fetchAll();
-      const out = [];
-      out.push(csvHeaders.join(","));
-      for(const r of all){
-        const row = [
-          r?.sku,
-          r?.descripcion,
-          r?.marca,
-          r?.modelo,
-          r?.numero_serie,
-          r?.genero,
-          r?.ubicacion,
-          r?.localizacion,
-          r?.responsable,
-          r?.codigo_barras,
-          r?.cantidad,
-          formatCsvDateOnly(r?.created_at),
-          r?.costo,
-          formatCsvDateOnly(r?.fecha_adquisicion),
-          (r?.dado_de_baja ? 1 : 0),
-          formatCsvDateOnly(r?.baja_at)
-        ];
-        out.push(row.map(csvEscape).join(","));
-      }
+      const out = [ANDROID_ACTIVOS_CSV_HEADERS.join(",")];
+      for(const r of all) out.push(activoRowToAndroidCsv(r));
 
       const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
         .toString().trim().replace(/\s+/g,'_');
@@ -1491,8 +1476,12 @@ function parseCsvDateToIso(value){
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if(m){
     const [,dd,mm,yyyy,hh='00',mi='00',ss='00'] = m;
-    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    // Hora de México (igual que Android) con offset fijo -06:00 (sin DST)
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(ss).padStart(2,'0')}-06:00`;
   }
+  // Epoch ms (CSV Android viejo de bajaAt)
+  if(/^\d{12,}$/.test(s)) return new Date(Number(s)).toISOString();
+  if(/^\d{10}$/.test(s)) return new Date(Number(s) * 1000).toISOString();
   return s;
 }
 
@@ -1522,6 +1511,16 @@ function parseCsvDateToDateOnly(value){
   return s;
 }
 
+/** true/false/null (celda vacía o sin columna → null = no tocar en servidor) */
+function parseCsvBoolOpt(v){
+  if(v === null || v === undefined) return null;
+  const s = String(v).trim().toLowerCase();
+  if(!s) return null;
+  if(s === '1' || s === 'true' || s === 'si' || s === 'sí' || s === 'yes') return true;
+  if(s === '0' || s === 'false' || s === 'no') return false;
+  return null;
+}
+
 function formatCsvDateOnly(value){
   const s = (value ?? "").toString().trim();
   if(!s) return "";
@@ -1536,6 +1535,34 @@ function formatCsvDateOnly(value){
     return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
   }
   return s;
+}
+
+/** Fecha+hora legible para bajaAt (America/Mexico_City). Acepta ISO o epoch ms. */
+function formatCsvDateTimeMexico(value){
+  if(value === null || value === undefined || value === '') return '';
+  let d = null;
+  if(typeof value === 'number' && Number.isFinite(value)){
+    d = new Date(value > 1e12 ? value : value * 1000);
+  } else {
+    const s = String(value).trim();
+    if(/^\d{12,}$/.test(s)) d = new Date(Number(s));
+    else if(/^\d{10}$/.test(s)) d = new Date(Number(s) * 1000);
+    else d = new Date(s);
+  }
+  if(!d || Number.isNaN(d.getTime())) return String(value ?? '');
+  try{
+    // en-GB da dd/mm/yyyy; hourCycle h23 para 00-23
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).formatToParts(d);
+    const map = {};
+    parts.forEach(p => { if(p.type !== 'literal') map[p.type] = p.value; });
+    return `${map.day}/${map.month}/${map.year} ${map.hour}:${map.minute}`;
+  }catch(_){
+    return formatCsvDateOnly(value);
+  }
 }
 
 function formatAndroidCsvDate(value){
@@ -1574,7 +1601,8 @@ function toBool(v){
     if(!ok) return;
 
     setSkusMsg("Leyendo CSV...");
-    const text = await file.text();
+    // Quitar BOM UTF-8 (export Android/web con EF BB BF)
+    const text = (await file.text()).replace(/^\uFEFF/, '');
     const table = parseCsv(text);
     if(!table.length){ setSkusMsg("CSV vacío"); return; }
 
@@ -1605,6 +1633,8 @@ function toBool(v){
       fecha_adquisicion: idxOfAny("fechaAdquisicion","FechaAdquisicion","fecha_adquisicion"),
       dado_de_baja: idxOfAny("dadoDeBaja","DadoDeBaja","dado_de_baja"),
       baja_at: idxOfAny("bajaAt","BajaAt","baja_at")
+      // has_foto / has_factura_pdf: se ignoran (aunque un CSV viejo las traiga).
+      // Los adjuntos reales del SKU no se tocan con el import de ficha.
     };
 
     if(mapIdx.sku < 0){
@@ -1615,6 +1645,7 @@ function toBool(v){
     const createdByEmail = (userEmail || window.userEmail || "").toString().trim() || null;
     const createdByNombre = ((typeof getPerms === "function" ? (getPerms().usuarioNombre || "") : (window.__permsEffective?.usuarioNombre || "")) || window.sessionUserName || window.userName || "").toString().trim() || null;
 
+    // Solo ficha: no se envía has_foto / has_factura_pdf (UPSERT conserva flags remotos)
     const objs = [];
     for(const r of dataRows){
       const sku = (r[mapIdx.sku]||"").trim();
@@ -1631,15 +1662,19 @@ function toBool(v){
         localizacion: mapIdx.localizacion>=0 ? (r[mapIdx.localizacion]||"").trim() : "",
         responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
         codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
-        cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"0").toString().trim())||0) : 0,
-        created_at: mapIdx.fecha_registro>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_registro]) : null,
+        cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"1").toString().trim())||1) : 1,
+        // No enviar created_at: se conserva en servidor (Android tampoco lo pisa en bulk)
         costo: mapIdx.costo>=0 ? toNum(r[mapIdx.costo]) : null,
         fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
-        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToDateOnly(r[mapIdx.baja_at]) : null,
+        // Timestamptz: dd/MM/yyyy HH:mm (México) o epoch viejo
+        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToIso(r[mapIdx.baja_at]) : null,
         creado_por_email: createdByEmail,
         creado_por_nombre: createdByNombre,
       };
+      // Normalizar baja_at vacío → null
+      if(obj.baja_at === '' || obj.baja_at === undefined) obj.baja_at = null;
+
       objs.push(obj);
     }
 
@@ -1655,9 +1690,10 @@ function toBool(v){
 
     const CHUNK = 200;
     let done=0;
+    const url = `${SB_URL}/rest/v1/activos?on_conflict=empresa_id,sku`;
     for(let i=0;i<objs.length;i+=CHUNK){
       const chunk = objs.slice(i, i+CHUNK);
-      const url = `${SB_URL}/rest/v1/activos?on_conflict=empresa_id,sku`;
+      // Todas las filas con las MISMAS keys (evita PGRST102)
       const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(chunk) });
       if(!res.ok){
         const t = await res.text().catch(()=> "");
@@ -2810,6 +2846,12 @@ function resetChipFiltroUI(){
 
   const lbEl = document.getElementById('lightbox');
   const lbImg = document.getElementById('lightbox-img');
+  const lbCounter = document.getElementById('lightbox-counter');
+  const lbPrevBtn = document.getElementById('lightbox-prev');
+  const lbNextBtn = document.getElementById('lightbox-next');
+  /** Galería multi-foto en lightbox (editor / detalle). */
+  let lbGallery = { urls: [], index: 0, objectUrls: [] };
+
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
   function applyLbTransform(){
@@ -2817,7 +2859,47 @@ function resetChipFiltroUI(){
       `translate(${lb.pos.x}px, ${lb.pos.y}px) scale(${lb.scale}) rotate(${lb.rot}deg)`;
   }
 
+  function lbUpdateChrome(){
+    const n = lbGallery.urls.length;
+    const multi = n > 1;
+    if(lbCounter){
+      if(multi){
+        lbCounter.textContent = `${lbGallery.index + 1} / ${n}`;
+        lbCounter.classList.remove('hidden');
+      }else{
+        lbCounter.classList.add('hidden');
+      }
+    }
+    if(lbPrevBtn) lbPrevBtn.classList.toggle('show', multi);
+    if(lbNextBtn) lbNextBtn.classList.toggle('show', multi);
+  }
+
+  function lbShowIndex(i){
+    if(!lbGallery.urls.length) return;
+    lbGallery.index = ((i % lbGallery.urls.length) + lbGallery.urls.length) % lbGallery.urls.length;
+    lb.scale = 1; lb.rot = 0; lb.pos = { x: 0, y: 0 };
+    lbImg.src = lbGallery.urls[lbGallery.index];
+    applyLbTransform();
+    lbUpdateChrome();
+  }
+
+  function lbPrev(){ if(lbGallery.urls.length > 1) lbShowIndex(lbGallery.index - 1); }
+  function lbNext(){ if(lbGallery.urls.length > 1) lbShowIndex(lbGallery.index + 1); }
+
   function openLb(src){
+    openLbGallery([src], 0);
+  }
+
+  /** Abre lightbox con 1..N URLs (blob o http). objectUrls se liberan al cerrar. */
+  function openLbGallery(urls, startIndex=0, objectUrls=[]){
+    (lbGallery.objectUrls || []).forEach(u => { try{ URL.revokeObjectURL(u); }catch{} });
+    const list = (urls || []).filter(Boolean);
+    if(!list.length) return;
+    lbGallery = {
+      urls: list,
+      index: Math.max(0, Math.min(startIndex || 0, list.length - 1)),
+      objectUrls: Array.isArray(objectUrls) ? objectUrls.slice() : []
+    };
     lb.scale = 1; lb.rot = 0; lb.pos = { x: 0, y: 0 };
     lb.dragging = false;
     lb.pointers.clear();
@@ -2826,17 +2908,25 @@ function resetChipFiltroUI(){
     lb.lastTap = 0;
     lb.swipeCloseArmed = false;
 
-    lbImg.src = src;
+    lbImg.src = lbGallery.urls[lbGallery.index];
     lbEl.classList.add('show');
     document.body.classList.add('lb-open');
     applyLbTransform();
+    lbUpdateChrome();
   }
 
   function closeLb(){
     lbEl.classList.remove('show');
     lbImg.src = "";
     document.body.classList.remove('lb-open');
+    (lbGallery.objectUrls || []).forEach(u => { try{ URL.revokeObjectURL(u); }catch{} });
+    lbGallery = { urls: [], index: 0, objectUrls: [] };
+    lbUpdateChrome();
   }
+
+  // Exponer navegación galería (onclick del HTML)
+  window.lbPrev = lbPrev;
+  window.lbNext = lbNext;
 
   function zoomInLb(){ lb.scale = clamp(lb.scale + 0.25, 0.8, 6); applyLbTransform(); }
   function zoomOutLb(){ lb.scale = clamp(lb.scale - 0.25, 0.8, 6); applyLbTransform(); }
@@ -2952,7 +3042,10 @@ function resetChipFiltroUI(){
   }, { passive:false });
 
   window.addEventListener('keydown', (e)=>{
-    if(e.key === 'Escape' && lbEl.classList.contains('show')) closeLb();
+    if(!lbEl.classList.contains('show')) return;
+    if(e.key === 'Escape'){ closeLb(); return; }
+    if(e.key === 'ArrowLeft'){ e.preventDefault(); lbPrev(); return; }
+    if(e.key === 'ArrowRight'){ e.preventDefault(); lbNext(); return; }
   });
 
   function startScanner(){
@@ -3001,7 +3094,7 @@ function resetChipFiltroUI(){
   const EDITOR_ACTIVOS_COLUMNS = [
     { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
     { field:'sku', label:'SKU', sticky:'editor-sticky-1', width:92, min:72, readonly:true, always:true },
-    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:280, min:80, max:520, readonly:true, always:true },
+    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:280, min:80, max:520, always:true },
     { field:'marca', label:'Marca', width:135, min:90 },
     { field:'modelo', label:'Modelo', width:135, min:90 },
     { field:'numero_serie', label:'Serie', width:135, min:90 },
@@ -3018,9 +3111,10 @@ function resetChipFiltroUI(){
   ];
 
   const EDITOR_ACTIVOS_EDITABLES = [
-    'marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','dado_de_baja','baja_at'
+    'descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','dado_de_baja','baja_at'
   ];
-  const EDITOR_ACTIVOS_CSV_FIELDS = ['sku','descripcion', ...EDITOR_ACTIVOS_EDITABLES, 'created_at'];
+  // CSV: sku + editables + fecha registro (solo lectura en export)
+  const EDITOR_ACTIVOS_CSV_FIELDS = ['sku', ...EDITOR_ACTIVOS_EDITABLES, 'created_at'];
   const EDITOR_ACTIVOS_CSV_LABELS = {
     sku:'sku', descripcion:'Descripcion', marca:'Marca', modelo:'Modelo', numero_serie:'Serie', genero:'genero', ubicacion:'ubicacion', localizacion:'localizacion', responsable:'responsable', codigo_barras:'codigoBarras', cantidad:'cantidad', costo:'costo', fecha_adquisicion:'fechaAdquisicion', dado_de_baja:'dadoDeBaja', baja_at:'bajaAt', created_at:'fechaRegistro'
   };
@@ -3180,6 +3274,7 @@ function resetChipFiltroUI(){
       try{ const el = qs(id); if(el) el.value = ''; }catch{}
     });
     try{ const el = qs('editor-activos-baja'); if(el) el.value = ''; }catch{}
+    try{ const el = qs('editor-activos-fotos-filtro'); if(el) el.value = ''; }catch{}
     try{ const el = qs('editor-activos-solo-modificados'); if(el) el.checked = false; }catch{}
     ['editor-activos-genero-list','editor-activos-ubicacion-list','editor-activos-responsable-list'].forEach(id => {
       try{ const el = qs(id); if(el) el.innerHTML = ''; }catch{}
@@ -3283,11 +3378,12 @@ function resetChipFiltroUI(){
         genero: r.genero ?? '', ubicacion: r.ubicacion ?? '', localizacion: r.localizacion ?? '', responsable: r.responsable ?? '', codigo_barras: r.codigo_barras ?? '',
         cantidad: r.cantidad ?? '', costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
         dado_de_baja: !!r.dado_de_baja, baja_at: editorActivosToInputDate(r.baja_at), created_at: r.created_at ?? '',
-        _hasFoto: false
+        _hasFoto: false,
+        _fotoCount: 0
       }));
       editorActivosRows.forEach(r => editorActivosOriginal.set(editorActivosKey(r), editorActivosCloneComparable(r)));
 
-      let totalConFoto = 0;
+      let totalConFoto = 0, totalMulti = 0, totalTres = 0;
       try{
         editorActivosStatus(`Editor cargado: ${editorActivosRows.length} activo(s). Consultando fotos...`);
         const fotosBySku = await editorActivosFetchFotosBatch(editorActivosRows, headers, (actual, total) => {
@@ -3295,18 +3391,25 @@ function resetChipFiltroUI(){
         });
         editorActivosRows.forEach(r => {
           const sku = String(r.sku || '').trim();
-          r._hasFoto = !!editorActivosPickLatestFoto(fotosBySku.get(sku));
-          if(r._hasFoto) totalConFoto++;
+          const n = editorActivosCountFotos(fotosBySku.get(sku));
+          r._fotoCount = n;
+          r._hasFoto = n > 0;
+          if(n > 0) totalConFoto++;
+          if(n >= 2) totalMulti++;
+          if(n >= 3) totalTres++;
         });
       }catch(e){
         console.warn('No se pudo consultar el indicador de fotos por SKU', e);
-        editorActivosRows.forEach(r => { r._hasFoto = false; });
+        editorActivosRows.forEach(r => { r._hasFoto = false; r._fotoCount = 0; });
       }
 
       editorActivosActualizarFiltros();
       editorActivosPage = 1;
       editorActivosLastSignature = '';
-      editorActivosStatus(`Editor cargado: ${editorActivosRows.length} activo(s). SKUs con foto: ${totalConFoto}.`);
+      editorActivosStatus(
+        `Editor cargado: ${editorActivosRows.length} activo(s). ` +
+        `Con foto: ${totalConFoto} · 2+ fotos: ${totalMulti} · 3 fotos: ${totalTres}.`
+      );
       aplicarFiltrosEditorActivos();
     }catch(e){
       if(String(empresaSeleccionada?.id || '') !== empresaIdCarga || String(e?.name || '') === 'AbortError') return;
@@ -3322,8 +3425,9 @@ function resetChipFiltroUI(){
     const ubi = editorActivosNormFilter(qs('editor-activos-ubicacion')?.value || '');
     const resp = editorActivosNormFilter(qs('editor-activos-responsable')?.value || '');
     const baja = String(qs('editor-activos-baja')?.value || '').trim();
+    const fotoFiltro = String(qs('editor-activos-fotos-filtro')?.value || '').trim();
     const soloMods = !!qs('editor-activos-solo-modificados')?.checked;
-    const signature = [q,gen,ubi,resp,baja,soloMods ? 'mods' : 'all', editorActivosSort.field, editorActivosSort.dir, [...editorActivosHiddenColumns].join(',')].join('|');
+    const signature = [q,gen,ubi,resp,baja,fotoFiltro,soloMods ? 'mods' : 'all', editorActivosSort.field, editorActivosSort.dir, [...editorActivosHiddenColumns].join(',')].join('|');
     if(signature !== editorActivosLastSignature){ editorActivosPage = 1; editorActivosLastSignature = signature; }
     editorActivosFiltered = editorActivosRows.filter(r => {
       if(q && !r._search.includes(q)) return false;
@@ -3332,6 +3436,11 @@ function resetChipFiltroUI(){
       if(resp && !editorActivosNormFilter(r.responsable).includes(resp)) return false;
       if(baja === 'activos' && r.dado_de_baja) return false;
       if(baja === 'baja' && !r.dado_de_baja) return false;
+      const nFoto = Number(r._fotoCount || 0) || (r._hasFoto ? 1 : 0);
+      if(fotoFiltro === 'con' && nFoto < 1) return false;
+      if(fotoFiltro === 'multi' && nFoto < 2) return false;
+      if(fotoFiltro === '3' && nFoto < 3) return false;
+      if(fotoFiltro === 'sin' && nFoto > 0) return false;
       if(soloMods && !editorActivosModified.has(editorActivosKey(r))) return false;
       return true;
     });
@@ -3371,12 +3480,23 @@ function resetChipFiltroUI(){
     const key = editorActivosKey(row);
     if(col.field === '__select') return `<td data-col="__select" class="editor-sticky-select editor-select-cell"><input type="checkbox" ${editorActivosSelected.has(key)?'checked':''} onchange="editorActivosToggleRow('${escapeHtml(key)}', this.checked)"></td>`;
     if(col.field === 'sku'){
-      const hasFoto = !!row._hasFoto;
-      const fotoIcon = hasFoto ? '<span class="material-symbols-rounded">image_search</span>' : '';
-      const title = hasFoto ? 'Ver foto más reciente del SKU' : 'SKU sin foto registrada';
-      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoIcon}</button></td>`;
+      const n = Number(row._fotoCount || 0) || (row._hasFoto ? 1 : 0);
+      const badgeClass = n >= 3 ? 'n3' : (n === 2 ? 'n2' : (n === 1 ? 'n1' : ''));
+      const fotoBadge = n > 0
+        ? `<span class="editor-foto-badge ${badgeClass}" title="${n} foto(s) · clic para ver galería"><span class="material-symbols-rounded">photo_camera</span>×${n}</span>`
+        : '';
+      const title = n > 0
+        ? (n === 1 ? 'Ver foto del SKU' : `Ver galería (${n} fotos) del SKU`)
+        : 'SKU sin foto registrada';
+      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoBadge}</button></td>`;
     }
-    if(col.field === 'descripcion') return `<td data-col="descripcion" class="editor-sticky-2 editor-readonly" title="${escapeHtml(row.descripcion)}">${escapeHtml(row.descripcion)}</td>`;
+    if(col.field === 'descripcion'){
+      // Editable (sticky): misma celda de input que el resto de campos
+      const key = editorActivosKey(row);
+      const modified = !!(editorActivosModified.get(key) || {})[col.field];
+      const cls = modified ? 'editor-input editor-modified' : 'editor-input';
+      return `<td data-col="descripcion" class="editor-sticky-2 ${modified ? 'editor-modified' : ''}" title="${escapeHtml(row.descripcion || '')}"><input class="${cls}" type="text" data-key="${escapeHtml(key)}" data-field="descripcion" value="${escapeHtml(row.descripcion ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
+    }
     return editorActivosCell(row, col.field, col.type === 'date' ? 'date' : (col.type === 'number' ? 'number' : 'text'));
   }
 
@@ -3446,7 +3566,7 @@ function resetChipFiltroUI(){
   }
 
   function limpiarFiltrosEditorActivos(){
-    ['editor-activos-search','editor-activos-genero','editor-activos-ubicacion','editor-activos-responsable','editor-activos-baja'].forEach(id=>{ const el=qs(id); if(el) el.value=''; });
+    ['editor-activos-search','editor-activos-genero','editor-activos-ubicacion','editor-activos-responsable','editor-activos-baja','editor-activos-fotos-filtro'].forEach(id=>{ const el=qs(id); if(el) el.value=''; });
     const solo = qs('editor-activos-solo-modificados'); if(solo) solo.checked = false;
     aplicarFiltrosEditorActivos();
   }
@@ -3642,15 +3762,41 @@ function resetChipFiltroUI(){
   }
 
   function editorActivosPickLatestFoto(list){
+    const arr = editorActivosSortedFotos(list);
+    return arr[0] || null;
+  }
+
+  /** Cuenta adjuntos de foto (máx 3 tipos: foto / foto2 / foto3). */
+  function editorActivosCountFotos(list){
+    return editorActivosSortedFotos(list).length;
+  }
+
+  /** Orden: foto, foto2, foto3 (slots), luego más reciente. */
+  function editorActivosSortedFotos(list){
     const arr = Array.isArray(list) ? list.filter(x => x && x.bucket && x.path) : [];
-    if(!arr.length) return null;
-    arr.sort((a,b) => {
+    if(!arr.length) return [];
+    const slot = (t) => {
+      const x = String(t || '').toLowerCase();
+      if(x === 'foto') return 1;
+      if(x === 'foto2') return 2;
+      if(x === 'foto3') return 3;
+      return 9;
+    };
+    // Dedup por path
+    const byPath = new Map();
+    arr.forEach(f => {
+      const p = String(f.path || '');
+      if(!p) return;
+      if(!byPath.has(p)) byPath.set(p, f);
+    });
+    return [...byPath.values()].sort((a,b) => {
+      const sa = slot(a.tipo), sb = slot(b.tipo);
+      if(sa !== sb) return sa - sb;
       const ta = Date.parse(a.created_at || a.inserted_at || a.updated_at || '') || 0;
       const tb = Date.parse(b.created_at || b.inserted_at || b.updated_at || '') || 0;
       if(tb !== ta) return tb - ta;
-      return String(b.path || '').localeCompare(String(a.path || ''));
+      return String(a.path || '').localeCompare(String(b.path || ''));
     });
-    return arr[0];
   }
 
 
@@ -3662,21 +3808,31 @@ function resetChipFiltroUI(){
     if(!sku){ alert('El activo no tiene SKU.'); return; }
 
     const oldStatus = qs('editor-activos-status')?.textContent || '';
-    editorActivosStatus(`Buscando foto más reciente del SKU ${sku}...`);
+    editorActivosStatus(`Buscando fotos del SKU ${sku}...`);
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
       const fotosBySku = await editorActivosFetchFotosBatch([row], headers);
-      const foto = editorActivosPickLatestFoto(fotosBySku.get(sku));
-      if(!foto){
+      const fotos = editorActivosSortedFotos(fotosBySku.get(sku));
+      if(!fotos.length){
         editorActivosStatus(oldStatus || `SKU ${sku} sin foto.`);
         alert(`El SKU ${sku} no tiene fotos registradas.`);
         return;
       }
-      editorActivosStatus(`Abriendo foto más reciente del SKU ${sku}...`);
-      const blob = await editorActivosDownloadFotoBlob(foto, headers);
-      const url = URL.createObjectURL(blob);
-      openLb(url);
-      editorActivosStatus(oldStatus || `Foto abierta: SKU ${sku}.`);
+      // Actualiza contador en fila (por si cambió en Storage)
+      row._fotoCount = fotos.length;
+      row._hasFoto = true;
+      renderEditorActivos();
+
+      editorActivosStatus(`Abriendo ${fotos.length} foto(s) del SKU ${sku}...`);
+      const blobs = await Promise.all(fotos.map(f => editorActivosDownloadFotoBlob(f, headers)));
+      const objectUrls = blobs.map(b => URL.createObjectURL(b));
+      openLbGallery(objectUrls, 0, objectUrls);
+      editorActivosStatus(
+        oldStatus ||
+        (fotos.length === 1
+          ? `Foto abierta: SKU ${sku}.`
+          : `Galería abierta: SKU ${sku} (${fotos.length} fotos). Usa ◀ ▶ para cambiar.`)
+      );
     }catch(e){
       console.error(e);
       editorActivosStatus(oldStatus || 'Error al abrir foto del SKU.');
@@ -3909,7 +4065,7 @@ function resetChipFiltroUI(){
         }
       }
 
-      const resumenCsv = resumen.map(row => row.map(csvEscape).join(',')).join('\n');
+      const resumenCsv = '\uFEFF' + resumen.map(row => row.map(csvEscape).join(',')).join('\n');
       zip.file('resumen_descarga_fotos.csv', resumenCsv);
       if(ok <= 0 && !confirm(`No se descargó ninguna foto.\n\nSin foto: ${sinFoto}\nErrores: ${errores}\n\n¿Descargar solo el resumen CSV?`)){
         editorActivosStatus(`Descarga cancelada. Fotos OK: ${ok}. Sin foto: ${sinFoto}. Errores: ${errores}.`);
@@ -4038,7 +4194,7 @@ function resetChipFiltroUI(){
       el.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(aplicarFiltrosEditorActivos, 120); });
       el.addEventListener('change', aplicarFiltrosEditorActivos);
     });
-    ['editor-activos-baja','editor-activos-solo-modificados'].forEach(id => qs(id)?.addEventListener('change', aplicarFiltrosEditorActivos));
+    ['editor-activos-baja','editor-activos-fotos-filtro','editor-activos-solo-modificados'].forEach(id => qs(id)?.addEventListener('change', aplicarFiltrosEditorActivos));
     document.addEventListener('keydown', (ev) => {
       const inEditor = !qs('view-editor-activos')?.classList.contains('hidden');
       if((ev.ctrlKey || ev.metaKey) && String(ev.key || '').toLowerCase() === 's' && inEditor){ ev.preventDefault(); guardarEditorActivos(); }
