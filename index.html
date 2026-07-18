@@ -131,6 +131,25 @@
     .editor-status{font-size:.78rem; color:#64748B; font-weight:800}
     .editor-actions{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
     .editor-actions .btn{padding:9px 11px; border-radius:11px}
+    .editor-actions .menu-wrap{ position:relative; display:inline-block; }
+    .editor-actions .menu-panel{
+      position:absolute; right:0; top:calc(100% + 6px);
+      min-width:300px; max-width:360px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; box-shadow: var(--shadow);
+      padding:8px; z-index:80;
+    }
+    .editor-actions .menu-item:disabled,
+    .editor-actions .menu-item[aria-disabled="true"]{
+      opacity:.45; cursor:not-allowed; pointer-events:none;
+    }
+    .editor-actions .menu-sep{
+      height:1px; margin:6px 8px; background:var(--border);
+    }
+    html.is-mobile .editor-actions .menu-panel{
+      left:0; right:auto; width:min(92vw, 360px);
+      min-width:unset; max-width:unset;
+    }
     .editor-filterbar{display:grid; gap:8px; grid-template-columns:minmax(260px,2fr) repeat(4,minmax(135px,1fr)) auto; align-items:end; padding:10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 8px 18px rgba(0,40,100,.04)}
     .editor-filterbar label{font-size:.68rem; color:#64748B; font-weight:900; text-transform:uppercase; display:block; margin-bottom:3px}
     .editor-filterbar .select,.editor-filterbar .editor-input{height:38px}
@@ -736,10 +755,81 @@
           <button class="btn tonal" onclick="editorActivosLimpiarSeleccion()"><span class="material-symbols-rounded">deselect</span> Limpiar selección</button>
           <button class="btn tonal" onclick="editorActivosColumnasConfig()"><span class="material-symbols-rounded">view_column</span> Columnas</button>
           <button class="btn tonal" onclick="editorActivosRestaurarColumnas()"><span class="material-symbols-rounded">restart_alt</span> Restaurar columnas</button>
-          <button class="btn tonal" onclick="exportarEditorActivosCsv()"><span class="material-symbols-rounded">table_view</span> Exportar CSV</button>
-          <button class="btn tonal" id="btn-editor-activos-fotos" onclick="editorActivosDescargarFotosSeleccionadas()" disabled><span class="material-symbols-rounded">photo_library</span> Bajar fotos selección</button>
+
+          <!-- Menú CSV: Exportar / Importar -->
+          <div class="menu-wrap" id="editor-activos-csv-wrap">
+            <button type="button" class="btn tonal" id="btn-editor-activos-csv-menu" onclick="toggleEditorActivosCsvMenu(event)" aria-expanded="false" aria-haspopup="true">
+              <span class="material-symbols-rounded">import_export</span> CSV
+              <span class="material-symbols-rounded" style="font-size:18px;margin-left:2px">expand_more</span>
+            </button>
+            <div id="editor-activos-csv-menu" class="menu-panel hidden" role="menu">
+              <button type="button" class="menu-item" role="menuitem" onclick="closeEditorActivosMenus(); exportarEditorActivosCsv()">
+                <span class="material-symbols-rounded">table_view</span>
+                <span class="mi-text">
+                  <span class="mi-title">Exportar CSV</span>
+                  <span class="mi-sub">Descarga la vista filtrada (o todos si no hay filtro)</span>
+                </span>
+              </button>
+              <button type="button" class="menu-item" role="menuitem" onclick="closeEditorActivosMenus(); qs('editor-activos-import').click()">
+                <span class="material-symbols-rounded">upload_file</span>
+                <span class="mi-text">
+                  <span class="mi-title">Importar CSV</span>
+                  <span class="mi-sub">Aplica cambios de ficha sobre activos ya cargados</span>
+                </span>
+              </button>
+            </div>
+          </div>
           <input id="editor-activos-import" type="file" accept=".csv,text/csv" class="hidden" onchange="importarEditorActivosCsv(this.files && this.files[0]); this.value=''"/>
-          <button class="btn tonal" onclick="qs('editor-activos-import').click()"><span class="material-symbols-rounded">upload_file</span> Importar CSV</button>
+
+          <!-- Menú Fotos: bajar / adjuntar -->
+          <div class="menu-wrap" id="editor-activos-fotos-wrap">
+            <button type="button" class="btn tonal" id="btn-editor-activos-fotos-menu" onclick="toggleEditorActivosFotosMenu(event)" aria-expanded="false" aria-haspopup="true">
+              <span class="material-symbols-rounded">photo_library</span> Fotos
+              <span class="material-symbols-rounded" style="font-size:18px;margin-left:2px">expand_more</span>
+            </button>
+            <div id="editor-activos-fotos-menu" class="menu-panel hidden" role="menu">
+              <button type="button" class="menu-item" id="mi-editor-bajar-fotos-sel" role="menuitem" onclick="closeEditorActivosMenus(); editorActivosDescargarFotosSeleccionadas()">
+                <span class="material-symbols-rounded">download</span>
+                <span class="mi-text">
+                  <span class="mi-title">Bajar fotos selección</span>
+                  <span class="mi-sub">ZIP con las fotos de los activos marcados</span>
+                </span>
+              </button>
+              <button type="button" class="menu-item" id="mi-editor-bajar-fotos-todas" role="menuitem" onclick="closeEditorActivosMenus(); editorActivosDescargarTodasFotos()">
+                <span class="material-symbols-rounded">cloud_download</span>
+                <span class="mi-text">
+                  <span class="mi-title">Bajar todas las fotos</span>
+                  <span class="mi-sub">ZIP con fotos de todos los activos cargados</span>
+                </span>
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button type="button" class="menu-item" id="mi-editor-adjuntar-fotos" role="menuitem" onclick="closeEditorActivosMenus(); editorActivosAdjuntarFotosPicker('files')" title="Nombre = código de barras. Opcional: _2 / _3">
+                <span class="material-symbols-rounded">add_a_photo</span>
+                <span class="mi-text">
+                  <span class="mi-title">Adjuntar fotos</span>
+                  <span class="mi-sub">Elige imágenes (nombre = código de barras)</span>
+                </span>
+              </button>
+              <button type="button" class="menu-item" id="mi-editor-adjuntar-carpeta" role="menuitem" onclick="closeEditorActivosMenus(); editorActivosAdjuntarFotosPicker('folder')">
+                <span class="material-symbols-rounded">folder_open</span>
+                <span class="mi-text">
+                  <span class="mi-title">Fotos desde carpeta</span>
+                  <span class="mi-sub">Lee todas las imágenes de una carpeta</span>
+                </span>
+              </button>
+              <button type="button" class="menu-item" id="mi-editor-adjuntar-zip" role="menuitem" onclick="closeEditorActivosMenus(); editorActivosAdjuntarFotosPicker('zip')">
+                <span class="material-symbols-rounded">folder_zip</span>
+                <span class="mi-text">
+                  <span class="mi-title">Fotos desde ZIP</span>
+                  <span class="mi-sub">ZIP con nombres por código de barras (_1/_2/_3)</span>
+                </span>
+              </button>
+            </div>
+          </div>
+          <input id="editor-activos-bulk-fotos" type="file" accept="image/*" multiple class="hidden" onchange="editorActivosOnBulkFotosFiles(this.files, 'files'); this.value=''"/>
+          <input id="editor-activos-bulk-fotos-folder" type="file" accept="image/*" multiple webkitdirectory directory class="hidden" onchange="editorActivosOnBulkFotosFiles(this.files, 'folder'); this.value=''"/>
+          <input id="editor-activos-bulk-fotos-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" class="hidden" onchange="editorActivosOnBulkFotosZip(this.files && this.files[0]); this.value=''"/>
+
           <button class="btn tonal" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Modos</button>
         </div>
       </div>

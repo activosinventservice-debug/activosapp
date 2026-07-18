@@ -1046,14 +1046,29 @@ function closeSkusCsvMenu(){
 document.addEventListener('pointerdown', (e)=>{
   const wrap = qs('skus-csv-wrap');
   const menu = qs('skus-csv-menu');
-  if(!wrap || !menu) return;
-  if(menu.classList.contains('hidden')) return;
-  if(!wrap.contains(e.target)) closeSkusCsvMenu();
+  if(wrap && menu && !menu.classList.contains('hidden') && !wrap.contains(e.target)){
+    closeSkusCsvMenu();
+  }
+  // Editor masivo: menús Fotos y CSV
+  try{
+    if(typeof closeEditorActivosMenus === 'function'){
+      const fWrap = qs('editor-activos-fotos-wrap');
+      const fMenu = qs('editor-activos-fotos-menu');
+      const cWrap = qs('editor-activos-csv-wrap');
+      const cMenu = qs('editor-activos-csv-menu');
+      const outsideFotos = fWrap && fMenu && !fMenu.classList.contains('hidden') && !fWrap.contains(e.target);
+      const outsideCsv = cWrap && cMenu && !cMenu.classList.contains('hidden') && !cWrap.contains(e.target);
+      if(outsideFotos || outsideCsv) closeEditorActivosMenus();
+    }
+  }catch{}
 }, true);
 
 // ✅ Escape para cerrar
 document.addEventListener('keydown', (e)=>{
-  if(e.key === 'Escape') closeSkusCsvMenu();
+  if(e.key === 'Escape'){
+    closeSkusCsvMenu();
+    try{ if(typeof closeEditorActivosMenus === 'function') closeEditorActivosMenus(); }catch{}
+  }
 });
 
 
@@ -3090,6 +3105,7 @@ function resetChipFiltroUI(){
   let editorActivosSort = { field: 'sku', dir: 'asc' };
   let editorActivosColumnWidths = {};
   let editorActivosHiddenColumns = new Set();
+  let editorActivosBulkAttachRunning = false;
 
   const EDITOR_ACTIVOS_COLUMNS = [
     { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
@@ -3463,7 +3479,77 @@ function resetChipFiltroUI(){
     if(qs('btn-editor-activos-deshacer')) qs('btn-editor-activos-deshacer').disabled = mods <= 0;
     if(qs('btn-editor-activos-bulk')) qs('btn-editor-activos-bulk').disabled = selected <= 0;
     if(qs('btn-editor-activos-deshacer-sel')) qs('btn-editor-activos-deshacer-sel').disabled = selected <= 0;
-    if(qs('btn-editor-activos-fotos')) qs('btn-editor-activos-fotos').disabled = selected <= 0 || !canDescargarFoto();
+    // Menú Fotos: habilita/deshabilita ítems según selección y permisos
+    try{ editorActivosUpdateFotosMenuState(); }catch{}
+  }
+
+  function editorActivosUpdateFotosMenuState(){
+    const selected = editorActivosSelected.size;
+    const hasRows = editorActivosRows.length > 0;
+    const canDown = !!canDescargarFoto();
+    const canAttach = !!editorActivosCanAdjuntarFotosMasivo && editorActivosCanAdjuntarFotosMasivo();
+    const busy = !!editorActivosBulkAttachRunning;
+
+    const setMi = (id, enabled, titleWhenDisabled) => {
+      const el = qs(id);
+      if(!el) return;
+      el.disabled = !enabled || busy;
+      el.setAttribute('aria-disabled', (!enabled || busy) ? 'true' : 'false');
+      if(!enabled && titleWhenDisabled) el.title = titleWhenDisabled;
+      else if(enabled) el.title = el.dataset.defaultTitle || el.title || '';
+    };
+
+    setMi('mi-editor-bajar-fotos-sel', canDown && selected > 0,
+      !canDown ? 'Sin permiso para descargar foto' : 'Selecciona uno o más activos');
+    setMi('mi-editor-bajar-fotos-todas', canDown && hasRows,
+      !canDown ? 'Sin permiso para descargar foto' : 'Primero carga activos');
+    setMi('mi-editor-adjuntar-fotos', canAttach && hasRows,
+      !canAttach ? 'Sin permiso de Editor Masivo' : 'Primero carga activos');
+    setMi('mi-editor-adjuntar-carpeta', canAttach && hasRows,
+      !canAttach ? 'Sin permiso de Editor Masivo' : 'Primero carga activos');
+    setMi('mi-editor-adjuntar-zip', canAttach && hasRows,
+      !canAttach ? 'Sin permiso de Editor Masivo' : 'Primero carga activos');
+
+    const btnMenu = qs('btn-editor-activos-fotos-menu');
+    if(btnMenu) btnMenu.disabled = busy;
+  }
+
+  function closeEditorActivosMenus(){
+    ['editor-activos-fotos-menu','editor-activos-csv-menu'].forEach(id => {
+      const menu = qs(id);
+      if(menu) menu.classList.add('hidden');
+    });
+    ['btn-editor-activos-fotos-menu','btn-editor-activos-csv-menu'].forEach(id => {
+      const btn = qs(id);
+      if(btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function toggleEditorActivosFotosMenu(ev){
+    try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch{}
+    const menu = qs('editor-activos-fotos-menu');
+    const btn = qs('btn-editor-activos-fotos-menu');
+    if(!menu) return;
+    const willOpen = menu.classList.contains('hidden');
+    closeEditorActivosMenus();
+    if(willOpen){
+      try{ editorActivosUpdateFotosMenuState(); }catch{}
+      menu.classList.remove('hidden');
+      if(btn) btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  function toggleEditorActivosCsvMenu(ev){
+    try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch{}
+    const menu = qs('editor-activos-csv-menu');
+    const btn = qs('btn-editor-activos-csv-menu');
+    if(!menu) return;
+    const willOpen = menu.classList.contains('hidden');
+    closeEditorActivosMenus();
+    if(willOpen){
+      menu.classList.remove('hidden');
+      if(btn) btn.setAttribute('aria-expanded', 'true');
+    }
   }
 
   function editorActivosCell(row, field, type='text'){
@@ -3979,12 +4065,33 @@ function resetChipFiltroUI(){
     const rowsBySku = new Map(editorActivosRows.map(r => [editorActivosKey(r), r]));
     const selectedRows = [...editorActivosSelected].map(k => rowsBySku.get(String(k))).filter(Boolean);
     if(!selectedRows.length){ alert('No se encontraron los activos seleccionados.'); return; }
-    if(selectedRows.length > 200 && !confirm(`Vas a descargar fotos de ${selectedRows.length} activos. Puede tardar y consumir datos.\n\n¿Continuar?`)) return;
+    await editorActivosDescargarFotosRows(selectedRows, 'seleccion');
+  }
 
-    const btn = qs('btn-editor-activos-fotos');
+  async function editorActivosDescargarTodasFotos(){
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa.'); return; }
+    if(!canDescargarFoto()){ alert('No tienes permiso para descargar fotos.'); return; }
+    if(!editorActivosRows.length){ alert('Primero carga los activos del editor.'); return; }
+    await editorActivosDescargarFotosRows(editorActivosRows.slice(), 'todas');
+  }
+
+  async function editorActivosDescargarFotosRows(selectedRows, scopeLabel){
+    const rows = Array.isArray(selectedRows) ? selectedRows.filter(Boolean) : [];
+    if(!rows.length){ alert('No hay activos para descargar.'); return; }
+
+    const scopeTxt = scopeLabel === 'todas' ? 'TODOS los activos cargados' : 'la selección';
+    if(rows.length > 200 && !confirm(
+      `Vas a descargar fotos de ${rows.length} activos (${scopeTxt}; hasta 3 fotos por SKU).\n` +
+      `Puede tardar y consumir datos.\n\n¿Continuar?`
+    )) return;
+    if(scopeLabel === 'todas' && rows.length > 50 && rows.length <= 200 && !confirm(
+      `Vas a descargar fotos de ${rows.length} activos cargados (hasta 3 por SKU).\n\n¿Continuar?`
+    )) return;
+
+    const btn = qs('btn-editor-activos-fotos-menu');
     const oldDisabled = btn ? btn.disabled : false;
     if(btn) btn.disabled = true;
-    editorActivosStatus(`Preparando descarga optimizada de fotos: ${selectedRows.length} activo(s)...`);
+    editorActivosStatus(`Preparando descarga de fotos (${scopeLabel}): ${rows.length} activo(s)...`);
 
     const resumen = [['sku','codigo_barra','nombre_archivo','foto_created_at','resultado']];
     let ok = 0, sinFoto = 0, errores = 0, procesadas = 0;
@@ -3996,25 +4103,40 @@ function resetChipFiltroUI(){
       const usados = new Map();
 
       editorActivosStatus('Consultando fotos en lote...');
-      const fotosBySku = await editorActivosFetchFotosBatch(selectedRows, headers, (actual, total) => {
+      const fotosBySku = await editorActivosFetchFotosBatch(rows, headers, (actual, total) => {
         editorActivosStatus(`Consultando fotos en lote: ${actual}/${total} bloque(s)...`);
       });
 
-      const tareas = selectedRows.map((row, i) => {
+      // Una tarea por CADA foto del SKU (foto / foto2 / foto3), no solo la más reciente.
+      const tareas = [];
+      rows.forEach((row, i) => {
         const sku = String(row?.sku || '').trim();
         const codigoBarra = String(row?.codigo_barras || '').trim();
         const baseRaw = codigoBarra || sku;
-        const base = editorActivosSafeFileName(baseRaw, `SKU_${i+1}`);
-        const foto = editorActivosPickLatestFoto(fotosBySku.get(sku));
-        return { row, sku, codigoBarra, base, foto };
+        const baseSku = editorActivosSafeFileName(baseRaw, `SKU_${i+1}`);
+        const fotos = editorActivosSortedFotos(fotosBySku.get(sku));
+        if(!fotos.length){
+          tareas.push({ row, sku, codigoBarra, base: baseSku, foto: null, slot: 0 });
+          return;
+        }
+        fotos.forEach((foto, idx) => {
+          const slot = idx + 1;
+          // Nombre: CODIGO_1, CODIGO_2… (o SKU_1, SKU_2) para no pisar en el ZIP
+          const base = fotos.length === 1 ? baseSku : `${baseSku}_${slot}`;
+          tareas.push({ row, sku, codigoBarra, base, foto, slot });
+        });
       });
 
       sinFoto = tareas.filter(t => !t.foto).length;
       tareas.filter(t => !t.foto).forEach(t => resumen.push([t.sku, t.codigoBarra, '', '', 'SIN FOTO']));
       const conFoto = tareas.filter(t => t.foto);
+      const skusConFoto = new Set(conFoto.map(t => t.sku)).size;
 
       const concurrency = Math.min(10, Math.max(4, Number(window.EDITOR_FOTOS_CONCURRENCY || 8)));
-      editorActivosStatus(`Descargando ${conFoto.length} foto(s) con ${concurrency} descarga(s) simultánea(s)...`);
+      editorActivosStatus(
+        `Descargando ${conFoto.length} foto(s) de ${skusConFoto} SKU(s) ` +
+        `con ${concurrency} descarga(s) simultánea(s)...`
+      );
 
       let fallidas = [];
       await editorActivosMapLimit(conFoto, concurrency, async (item) => {
@@ -4022,7 +4144,13 @@ function resetChipFiltroUI(){
         try{
           const filename = await editorActivosAgregarFotoAlZip(item, headers, usados, zip);
           ok++;
-          resumen.push([sku, codigoBarra, filename, foto.created_at || foto.inserted_at || foto.updated_at || '', 'OK']);
+          resumen.push([
+            sku,
+            codigoBarra,
+            filename,
+            foto.created_at || foto.inserted_at || foto.updated_at || '',
+            item.slot > 1 ? `OK_FOTO_${item.slot}` : 'OK'
+          ]);
         }catch(e){
           fallidas.push({ item, error: e });
           console.warn('Foto pendiente para reintento SKU', sku, e);
@@ -4078,20 +4206,500 @@ function resetChipFiltroUI(){
       });
       const emp = editorActivosSafeFileName(empresaSeleccionada?.nombre || 'empresa', 'empresa');
       const stamp = new Date().toISOString().slice(0,10);
+      const scopeFile = scopeLabel === 'todas' ? 'todas' : 'seleccion';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(out);
-      a.download = `fotos_activos_${emp}_${stamp}.zip`;
+      a.download = `fotos_activos_${scopeFile}_${emp}_${stamp}.zip`;
       document.body.appendChild(a);
       a.click();
       setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-      editorActivosStatus(`ZIP generado. Fotos OK: ${ok}. Sin foto: ${sinFoto}. Errores: ${errores}.`);
-      alert(`Descarga lista.\n\nFotos descargadas: ${ok}\nSin foto: ${sinFoto}\nErrores: ${errores}`);
+      editorActivosStatus(`ZIP generado (${scopeLabel}). Fotos OK: ${ok}. Sin foto: ${sinFoto}. Errores: ${errores}.`);
+      alert(`Descarga lista (${scopeTxt}).\n\nFotos descargadas: ${ok}\nSin foto: ${sinFoto}\nErrores: ${errores}`);
     }catch(e){
       console.error(e);
       editorActivosStatus('Error al generar ZIP de fotos.');
       alert('No se pudo generar el ZIP de fotos: ' + (e?.message || e));
     }finally{
-      if(btn) btn.disabled = oldDisabled || editorActivosSelected.size <= 0 || !canDescargarFoto();
+      if(btn) btn.disabled = oldDisabled;
+      try{ editorActivosUpdateFotosMenuState(); }catch{}
+    }
+  }
+
+  // =========================
+  // ✅ Adjuntar fotos masivo (paridad Android BulkPhotoAttachUtils)
+  // Nombre archivo = código de barras (sin extensión).
+  // Slots: CODIGO.jpg → foto · CODIGO_2.jpg → foto2 · CODIGO_3.jpg → foto3
+  // También: CODIGO-2, CODIGO 2, CODIGO(2)
+  // =========================
+  const EDITOR_BULK_MAX_IMAGES = 2000;
+  const EDITOR_BULK_MAX_ZIP_IMAGES = 10000;
+  const EDITOR_BULK_FOTO_TIPOS = ['foto', 'foto2', 'foto3'];
+
+  function editorActivosCanAdjuntarFotosMasivo(){
+    return !!canEditorActivos();
+  }
+
+  function editorActivosAdjuntarFotosPicker(mode){
+    if(!editorActivosCanAdjuntarFotosMasivo()){
+      alert('No tienes permiso de Editor Masivo para adjuntar fotos.');
+      return;
+    }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa.'); return; }
+    if(!editorActivosRows.length){
+      alert('Primero pulsa «Cargar activos» para poder emparejar las fotos con los códigos de barras.');
+      return;
+    }
+    if(editorActivosBulkAttachRunning){
+      alert('Ya hay un adjunto masivo en curso. Espera a que termine.');
+      return;
+    }
+    const id = mode === 'folder'
+      ? 'editor-activos-bulk-fotos-folder'
+      : (mode === 'zip' ? 'editor-activos-bulk-fotos-zip' : 'editor-activos-bulk-fotos');
+    const el = qs(id);
+    if(!el){ alert('No se encontró el selector de archivos.'); return; }
+    el.click();
+  }
+
+  function editorActivosIsBulkImageName(name){
+    return /\.(jpe?g|png|webp|gif|bmp)$/i.test(String(name || ''));
+  }
+
+  function editorActivosBulkFileBaseName(pathOrName){
+    const s = String(pathOrName || '').replace(/\\/g, '/');
+    const parts = s.split('/');
+    return parts[parts.length - 1] || s;
+  }
+
+  function editorActivosNormalizeBulkCode(value){
+    return String(value ?? '')
+      .trim()
+      .replace(/\uFEFF/g, '')
+      .replace(/\u200B/g, '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, '');
+  }
+
+  /** @returns {{ barcode: string, slot: number }} slot 1|2|3 */
+  function editorActivosParseBulkBarcodeAndSlot(value){
+    const raw = String(value || '').trim();
+    const m = /^(.*?)(?:[\s_-]+|\()([123])\)?$/.exec(raw);
+    if(m){
+      const base = m[1].trim();
+      const slot = Math.min(3, Math.max(1, parseInt(m[2], 10) || 1));
+      return { barcode: base, slot };
+    }
+    return { barcode: raw, slot: 1 };
+  }
+
+  function editorActivosFotoTipoForSlot(slot){
+    const i = Math.min(3, Math.max(1, Number(slot) || 1)) - 1;
+    return EDITOR_BULK_FOTO_TIPOS[i] || 'foto';
+  }
+
+  function editorActivosSanitizeStorageToken(s){
+    return String(s || '')
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9._-]/g, '') || 'x';
+  }
+
+  function editorActivosSetBulkButtonsDisabled(_disabled){
+    // El flag editorActivosBulkAttachRunning se gestiona en runBulkAttach;
+    // aquí solo refresca el estado del menú Fotos (ítems + botón principal).
+    try{ editorActivosUpdateFotosMenuState(); }catch{}
+  }
+
+  async function editorActivosCompressImageToJpeg(fileOrBlob, targetLongSide = 1280, jpegQuality = 0.6){
+    const blob = fileOrBlob instanceof Blob ? fileOrBlob : null;
+    if(!blob) throw new Error('Archivo inválido');
+    let bitmap = null;
+    try{
+      if(typeof createImageBitmap === 'function'){
+        try{
+          bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+        }catch(_){
+          bitmap = await createImageBitmap(blob);
+        }
+      }
+    }catch(_){ bitmap = null; }
+
+    if(!bitmap){
+      // Fallback Image + canvas
+      const dataUrl = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ''));
+        fr.onerror = () => reject(new Error('No se pudo leer la imagen'));
+        fr.readAsDataURL(blob);
+      });
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('No se pudo decodificar la imagen'));
+        el.src = dataUrl;
+      });
+      const w0 = img.naturalWidth || img.width || 0;
+      const h0 = img.naturalHeight || img.height || 0;
+      if(w0 <= 0 || h0 <= 0) throw new Error('Dimensiones de imagen inválidas');
+      const longSide = Math.max(w0, h0);
+      const scale = longSide > targetLongSide ? (targetLongSide / longSide) : 1;
+      const w = Math.max(1, Math.round(w0 * scale));
+      const h = Math.max(1, Math.round(h0 * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if(!ctx) throw new Error('Canvas no disponible');
+      ctx.drawImage(img, 0, 0, w, h);
+      const out = await new Promise((resolve, reject) => {
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Fallo al comprimir JPEG')), 'image/jpeg', jpegQuality);
+      });
+      return out;
+    }
+
+    try{
+      const w0 = bitmap.width || 0;
+      const h0 = bitmap.height || 0;
+      if(w0 <= 0 || h0 <= 0) throw new Error('Dimensiones de imagen inválidas');
+      const longSide = Math.max(w0, h0);
+      const scale = longSide > targetLongSide ? (targetLongSide / longSide) : 1;
+      const w = Math.max(1, Math.round(w0 * scale));
+      const h = Math.max(1, Math.round(h0 * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if(!ctx) throw new Error('Canvas no disponible');
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const out = await new Promise((resolve, reject) => {
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Fallo al comprimir JPEG')), 'image/jpeg', jpegQuality);
+      });
+      return out;
+    }finally{
+      try{ if(bitmap && typeof bitmap.close === 'function') bitmap.close(); }catch{}
+    }
+  }
+
+  async function editorActivosUploadFotoBlob(objectPath, jpegBlob){
+    const pathPart = String(objectPath || '').split('/').map(encodeURIComponent).join('/');
+    const url = `${SB_URL}/storage/v1/object/activo/${pathPart}`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${sessionToken}`,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'true'
+      },
+      body: jpegBlob
+    });
+    if(!res.ok){
+      const t = await res.text().catch(()=> '');
+      throw new Error(`Storage HTTP ${res.status}: ${String(t).replace(/\s+/g,' ').slice(0,180)}`);
+    }
+  }
+
+  async function editorActivosUpsertAdjuntoFoto({ sku, tipo, objectPath, fileName, size }){
+    const empresaNombre = String(empresaSeleccionada?.nombre || '').trim();
+    const empresaId = String(empresaSeleccionada?.id || '').trim();
+    if(!empresaId || !sku || !tipo || !objectPath) throw new Error('Datos de adjunto incompletos');
+
+    const payload = {
+      empresa: empresaNombre,
+      empresa_id: empresaId,
+      sku: String(sku).trim(),
+      tipo: String(tipo).trim().toLowerCase(),
+      bucket: 'activo',
+      path: objectPath,
+      filename: fileName,
+      mime: 'image/jpeg',
+      size: Number.isFinite(size) ? size : null
+    };
+
+    async function post(onConflict){
+      const url = `${SB_URL}/rest/v1/adjuntos?on_conflict=${encodeURIComponent(onConflict)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify(payload)
+      });
+      const body = await res.text().catch(()=> '');
+      return { ok: res.ok, status: res.status, body };
+    }
+
+    let r = await post('empresa_id,sku,tipo');
+    if(r.ok) return;
+    const b = String(r.body || '').toLowerCase();
+    const missingConstraint =
+      b.includes('there is no unique or exclusion constraint matching the on conflict specification') ||
+      b.includes('42p10') ||
+      (b.includes('on_conflict') && b.includes('unique'));
+    if(missingConstraint){
+      r = await post('empresa,sku,tipo');
+      if(r.ok) return;
+    }
+    throw new Error(`Adjunto HTTP ${r.status}: ${String(r.body).replace(/\s+/g,' ').slice(0,180)}`);
+  }
+
+  async function editorActivosPatchHasFotoTrue(sku){
+    const empresaId = String(empresaSeleccionada?.id || '').trim();
+    if(!empresaId || !sku) return;
+    const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&sku=eq.${encodeURIComponent(sku)}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({ has_foto: true })
+    });
+    if(!res.ok){
+      const t = await res.text().catch(()=> '');
+      throw new Error(`PATCH has_foto HTTP ${res.status}: ${String(t).replace(/\s+/g,' ').slice(0,120)}`);
+    }
+  }
+
+  function editorActivosBuildCodigoIndex(rows){
+    const map = new Map();
+    (rows || []).forEach(r => {
+      const codigo = editorActivosNormalizeBulkCode(r?.codigo_barras || '');
+      if(!codigo) return;
+      if(!map.has(codigo)) map.set(codigo, r);
+    });
+    return map;
+  }
+
+  async function editorActivosAttachOneBulkPhoto(item, activosPorCodigo, empresaSlug){
+    const originalName = item.name || 'foto';
+    const barcodeOriginal = String(originalName).replace(/\.[^.]+$/, '').trim();
+    const parsed = editorActivosParseBulkBarcodeAndSlot(barcodeOriginal);
+    const barcode = editorActivosNormalizeBulkCode(parsed.barcode);
+    const fotoSlot = parsed.slot;
+    if(!barcode){
+      return { originalName, barcode: barcodeOriginal, matchedSku: null, ok: false, message: 'Nombre inválido (sin código)' };
+    }
+    const activo = activosPorCodigo.get(barcode);
+    if(!activo){
+      return { originalName, barcode: barcodeOriginal, matchedSku: null, ok: false, message: 'No existe activo con ese código de barras' };
+    }
+    const sku = String(activo.sku || '').trim();
+    if(!sku){
+      return { originalName, barcode: barcodeOriginal, matchedSku: null, ok: false, message: 'Activo encontrado pero SKU vacío' };
+    }
+
+    let lastError = '';
+    for(let attempt = 1; attempt <= 3; attempt++){
+      try{
+        const barcodeForFile = fotoSlot <= 1 ? barcode : `${barcode}_${fotoSlot}`;
+        const safeBarcode = editorActivosSanitizeStorageToken(barcodeForFile);
+        const fileName = `INV_${empresaSlug}_${safeBarcode}_${Date.now()}.jpg`;
+        const objectPath = `${empresaSlug}/fotos/${fileName}`;
+        const jpegBlob = await editorActivosCompressImageToJpeg(item.blob || item.file, 1280, 0.6);
+        await editorActivosUploadFotoBlob(objectPath, jpegBlob);
+        await editorActivosUpsertAdjuntoFoto({
+          sku,
+          tipo: editorActivosFotoTipoForSlot(fotoSlot),
+          objectPath,
+          fileName,
+          size: jpegBlob.size
+        });
+        try{ await editorActivosPatchHasFotoTrue(sku); }
+        catch(e){ console.warn('Subió foto pero falló patch has_foto', sku, e); }
+
+        // Indicador provisional hasta reconsultar adjuntos al final del lote
+        const prev = Number(activo._fotoCount || 0) || 0;
+        activo._fotoCount = Math.min(3, Math.max(prev, fotoSlot));
+        activo._hasFoto = true;
+
+        const msg = attempt === 1 ? 'Adjuntada ✅' : `Adjuntada ✅ en reintento ${attempt}`;
+        return { originalName, barcode: barcodeOriginal, matchedSku: sku, ok: true, message: msg, slot: fotoSlot };
+      }catch(e){
+        lastError = e?.message || String(e);
+        console.warn('BULK_PHOTO web error', originalName, 'intento', attempt, e);
+        if(attempt < 3) await editorActivosSleep(attempt === 1 ? 1500 : 4000);
+      }
+    }
+    return {
+      originalName,
+      barcode: barcodeOriginal,
+      matchedSku: sku,
+      ok: false,
+      message: `Error final tras reintentos: ${lastError}`
+    };
+  }
+
+  async function editorActivosRunBulkAttach(items, sourceLabel){
+    if(editorActivosBulkAttachRunning) return;
+    if(!editorActivosCanAdjuntarFotosMasivo()){ alert('Sin permiso de Editor Masivo.'); return; }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa.'); return; }
+    if(!sessionToken){ alert('Sesión no válida. Vuelve a iniciar sesión.'); return; }
+    if(!editorActivosRows.length){
+      alert('Primero carga los activos del editor.');
+      return;
+    }
+    const list = Array.isArray(items) ? items.filter(Boolean) : [];
+    if(!list.length){
+      alert('No se encontraron imágenes válidas.');
+      return;
+    }
+
+    if(list.length > 200 && !confirm(
+      `Vas a adjuntar ${list.length} foto(s) (${sourceLabel}).\n` +
+      `Se emparejan por código de barras en el nombre del archivo.\n` +
+      `Sufijos _2 / _3 = 2.ª / 3.ª foto del mismo activo.\n\n¿Continuar?`
+    )) return;
+
+    editorActivosBulkAttachRunning = true;
+    editorActivosSetBulkButtonsDisabled(true);
+    const empresaSlug = empresaSafe(empresaSeleccionada.nombre || 'emp');
+    const activosPorCodigo = editorActivosBuildCodigoIndex(editorActivosRows);
+    const results = [];
+    let ok = 0, fail = 0;
+
+    try{
+      editorActivosStatus(`Adjuntando fotos masivo (${sourceLabel}): 0/${list.length}...`);
+      for(let i = 0; i < list.length; i++){
+        const item = list[i];
+        editorActivosStatus(`Adjuntando ${i + 1}/${list.length}: ${item.name || 'foto'}...`);
+        const r = await editorActivosAttachOneBulkPhoto(item, activosPorCodigo, empresaSlug);
+        results.push(r);
+        if(r.ok) ok++; else fail++;
+        if((i + 1) % 100 === 0) await editorActivosSleep(1200);
+      }
+
+      // Reconsulta contadores reales de fotos para SKUs tocados
+      const skusOk = [...new Set(results.filter(r => r.ok && r.matchedSku).map(r => r.matchedSku))];
+      if(skusOk.length){
+        try{
+          editorActivosStatus(`Actualizando contadores de fotos (${skusOk.length} SKU)...`);
+          const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
+          const rowsTouch = editorActivosRows.filter(r => skusOk.includes(String(r.sku || '').trim()));
+          const fotosBySku = await editorActivosFetchFotosBatch(rowsTouch, headers);
+          rowsTouch.forEach(r => {
+            const n = editorActivosCountFotos(fotosBySku.get(String(r.sku || '').trim()));
+            r._fotoCount = n;
+            r._hasFoto = n > 0;
+          });
+        }catch(e){
+          console.warn('No se pudieron refrescar contadores de fotos tras bulk', e);
+        }
+      }
+
+      renderEditorActivos();
+      const resumenLines = [
+        ['archivo','codigo','sku','ok','mensaje']
+      ];
+      results.forEach(r => {
+        resumenLines.push([
+          r.originalName || '',
+          r.barcode || '',
+          r.matchedSku || '',
+          r.ok ? '1' : '0',
+          r.message || ''
+        ]);
+      });
+      // downloadTextFile ya antepone BOM UTF-8 en CSV
+      const resumenCsv = resumenLines.map(row => row.map(csvEscape).join(',')).join('\n');
+      try{
+        const emp = editorActivosSafeFileName(empresaSeleccionada?.nombre || 'empresa', 'empresa');
+        const stamp = new Date().toISOString().slice(0,10);
+        downloadTextFile(`resumen_adjuntar_fotos_${emp}_${stamp}.csv`, resumenCsv, 'text/csv;charset=utf-8');
+      }catch(e){ console.warn('No se pudo descargar resumen CSV', e); }
+
+      editorActivosStatus(`Adjuntar fotos terminado (${sourceLabel}). OK: ${ok}. Error: ${fail}. Total: ${list.length}.`);
+      const sampleFail = results.filter(r => !r.ok).slice(0, 8).map(r => `· ${r.originalName}: ${r.message}`).join('\n');
+      alert(
+        `Adjuntar fotos masivo listo.\n\n` +
+        `Fuente: ${sourceLabel}\n` +
+        `OK: ${ok}\n` +
+        `Error / sin match: ${fail}\n` +
+        `Total: ${list.length}\n\n` +
+        (sampleFail ? `Ejemplos de fallo:\n${sampleFail}\n\n` : '') +
+        `Se descargó un CSV con el detalle.`
+      );
+    }catch(e){
+      console.error(e);
+      editorActivosStatus('Error en adjuntar fotos masivo.');
+      alert('Error en adjuntar fotos masivo: ' + (e?.message || e));
+    }finally{
+      editorActivosBulkAttachRunning = false;
+      editorActivosSetBulkButtonsDisabled(false);
+    }
+  }
+
+  async function editorActivosOnBulkFotosFiles(fileList, source){
+    try{
+      const files = Array.from(fileList || []);
+      let images = files.filter(f => editorActivosIsBulkImageName(f.name || f.webkitRelativePath || ''));
+      if(!images.length){
+        // Algunos navegadores no ponen extensión útil; confían en type
+        images = files.filter(f => String(f.type || '').startsWith('image/'));
+      }
+      if(!images.length){
+        alert(source === 'folder'
+          ? 'La carpeta seleccionada no contiene imágenes válidas (jpg/png/webp/gif).'
+          : 'No se seleccionaron imágenes válidas.');
+        return;
+      }
+      if(images.length > EDITOR_BULK_MAX_IMAGES){
+        alert(`Se limitarán a ${EDITOR_BULK_MAX_IMAGES} imágenes por seguridad.`);
+        images = images.slice(0, EDITOR_BULK_MAX_IMAGES);
+      }
+      const items = images.map(f => ({
+        name: editorActivosBulkFileBaseName(f.webkitRelativePath || f.name || 'foto.jpg'),
+        file: f,
+        blob: f
+      }));
+      await editorActivosRunBulkAttach(items, source === 'folder' ? 'carpeta' : 'selección');
+    }catch(e){
+      console.error(e);
+      alert('No se pudieron leer las imágenes: ' + (e?.message || e));
+    }
+  }
+
+  async function editorActivosOnBulkFotosZip(file){
+    if(!file) return;
+    try{
+      editorActivosStatus('Leyendo ZIP de fotos...');
+      const JSZipCtor = await ensureJsZipEditorActivos();
+      const zip = await JSZipCtor.loadAsync(file);
+      const entries = [];
+      zip.forEach((relativePath, entry) => {
+        if(entry.dir) return;
+        const base = editorActivosBulkFileBaseName(relativePath);
+        if(base.startsWith('.') || base.startsWith('__MACOSX')) return;
+        if(relativePath.includes('__MACOSX')) return;
+        if(!editorActivosIsBulkImageName(base)) return;
+        entries.push({ relativePath, entry, name: base });
+      });
+      if(!entries.length){
+        alert('El ZIP no contiene imágenes válidas (jpg/png/webp/gif).');
+        editorActivosStatus('ZIP sin imágenes.');
+        return;
+      }
+      if(entries.length > EDITOR_BULK_MAX_ZIP_IMAGES){
+        alert(`Se limitarán a ${EDITOR_BULK_MAX_ZIP_IMAGES} imágenes del ZIP por seguridad.`);
+        entries.length = EDITOR_BULK_MAX_ZIP_IMAGES;
+      }
+      const items = [];
+      for(let i = 0; i < entries.length; i++){
+        const e = entries[i];
+        if(i === 0 || (i + 1) % 25 === 0 || i === entries.length - 1){
+          editorActivosStatus(`Extrayendo ZIP: ${i + 1}/${entries.length}...`);
+        }
+        const blob = await e.entry.async('blob');
+        items.push({ name: e.name, blob, file: blob });
+      }
+      await editorActivosRunBulkAttach(items, 'ZIP');
+    }catch(e){
+      console.error(e);
+      editorActivosStatus('Error al leer ZIP de fotos.');
+      alert('No se pudo leer el ZIP: ' + (e?.message || e));
     }
   }
 
