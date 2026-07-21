@@ -1078,22 +1078,67 @@ document.addEventListener('keydown', (e)=>{
       .replace(/\s+/g,'_');
   }
 
+  /**
+   * Repara mojibake típico (UTF-8 leído como Latin-1): "JosÃ©" → "José", "INYECCIÃ“N" → "INYECCIÓN".
+   * No inventa acentos si el dato ya trae � (U+FFFD = carácter perdido).
+   */
+  function fixCsvMojibake(s){
+    let t = String(s ?? '');
+    if(!t) return '';
+    // NFC: unifica acentos compuestos
+    try{ t = t.normalize('NFC'); }catch{}
+    if(!/[ÃÂ]/.test(t)) return t;
+    const bad = (str) => (str.match(/\uFFFD/g) || []).length;
+    // Mapa inverso Windows-1252 (0x80–0x9F) → byte, para “ ” • etc. (Ó mal leída = Ã“)
+    const win1252Extras = {
+      0x20AC:0x80,0x201A:0x82,0x0192:0x83,0x201E:0x84,0x2026:0x85,0x2020:0x86,0x2021:0x87,
+      0x02C6:0x88,0x2030:0x89,0x0160:0x8A,0x2039:0x8B,0x0152:0x8C,0x017D:0x8E,0x2018:0x91,
+      0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,0x02DC:0x98,
+      0x2122:0x99,0x0161:0x9A,0x203A:0x9B,0x0153:0x9C,0x017E:0x9E,0x0178:0x9F
+    };
+    try{
+      const bytes = new Uint8Array(t.length);
+      for(let i=0;i<t.length;i++){
+        const c = t.charCodeAt(i);
+        if(c <= 0xff) bytes[i] = c;
+        else if(win1252Extras[c] != null) bytes[i] = win1252Extras[c];
+        else bytes[i] = 0x3f; // ?
+      }
+      const fixed = new TextDecoder('utf-8', { fatal:false }).decode(bytes);
+      if(fixed && bad(fixed) <= bad(t) && fixed !== t){
+        if(/[áéíóúñÁÉÍÓÚÑüÜ]/.test(fixed) || bad(fixed) < bad(t)) return fixed.normalize('NFC');
+      }
+    }catch{}
+    return t;
+  }
+
   function csvEscape(v){
     if(v===null || v===undefined) return "";
-    const s = String(v);
+    const s = fixCsvMojibake(String(v));
     if(/[",\n\r]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
     return s;
   }
 
   function downloadTextFile(filename, text, mime="text/plain"){
-    // UTF-8 + BOM en CSV: Excel (Windows) muestra bien acentos/ñ.
-    // Sin BOM interpreta como Windows-1252 y sale "JosÃ©", "ubicaciÃ³n", etc.
+    // CSV: UTF-8 binario + BOM EF BB BF (más fiable que meter \uFEFF en el string
+    // para Excel Windows/Mac y evitar "JosÃ©" / "INYECCI�N").
     const isCsv = /csv/i.test(String(mime||'')) || /\.csv$/i.test(String(filename||''));
-    const payload = isCsv ? ('\uFEFF' + String(text ?? '')) : String(text ?? '');
-    const type = isCsv
-      ? (String(mime||'').includes('charset') ? mime : 'text/csv;charset=utf-8')
-      : mime;
-    const blob = new Blob([payload], {type});
+    let body = String(text ?? '');
+    // Evitar BOM doble
+    if(body.charCodeAt(0) === 0xFEFF) body = body.slice(1);
+
+    let blob;
+    if(isCsv){
+      const enc = new TextEncoder(); // siempre UTF-8
+      const data = enc.encode(body);
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const out = new Uint8Array(bom.length + data.length);
+      out.set(bom, 0);
+      out.set(data, bom.length);
+      blob = new Blob([out], { type: 'text/csv;charset=utf-8' });
+    }else{
+      blob = new Blob([body], { type: mime || 'text/plain;charset=utf-8' });
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -1697,16 +1742,17 @@ function toBool(v){
       return;
     }
 
-    const createdByEmail = (userEmail || window.userEmail || "").toString().trim() || null;
-    const createdByNombre = ((typeof getPerms === "function" ? (getPerms().usuarioNombre || "") : (window.__permsEffective?.usuarioNombre || "")) || window.sessionUserName || window.userName || "").toString().trim() || null;
+    // Solo para SKUs NUEVOS. En UPSERT, si se mandan siempre, se PISABA el creador original
+    // de todos los activos con el usuario que importa (bug grave).
+    const sessionCreatorEmail = (userEmail || window.userEmail || "").toString().trim() || null;
+    const sessionCreatorNombre = ((typeof getPerms === "function" ? (getPerms().usuarioNombre || "") : (window.__permsEffective?.usuarioNombre || "")) || window.sessionUserName || window.userName || "").toString().trim() || null;
 
     // Solo ficha: no se envía has_foto / has_factura_pdf (UPSERT conserva flags remotos)
-    const objs = [];
+    const rowsPrep = [];
     for(const r of dataRows){
       const sku = (r[mapIdx.sku]||"").trim();
       if(!sku) continue;
-      const obj = {
-        empresa_id: empresaSeleccionada.id,
+      rowsPrep.push({
         sku,
         descripcion: mapIdx.descripcion>=0 ? (r[mapIdx.descripcion]||"").trim() : "",
         marca: mapIdx.marca>=0 ? ((r[mapIdx.marca]||"").trim() || null) : null,
@@ -1718,22 +1764,73 @@ function toBool(v){
         responsable: mapIdx.responsable>=0 ? (r[mapIdx.responsable]||"").trim() : "",
         codigo_barras: mapIdx.codigo_barras>=0 ? (r[mapIdx.codigo_barras]||"").trim() : "",
         cantidad: mapIdx.cantidad>=0 ? (Number((r[mapIdx.cantidad]||"1").toString().trim())||1) : 1,
-        // No enviar created_at: se conserva en servidor (Android tampoco lo pisa en bulk)
         costo: mapIdx.costo>=0 ? toNum(r[mapIdx.costo]) : null,
         fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
-        // baja_at = BIGINT epoch ms (NO ISO string → 22P02)
-        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToEpochMs(r[mapIdx.baja_at]) : null,
-        creado_por_email: createdByEmail,
-        creado_por_nombre: createdByNombre,
-      };
-      // Normalizar baja_at vacío / NaN → null
-      if(obj.baja_at === '' || obj.baja_at === undefined || !Number.isFinite(obj.baja_at)) obj.baja_at = null;
-
-      objs.push(obj);
+        baja_at: mapIdx.baja_at>=0 ? parseCsvDateToEpochMs(r[mapIdx.baja_at]) : null
+      });
     }
 
-    if(!objs.length){ setSkusMsg("No hay filas válidas para importar"); return; }
+    if(!rowsPrep.length){ setSkusMsg("No hay filas válidas para importar"); return; }
+
+    // Mapa sku → creador ya existente en nube (para NO pisar en updates)
+    setSkusMsg(`Consultando creadores existentes (${rowsPrep.length})...`);
+    const existingCreators = new Map(); // sku -> { email, nombre }
+    try{
+      const headersGet = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
+      const skus = rowsPrep.map(x => x.sku);
+      const CHUNK_Q = 120;
+      for(let i=0;i<skus.length;i+=CHUNK_Q){
+        const chunk = skus.slice(i, i+CHUNK_Q);
+        const inList = chunk.map(s => `"${String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"`).join(',');
+        const urlQ = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})&select=sku,creado_por_email,creado_por_nombre`;
+        const resQ = await fetch(urlQ, { headers: headersGet });
+        if(!resQ.ok) continue;
+        const arr = await resQ.json().catch(()=>[]);
+        (Array.isArray(arr) ? arr : []).forEach(row => {
+          const sku = String(row?.sku || '').trim();
+          if(!sku) return;
+          existingCreators.set(sku, {
+            email: (row?.creado_por_email || '').toString().trim() || null,
+            nombre: (row?.creado_por_nombre || '').toString().trim() || null
+          });
+        });
+      }
+    }catch(e){
+      console.warn('No se pudieron cargar creadores existentes; se usará sesión solo en altas nuevas.', e);
+    }
+
+    const objs = rowsPrep.map(r => {
+      const prev = existingCreators.get(r.sku);
+      // Conservar creador original si el SKU ya existe; solo en alta nueva usar sesión
+      const email = (prev && prev.email) ? prev.email : sessionCreatorEmail;
+      const nombre = (prev && (prev.nombre || prev.email))
+        ? (prev.nombre || null)
+        : sessionCreatorNombre;
+      let bajaAt = r.baja_at;
+      if(bajaAt === '' || bajaAt === undefined || !Number.isFinite(bajaAt)) bajaAt = null;
+      return {
+        empresa_id: empresaSeleccionada.id,
+        sku: r.sku,
+        descripcion: r.descripcion,
+        marca: r.marca,
+        modelo: r.modelo,
+        numero_serie: r.numero_serie,
+        genero: r.genero,
+        ubicacion: r.ubicacion,
+        localizacion: r.localizacion,
+        responsable: r.responsable,
+        codigo_barras: r.codigo_barras,
+        cantidad: r.cantidad,
+        // No enviar created_at: se conserva en servidor
+        costo: r.costo,
+        fecha_adquisicion: r.fecha_adquisicion,
+        dado_de_baja: r.dado_de_baja,
+        baja_at: bajaAt,
+        creado_por_email: email,
+        creado_por_nombre: nombre
+      };
+    });
 
     setSkusMsg(`Importando ${objs.length}...`);
     const headers = {
