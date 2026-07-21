@@ -3242,7 +3242,13 @@ function resetChipFiltroUI(){
   let editorActivosSort = { field: 'sku', dir: 'asc' };
   let editorActivosColumnWidths = {};
   let editorActivosHiddenColumns = new Set();
+  let editorActivosColumnOrder = []; // orden de columnas movibles (sin sticky)
   let editorActivosBulkAttachRunning = false;
+  let editorActivosColDragFrom = null;
+  let editorActivosColDragMoved = false;
+
+  // Sticky fijas a la izquierda (no se reordenan). El resto se puede arrastrar.
+  const EDITOR_ACTIVOS_STICKY_FIELDS = ['__select', 'sku', 'descripcion'];
 
   const EDITOR_ACTIVOS_COLUMNS = [
     { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
@@ -3319,8 +3325,42 @@ function resetChipFiltroUI(){
   function editorActivosSaveHiddenColumns(){
     try{ localStorage.setItem('editorActivosHiddenColumns', JSON.stringify([...editorActivosHiddenColumns])); }catch{}
   }
+  function editorActivosDefaultMovableOrder(){
+    return EDITOR_ACTIVOS_COLUMNS
+      .map(c => c.field)
+      .filter(f => !EDITOR_ACTIVOS_STICKY_FIELDS.includes(f));
+  }
+  function editorActivosLoadColumnOrder(){
+    const defaults = editorActivosDefaultMovableOrder();
+    try{
+      const saved = JSON.parse(localStorage.getItem('editorActivosColumnOrder') || '[]');
+      const known = new Set(defaults);
+      const order = [];
+      (Array.isArray(saved) ? saved : []).forEach(f => {
+        if(known.has(f) && !order.includes(f)) order.push(f);
+      });
+      defaults.forEach(f => { if(!order.includes(f)) order.push(f); });
+      editorActivosColumnOrder = order;
+    }catch{
+      editorActivosColumnOrder = defaults.slice();
+    }
+  }
+  function editorActivosSaveColumnOrder(){
+    try{ localStorage.setItem('editorActivosColumnOrder', JSON.stringify(editorActivosColumnOrder || [])); }catch{}
+  }
+  function editorActivosColByField(field){
+    return EDITOR_ACTIVOS_COLUMNS.find(c => c.field === field) || null;
+  }
   function editorActivosVisibleColumns(){
-    return EDITOR_ACTIVOS_COLUMNS.filter(c => c.always || !editorActivosHiddenColumns.has(c.field));
+    // Sticky fijas + movibles en el orden guardado (respetando ocultas)
+    const sticky = EDITOR_ACTIVOS_STICKY_FIELDS
+      .map(f => editorActivosColByField(f))
+      .filter(Boolean);
+    if(!editorActivosColumnOrder.length) editorActivosLoadColumnOrder();
+    const rest = editorActivosColumnOrder
+      .map(f => editorActivosColByField(f))
+      .filter(c => c && (c.always || !editorActivosHiddenColumns.has(c.field)));
+    return sticky.concat(rest);
   }
   function editorActivosColumnWidth(col){
     const saved = Number(editorActivosColumnWidths[col.field]);
@@ -3338,10 +3378,78 @@ function resetChipFiltroUI(){
       const w = editorActivosColumnWidth(col); total += w;
       table.querySelectorAll(`[data-col="${col.field}"]`).forEach(el => { el.style.width = `${w}px`; el.style.minWidth = `${w}px`; });
     });
-    document.documentElement.style.setProperty('--editor-select-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[0])}px`);
-    document.documentElement.style.setProperty('--editor-sku-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[1])}px`);
-    document.documentElement.style.setProperty('--editor-desc-w', `${editorActivosColumnWidth(EDITOR_ACTIVOS_COLUMNS[2])}px`);
+    const sel = editorActivosColByField('__select');
+    const sku = editorActivosColByField('sku');
+    const desc = editorActivosColByField('descripcion');
+    document.documentElement.style.setProperty('--editor-select-w', `${editorActivosColumnWidth(sel || EDITOR_ACTIVOS_COLUMNS[0])}px`);
+    document.documentElement.style.setProperty('--editor-sku-w', `${editorActivosColumnWidth(sku || EDITOR_ACTIVOS_COLUMNS[1])}px`);
+    document.documentElement.style.setProperty('--editor-desc-w', `${editorActivosColumnWidth(desc || EDITOR_ACTIVOS_COLUMNS[2])}px`);
     table.style.minWidth = `${Math.max(900,total)}px`;
+  }
+
+  function editorActivosMoveColumn(fromField, toField){
+    if(!fromField || !toField || fromField === toField) return;
+    if(EDITOR_ACTIVOS_STICKY_FIELDS.includes(fromField) || EDITOR_ACTIVOS_STICKY_FIELDS.includes(toField)) return;
+    if(!editorActivosColumnOrder.length) editorActivosLoadColumnOrder();
+    const order = editorActivosColumnOrder.slice();
+    const from = order.indexOf(fromField);
+    const to = order.indexOf(toField);
+    if(from < 0 || to < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, fromField);
+    editorActivosColumnOrder = order;
+    editorActivosSaveColumnOrder();
+    editorActivosLastSignature = '';
+    editorActivosStatus(`Columna movida: ${editorActivosColByField(fromField)?.label || fromField}`);
+    aplicarFiltrosEditorActivos();
+  }
+
+  function editorActivosOnColDragStart(ev, field){
+    if(ev.target && ev.target.closest && ev.target.closest('.editor-resize-handle')){
+      ev.preventDefault();
+      return;
+    }
+    if(EDITOR_ACTIVOS_STICKY_FIELDS.includes(field)){
+      ev.preventDefault();
+      return;
+    }
+    editorActivosColDragFrom = field;
+    editorActivosColDragMoved = false;
+    try{
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', field);
+    }catch{}
+    document.body.classList.add('editor-col-dragging');
+    ev.currentTarget.classList.add('editor-col-dragging');
+  }
+  function editorActivosOnColDragOver(ev, field){
+    if(EDITOR_ACTIVOS_STICKY_FIELDS.includes(field)) return;
+    if(!editorActivosColDragFrom || editorActivosColDragFrom === field) return;
+    ev.preventDefault();
+    try{ ev.dataTransfer.dropEffect = 'move'; }catch{}
+    editorActivosColDragMoved = true;
+    document.querySelectorAll('#view-editor-activos thead th.editor-col-drop-target')
+      .forEach(el => el.classList.remove('editor-col-drop-target'));
+    ev.currentTarget.classList.add('editor-col-drop-target');
+  }
+  function editorActivosOnColDragLeave(ev){
+    ev.currentTarget.classList.remove('editor-col-drop-target');
+  }
+  function editorActivosOnColDrop(ev, field){
+    ev.preventDefault();
+    ev.stopPropagation();
+    const from = editorActivosColDragFrom || (ev.dataTransfer && ev.dataTransfer.getData('text/plain'));
+    editorActivosOnColDragEnd();
+    if(from && field) editorActivosMoveColumn(from, field);
+  }
+  function editorActivosOnColDragEnd(){
+    editorActivosColDragFrom = null;
+    document.body.classList.remove('editor-col-dragging');
+    document.querySelectorAll('#view-editor-activos thead th.editor-col-dragging, #view-editor-activos thead th.editor-col-drop-target')
+      .forEach(el => {
+        el.classList.remove('editor-col-dragging');
+        el.classList.remove('editor-col-drop-target');
+      });
   }
   function editorActivosSortIcon(field){
     if(editorActivosSort.field !== field) return 'unfold_more';
@@ -3364,18 +3472,36 @@ function resetChipFiltroUI(){
         if(col.field === '__select'){
           return `<th data-col="__select" class="editor-sticky-select"><input type="checkbox" id="editor-activos-select-page" onchange="editorActivosTogglePage(this.checked)" title="Seleccionar visibles de la página"></th>`;
         }
-        const sortButton = col.nosort ? `<span>${escapeHtml(col.label)}</span>` : `
-          <button type="button" class="editor-th-sort" onclick="editorActivosSetSort('${col.field}')" title="Ordenar por ${escapeHtml(col.label)}">
+        const movable = !EDITOR_ACTIVOS_STICKY_FIELDS.includes(col.field);
+        const thClass = [col.sticky || '', movable ? 'editor-col-movable' : ''].filter(Boolean).join(' ');
+        const dragAttrs = movable
+          ? `draggable="true" ondragstart="editorActivosOnColDragStart(event,'${col.field}')" ondragover="editorActivosOnColDragOver(event,'${col.field}')" ondragleave="editorActivosOnColDragLeave(event)" ondrop="editorActivosOnColDrop(event,'${col.field}')" ondragend="editorActivosOnColDragEnd()"`
+          : `ondragover="editorActivosOnColDragOver(event,'${col.field}')"`;
+        const title = movable
+          ? 'title="Arrastra para reordenar · clic en el nombre para ordenar filas"'
+          : '';
+        const dragHint = movable
+          ? `<span class="material-symbols-rounded editor-drag-hint" title="Arrastra la columna">drag_indicator</span>`
+          : '';
+        const sortButton = col.nosort
+          ? `<span>${escapeHtml(col.label)}</span>`
+          : `<button type="button" class="editor-th-sort" onclick="editorActivosSetSort('${col.field}')" title="Ordenar filas por ${escapeHtml(col.label)}">
+            ${dragHint}
             <span>${escapeHtml(col.label)}</span>
             <span class="material-symbols-rounded editor-sort-icon">${editorActivosSortIcon(col.field)}</span>
           </button>`;
-        return `<th data-col="${col.field}" data-field="${col.field}" class="${col.sticky || ''}">${sortButton}<span class="editor-resize-handle" onmousedown="editorActivosStartResize(event,'${col.field}')" title="Arrastra para cambiar ancho"></span></th>`;
+        return `<th data-col="${col.field}" data-field="${col.field}" class="${thClass}" ${dragAttrs} ${title}>${sortButton}<span class="editor-resize-handle" onmousedown="editorActivosStartResize(event,'${col.field}')" title="Arrastra para cambiar ancho"></span></th>`;
       }).join('');
     }
     editorActivosApplyColumnWidths();
   }
   function editorActivosSetSort(field){
     if(field === '__select') return;
+    // Si acabamos de arrastrar columna, no ordenar
+    if(editorActivosColDragMoved){
+      editorActivosColDragMoved = false;
+      return;
+    }
     if(editorActivosSort.field === field) editorActivosSort.dir = editorActivosSort.dir === 'asc' ? 'desc' : 'asc';
     else editorActivosSort = { field, dir:'asc' };
     editorActivosLastSignature = '';
@@ -3919,11 +4045,14 @@ function resetChipFiltroUI(){
     aplicarFiltrosEditorActivos();
   }
   function editorActivosRestaurarColumnas(){
-    if(!confirm('¿Restaurar columnas visibles y anchos originales?')) return;
+    if(!confirm('¿Restaurar columnas visibles, anchos y orden originales?')) return;
     editorActivosHiddenColumns = new Set();
     editorActivosColumnWidths = {};
-    editorActivosSaveHiddenColumns(); editorActivosSaveColumnWidths();
-    editorActivosStatus('Columnas restauradas.');
+    editorActivosColumnOrder = editorActivosDefaultMovableOrder();
+    editorActivosSaveHiddenColumns();
+    editorActivosSaveColumnWidths();
+    editorActivosSaveColumnOrder();
+    editorActivosStatus('Columnas restauradas (visibles, anchos y orden).');
     aplicarFiltrosEditorActivos();
   }
 
@@ -5008,6 +5137,7 @@ function resetChipFiltroUI(){
   document.addEventListener('DOMContentLoaded', () => {
     editorActivosLoadColumnWidths();
     editorActivosLoadHiddenColumns();
+    editorActivosLoadColumnOrder();
     editorActivosInitColumnTools();
     let t = null;
     qs('editor-activos-search')?.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(aplicarFiltrosEditorActivos, 180); });

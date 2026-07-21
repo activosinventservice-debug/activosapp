@@ -159,12 +159,18 @@
     .editor-table{border-collapse:separate; border-spacing:0; min-width:1880px; width:max-content; font-size:.76rem; line-height:1.05; table-layout:fixed}
     .editor-table th,.editor-table td{border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; white-space:nowrap; height:38px; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box; max-width:0}
     .editor-table thead th{position:sticky; top:0; z-index:8; background:#F8FAFC; font-size:.68rem; text-transform:uppercase; letter-spacing:.02em; color:#475569; height:32px; user-select:none}
+    .editor-table thead th.editor-col-movable{cursor:grab}
+    .editor-table thead th.editor-col-movable:active{cursor:grabbing}
+    .editor-table thead th.editor-col-dragging{opacity:.45; background:#E0E7FF !important}
+    .editor-table thead th.editor-col-drop-target{box-shadow:inset 3px 0 0 #0B6EF3, inset -3px 0 0 transparent; background:#DBEAFE !important}
     .editor-th-sort{width:100%; border:0; background:transparent; color:inherit; font:inherit; font-weight:900; text-transform:uppercase; letter-spacing:.02em; display:flex; align-items:center; justify-content:space-between; gap:5px; padding:0 14px 0 0; cursor:pointer; text-align:left}
     .editor-th-sort span:first-child{overflow:hidden; text-overflow:ellipsis}
     .editor-sort-icon{font-size:16px; opacity:.78; flex:0 0 auto}
+    .editor-drag-hint{font-size:14px; opacity:.45; margin-right:2px; flex:0 0 auto}
     .editor-resize-handle{position:absolute; top:0; right:0; width:9px; height:100%; cursor:col-resize; z-index:20}
     .editor-resize-handle:hover{background:rgba(11,110,243,.18)}
     body.editor-resizing{cursor:col-resize !important; user-select:none}
+    body.editor-col-dragging{cursor:grabbing !important; user-select:none}
     .editor-sticky-select{position:sticky; left:0; z-index:10; background:#fff; min-width:var(--editor-select-w,44px); width:var(--editor-select-w,44px); box-shadow:1px 0 0 var(--border); text-align:center!important}
     .editor-sticky-1{position:sticky; left:var(--editor-select-w,44px); z-index:9; background:#fff; min-width:var(--editor-sku-w,92px); width:var(--editor-sku-w,92px); box-shadow:1px 0 0 var(--border)}
     .editor-sticky-2{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,92px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,280px); width:var(--editor-desc-w,280px); max-width:var(--editor-desc-w,280px); box-shadow:1px 0 0 var(--border)}
