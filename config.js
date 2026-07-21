@@ -35,6 +35,6 @@ window.getActiveSupabaseConfig = function(){
 
 
 // ✅ Versionado de la webapp para gate de servidor
-window.APP_VERSION_CODE = 18;
-window.APP_VERSION_NAME = "2026.07.17.2";
+window.APP_VERSION_CODE = 19;
+window.APP_VERSION_NAME = "2026.07.20.3";
 window.APP_PLATFORM = "web";
