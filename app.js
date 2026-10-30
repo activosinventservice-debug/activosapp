@@ -4303,7 +4303,7 @@ function resetChipFiltroUI(){
     skus.forEach(sku => bySku.set(sku, []));
     if(!skus.length) return bySku;
 
-    const selectFull = 'sku,bucket,path,filename,mime,created_at,inserted_at,updated_at';
+    const selectFull = 'sku,bucket,path,filename,mime,created_at,updated_at';
     const selectBasic = 'sku,bucket,path,filename,mime';
     const chunks = editorActivosChunkArray(skus, 120);
 
