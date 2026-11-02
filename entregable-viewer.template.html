@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Visor de activos</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#14213d;background:#f3f6fb;font-synthesis:none;text-rendering:optimizeLegibility;--bg:#f3f6fb;--blue:#1463d9;--blue-soft:#eaf2ff;--line:#dbe3ef;--muted:#64748b;--surface:#fff;--shadow:0 12px 32px rgba(15,45,90,.08)}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg)}
+    .top{background:linear-gradient(115deg,#0b55bd,#2584ff);color:#fff;padding:22px clamp(16px,4vw,44px);box-shadow:0 8px 24px #0b397522}
+    .top-inner{max-width:1500px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:20px}.eyebrow{font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.82}.top h1{font-size:clamp(1.25rem,3vw,2rem);margin:5px 0}.top p{margin:0;color:#dbeafe;font-size:.9rem}.stats{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.stat{padding:8px 12px;border:1px solid #ffffff44;border-radius:999px;background:#ffffff18;font-weight:750;font-size:.82rem;white-space:nowrap}
+    main{max-width:1500px;margin:22px auto;padding:0 clamp(12px,3vw,32px);display:grid;grid-template-columns:minmax(255px,340px) minmax(0,1fr);gap:18px;align-items:start}
+    aside,.detail{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}aside{overflow:hidden;position:sticky;top:14px}.controls{padding:14px;border-bottom:1px solid var(--line);display:grid;gap:9px}.controls input,.controls select{width:100%;border:1px solid #cbd5e1;border-radius:11px;padding:11px 12px;background:#fff;color:#14213d;font:inherit;outline:none}.controls input:focus,.controls select:focus{border-color:#77a9f8;box-shadow:0 0 0 3px #1463d91a}.count{font-size:.8rem;color:var(--muted);font-weight:700}.sku-list{max-height:calc(100vh - 190px);overflow:auto;padding:8px}.sku-item{width:100%;text-align:left;border:1px solid transparent;border-radius:12px;padding:11px;background:#fff;color:inherit;cursor:pointer;display:grid;gap:4px}.sku-item:hover{background:#f5f8ff;border-color:#dce8ff}.sku-item.selected{background:var(--blue-soft);border-color:#9fc4ff}.sku-line{display:flex;justify-content:space-between;align-items:center;gap:8px}.sku-code{font-weight:850;color:#064cb0}.sku-desc{font-size:.82rem;line-height:1.35}.sku-meta{font-size:.72rem;color:var(--muted)}.badges{display:flex;gap:5px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;border-radius:99px;background:#f1f5f9;padding:3px 7px;font-size:.7rem;color:#475569;font-weight:750}.badge.photo{background:#e8f8ee;color:#187744}.badge.pdf{background:#fff0f0;color:#b42318}.more{border:0;background:transparent;color:var(--blue);padding:11px;width:100%;font:inherit;font-weight:750;cursor:pointer}
+    .detail{min-height:460px;padding:clamp(16px,2.5vw,28px)}.empty{min-height:380px;display:grid;place-items:center;text-align:center;color:var(--muted)}.empty strong{display:block;color:#334155;font-size:1.1rem;margin-bottom:5px}.detail-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px}.detail-head h2{font-size:1.45rem;margin:0 0 5px;overflow-wrap:anywhere}.detail-head p{margin:0;color:var(--muted);line-height:1.45}.status{padding:6px 10px;border-radius:999px;background:#e8f8ee;color:#187744;font-weight:800;font-size:.75rem;white-space:nowrap}.status.retired{background:#fff4e5;color:#a15c00}.section{margin:18px 0 0}.section h3{font-size:1rem;margin:0 0 11px}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.field{padding:10px 12px;background:#f8fafc;border:1px solid #edf1f7;border-radius:11px;min-width:0}.field label{display:block;color:var(--muted);font-size:.7rem;font-weight:750;margin-bottom:4px}.field div{font-weight:700;overflow-wrap:anywhere;white-space:pre-wrap}.qty-table{width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden}.qty-table th,.qty-table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}.qty-table th{font-size:.75rem;color:#475569;background:#f8fafc}.qty-table td:last-child,.qty-table th:last-child{text-align:right}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.photo-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc}.photo-view{width:100%;height:160px;border:0;background:#edf2f8;display:grid;place-items:center;padding:0;cursor:zoom-in}.photo-view img{width:100%;height:100%;object-fit:contain}.file-row{padding:9px;display:flex;justify-content:space-between;align-items:center;gap:8px}.file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.77rem;font-weight:700}.link,.pdf-open{border:1px solid #c7dbfa;border-radius:9px;background:#f5f9ff;color:#064cb0;padding:7px 9px;font:inherit;font-size:.75rem;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}.pdf-list{display:grid;gap:7px}.pdf-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:11px}.pdf-title{font-size:.85rem;font-weight:700;overflow-wrap:anywhere}.pdf-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.pdf-frame-wrap{margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#e9eef5}.pdf-frame{display:block;width:100%;height:min(68vh,760px);border:0;background:#fff}.hint{margin-top:8px;color:var(--muted);font-size:.78rem}.no-files{padding:14px;border-radius:11px;background:#f8fafc;color:var(--muted);font-size:.85rem}
+    .modal{position:fixed;inset:0;background:#06152de8;z-index:10;display:grid;grid-template-rows:auto 1fr;gap:10px;padding:12px}.modal[hidden]{display:none}.modal-bar{display:flex;justify-content:space-between;align-items:center;color:#fff;gap:10px}.modal-close{border:1px solid #ffffff55;border-radius:10px;background:#ffffff18;color:#fff;padding:8px 12px;font:inherit;font-weight:800;cursor:pointer}.modal img{max-width:100%;max-height:calc(100vh - 72px);object-fit:contain;justify-self:center;align-self:center}
+    @media(max-width:850px){main{grid-template-columns:1fr}.sku-list{max-height:260px}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.detail{min-height:300px}.top-inner{align-items:flex-start;flex-direction:column}.stats{justify-content:flex-start}}
+    @media(max-width:520px){.fields{grid-template-columns:1fr}.detail-head{flex-direction:column}.pdf-item{align-items:flex-start;flex-direction:column}.pdf-actions{justify-content:flex-start}.photo-view{height:145px}}
+    @media print{body{background:#fff}.top{box-shadow:none}main{display:block;margin:0;max-width:none;padding:10px}.top{padding:12px}.stats{display:none}aside{display:none}.detail{box-shadow:none;border:0;padding:0}.pdf-frame-wrap{display:none}.photo-card{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div><div class="eyebrow">Visor de inventario · solo lectura</div><h1 id="company"></h1><p id="generated"></p></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </header>
+  <main>
+    <aside aria-label="Lista de activos">
+      <div class="controls">
+        <input id="search" type="search" placeholder="Buscar SKU, descripción, código..." autocomplete="off">
+        <select id="filter" aria-label="Filtrar activos">
+          <option value="todos">Todos los activos</option>
+          <option value="vigentes">Activos vigentes</option>
+          <option value="baja">Dados de baja</option>
+          <option value="foto">Con fotos</option>
+          <option value="pdf">Con PDF</option>
+        </select>
+        <div id="count" class="count"></div>
+      </div>
+      <div id="sku-list" class="sku-list"></div>
+      <button id="more" class="more" type="button" hidden>Mostrar más</button>
+    </aside>
+    <section id="detail" class="detail" aria-live="polite"></section>
+  </main>
+  <div id="photo-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Foto del activo">
+    <div class="modal-bar"><span id="photo-title"></span><button id="photo-close" class="modal-close" type="button">Cerrar</button></div>
+    <img id="photo-large" alt="Foto del activo">
+  </div>
+  <script type="application/json" id="entregable-data">__ENTREGABLE_PAYLOAD__</script>
+  <script>
+  (()=>{
+    'use strict';
+    const DATA=JSON.parse(document.getElementById('entregable-data').textContent);
+    const $=id=>document.getElementById(id);
+    const rows=Array.isArray(DATA.activos)?DATA.activos:[];
+    const search=$('search'),filter=$('filter'),list=$('sku-list'),detail=$('detail'),more=$('more');
+    let selectedSku='',visibleCount=100,pdfObjectUrl='';
+    const esc=s=>String(s??'').trim();
+    const fileData=f=>`data:${f.mime||'application/octet-stream'};base64,${f.data||''}`;
+    const totalFiles=rows.reduce((n,r)=>n+(r.adjuntos||[]).length,0);
+    const totalPhotos=rows.reduce((n,r)=>n+(r.adjuntos||[]).filter(f=>f.tipo==='foto').length,0);
+    const totalPdfs=rows.reduce((n,r)=>n+(r.adjuntos||[]).filter(f=>f.tipo==='pdf').length,0);
+    $('company').textContent=DATA.empresa||'Empresa';
+    $('generated').textContent=`Generado ${DATA.generado||''} · Archivo para consulta sin conexión`;
+    [['SKUs',rows.length],['Fotos',totalPhotos],['PDFs',totalPdfs]].forEach(([label,value])=>{const el=document.createElement('span');el.className='stat';el.textContent=`${label}: ${value}`;$('stats').append(el)});
+    function el(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node}
+    function setText(node,value,fallback='—'){node.textContent=esc(value)||fallback}
+    function filesOf(row,type){return (row.adjuntos||[]).filter(f=>f.tipo===type)}
+    function filterRows(){
+      const q=search.value.trim().toLocaleLowerCase('es-MX'),f=filter.value;
+      return rows.map((row,index)=>({row,index})).filter(({row})=>{
+        const haystack=[row.sku,row.descripcion,row.codigoBarras,row.marca,row.modelo,row.serie,row.genero,row.ubicacion,row.localizacion,row.responsable].join(' ').toLocaleLowerCase('es-MX');
+        if(q&&!haystack.includes(q))return false;
+        if(f==='vigentes'&&row.dadoDeBaja)return false;
+        if(f==='baja'&&!row.dadoDeBaja)return false;
+        if(f==='foto'&&!filesOf(row,'foto').length)return false;
+        if(f==='pdf'&&!filesOf(row,'pdf').length)return false;
+        return true;
+      });
+    }
+    function renderList(){
+      const filtered=filterRows();
+      $('count').textContent=`${filtered.length.toLocaleString('es-MX')} de ${rows.length.toLocaleString('es-MX')} SKU(s)`;
+      if(!filtered.some(x=>x.row.sku===selectedSku))selectedSku=filtered[0]?.row.sku||'';
+      list.replaceChildren();
+      filtered.slice(0,visibleCount).forEach(({row,index})=>{
+        const button=el('button','sku-item'+(row.sku===selectedSku?' selected':''));button.type='button';button.dataset.index=String(index);
+        const line=el('span','sku-line');line.append(el('span','sku-code',row.sku||'Sin SKU'));
+        const badges=el('span','badges');
+        const photos=filesOf(row,'foto').length,pdfs=filesOf(row,'pdf').length;
+        if(photos)badges.append(el('span','badge photo',`📷 ${photos}`));if(pdfs)badges.append(el('span','badge pdf',`PDF ${pdfs}`));
+        if(row.dadoDeBaja)badges.append(el('span','badge','Baja'));
+        line.append(badges);button.append(line,el('span','sku-desc',row.descripcion||'Sin descripción'));
+        button.append(el('span','sku-meta',[row.codigoBarras,row.ubicacion].filter(Boolean).join(' · ')||' '));list.append(button);
+      });
+      more.hidden=filtered.length<=visibleCount;
+      more.textContent=`Mostrar más (${Math.max(0,filtered.length-visibleCount).toLocaleString('es-MX')} restantes)`;
+      const row=rows.find(x=>x.sku===selectedSku);
+      if(row)renderDetail(row);else renderEmpty();
+    }
+    function renderEmpty(){detail.replaceChildren();const box=el('div','empty');const msg=el('div');msg.append(el('strong','',rows.length?'No hay coincidencias':'No hay activos'),el('span','',rows.length?'Ajusta la búsqueda o el filtro.':'El entregable no contiene SKUs.'));box.append(msg);detail.append(box)}
+    function field(grid,label,value){const card=el('div','field');card.append(el('label','',label),el('div','',esc(value)||'—'));grid.append(card)}
+    function section(parent,title){const s=el('section','section');s.append(el('h3','',title));parent.append(s);return s}
+    function renderDetail(row){
+      if(pdfObjectUrl){URL.revokeObjectURL(pdfObjectUrl);pdfObjectUrl=''}
+      detail.replaceChildren();
+      const head=el('header','detail-head'),title=el('div');title.append(el('h2','',`SKU ${row.sku||'—'}`),el('p','',row.descripcion||'Sin descripción'));head.append(title,el('span','status'+(row.dadoDeBaja?' retired':''),row.dadoDeBaja?'Dado de baja':'Activo'));detail.append(head);
+      const fields=el('div','fields');
+      field(fields,'Código de barras',row.codigoBarras);field(fields,'Marca',row.marca);field(fields,'Modelo',row.modelo);field(fields,'Serie',row.serie);field(fields,'Género',row.genero);field(fields,'Responsable',row.responsable);field(fields,'Ubicación',row.ubicacion);field(fields,'Localización',row.localizacion);
+      const partidas=Array.isArray(row.cantidadesUbicacion)?row.cantidadesUbicacion:[];
+      const suma=partidas.length?partidas.reduce((n,p)=>n+(Number(p.cantidad)||0),0):(Number(row.cantidad)||0);
+      field(fields,'Cantidad total',suma);field(fields,'Costo',row.costo===''||row.costo==null?'—':new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(row.costo)||0));field(fields,'Fecha de adquisición',row.fechaAdquisicion);field(fields,'Fecha de registro',row.fechaRegistro);if(row.dadoDeBaja)field(fields,'Fecha de baja',row.bajaAt);
+      detail.append(fields);
+      if(partidas.length){const sec=section(detail,'Cantidades por ubicación');const table=el('table','qty-table'),thead=el('thead'),hr=el('tr');hr.append(el('th','','Ubicación'),el('th','','Cantidad'));thead.append(hr);table.append(thead);const tbody=el('tbody');partidas.forEach(p=>{const tr=el('tr');tr.append(el('td','',p.ubicacion),el('td','',p.cantidad));tbody.append(tr)});table.append(tbody);sec.append(table)}
+      renderPhotos(detail,filesOf(row,'foto'));
+      renderPdfs(detail,filesOf(row,'pdf'));
+    }
+    function downloadLink(file,label='Descargar'){
+      const a=el('a','link',label);a.href=fileData(file);a.download=file.nombre||'adjunto';a.rel='noopener';return a;
+    }
+    function renderPhotos(parent,photos){
+      const sec=section(parent,`Fotos (${photos.length})`);if(!photos.length){sec.append(el('div','no-files','Este SKU no tiene fotos disponibles.'));return}
+      const gallery=el('div','gallery');photos.forEach((file,index)=>{
+        const card=el('div','photo-card'),button=el('button','photo-view');button.type='button';button.setAttribute('aria-label',`Ampliar foto ${index+1}`);
+        const img=el('img');img.src=fileData(file);img.alt=file.nombre||`Foto ${index+1}`;button.append(img);
+        button.addEventListener('click',()=>{ $('photo-title').textContent=file.nombre||`Foto ${index+1}`;$('photo-large').src=fileData(file);$('photo-large').alt=file.nombre||'Foto del activo';$('photo-modal').hidden=false });
+        const row=el('div','file-row');row.append(el('span','file-name',file.nombre||`Foto ${index+1}`),downloadLink(file));card.append(button,row);gallery.append(card);
+      });sec.append(gallery);
+    }
+    function bytesFromBase64(value){const raw=atob(value),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
+    function renderPdfs(parent,pdfs){
+      const sec=section(parent,`Documentos PDF (${pdfs.length})`);if(!pdfs.length){sec.append(el('div','no-files','Este SKU no tiene PDFs disponibles.'));return}
+      const list=el('div','pdf-list');const frameWrap=el('div','pdf-frame-wrap'),frame=el('iframe','pdf-frame');frame.title='Visor de PDF';frameWrap.append(frame);
+      pdfs.forEach((file,index)=>{
+        const item=el('div','pdf-item');item.append(el('span','pdf-title',file.nombre||`PDF ${index+1}`));const actions=el('span','pdf-actions');
+        const preview=el('button','pdf-open','Vista previa');preview.type='button';preview.addEventListener('click',()=>{
+          try{if(pdfObjectUrl)URL.revokeObjectURL(pdfObjectUrl);const blob=new Blob([bytesFromBase64(file.data)],{type:'application/pdf'});pdfObjectUrl=URL.createObjectURL(blob);frame.src=pdfObjectUrl+'#toolbar=1&navpanes=0&view=FitH';frameWrap.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('No se pudo abrir el PDF en este navegador. Puedes descargarlo.')}
+        });
+        actions.append(preview,downloadLink(file));item.append(actions);list.append(item);
+      });sec.append(list,frameWrap,el('p','hint','Si el navegador no muestra la vista previa, usa Descargar PDF.'));
+    }
+    list.addEventListener('click',event=>{const button=event.target.closest('.sku-item');if(!button)return;const row=rows[Number(button.dataset.index)];if(!row)return;selectedSku=row.sku;visibleCount=Math.max(visibleCount,Math.ceil((Number(button.dataset.index)+1)/100)*100);renderList()});
+    search.addEventListener('input',()=>{visibleCount=100;renderList()});filter.addEventListener('change',()=>{visibleCount=100;renderList()});more.addEventListener('click',()=>{visibleCount+=100;renderList()});
+    $('photo-close').addEventListener('click',()=>{$('photo-modal').hidden=true;$('photo-large').removeAttribute('src')});$('photo-modal').addEventListener('click',event=>{if(event.target===$('photo-modal'))$('photo-close').click()});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('photo-modal').hidden)$('photo-close').click()});
+    renderList();
+  })();
+  </script>
+</body>
+</html>

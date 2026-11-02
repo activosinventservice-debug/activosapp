@@ -406,7 +406,8 @@ window.fetch = async function(input, init){
     puedeCambiarFechaResguardosHistorial:false,
     puedeDescargarFoto:false,
     puedeImportarExportarSkusCsv:false,
-    puedeAccederEditorMasivo:false
+    puedeAccederEditorMasivo:false,
+    puedeAccederEntregableHtml:false
   };
 
   const __PERMS_ALL = {
@@ -421,7 +422,8 @@ window.fetch = async function(input, init){
     puedeCambiarFechaResguardosHistorial:true,
     puedeDescargarFoto:true,
     puedeImportarExportarSkusCsv:true,
-    puedeAccederEditorMasivo:true
+    puedeAccederEditorMasivo:true,
+    puedeAccederEntregableHtml:true
   };
 
   let __isSuperAdminChecked = false;
@@ -465,11 +467,11 @@ window.fetch = async function(input, init){
 
       puedeExportarResCvsPDF: isSuper || esAdmin || raw?.puedeExportarResCvsPDF === true,
       puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
-      puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true
-    ,
+      puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true,
 
       puedeImportarExportarSkusCsv: isSuper || esAdmin || raw?.puedeImportarExportarSkusCsv === true,
-      puedeAccederEditorMasivo: isSuper || raw?.puedeAccederEditorMasivo === true
+      puedeAccederEditorMasivo: isSuper || raw?.puedeAccederEditorMasivo === true,
+      puedeAccederEntregableHtml: isSuper || raw?.puedeAccederEntregableHtml === true
     };
   }
 
@@ -513,7 +515,8 @@ window.fetch = async function(input, init){
         "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
         "puedeDescargarFoto",
         "puedeImportarExportarSkusCsv",
-        "puedeAccederEditorMasivo"
+        "puedeAccederEditorMasivo",
+        "puedeAccederEntregableHtml"
       ].join(",");
 
       const url = `${SB_URL}/rest/v1/empresa_user_permissions` +
@@ -521,7 +524,7 @@ window.fetch = async function(input, init){
         `&empresaNombre=eq.${encodeURIComponent(emp)}` +
         `&select=${select}`;
 
-      const res = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+      const res = await fetch(url, { cache:'no-store', headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
       if(!res.ok){
         const t = await res.text().catch(()=> "");
         console.warn("Permisos HTTP", res.status, t);
@@ -552,6 +555,7 @@ window.fetch = async function(input, init){
   function canChangeFechaPdf(){ return !!getPerms().puedeCambiarFechaResguardosHistorial; }
   function canDescargarFoto(){ return !!getPerms().puedeDescargarFoto; }
   function canSkusCsv(){ return !!getPerms().puedeImportarExportarSkusCsv; }
+  function canEntregableHtml(){ return !!getPerms().puedeAccederEntregableHtml; }
 
   function setBtnEnabled(id, enabled, disabledTitle){
     const el = qs(id);
@@ -576,6 +580,7 @@ window.fetch = async function(input, init){
     setBtnEnabled('btn-mode-hist', canHist(), 'Sin permiso para Historial Resguardos');
     setBtnVisible('btn-mode-editor-activos', canEditorActivos());
     setBtnEnabled('btn-mode-editor-activos', canEditorActivos(), 'Solo admin de empresa');
+    try{ window.updateEntregableHtmlPermissions?.(); }catch{}
 
     // Navegación interna
     setBtnEnabled('btn-skus-catalogos', canCatalogos(), 'Sin permiso para Catálogos');
@@ -1298,14 +1303,39 @@ document.addEventListener('keydown', (e)=>{
     "codigoBarras","cantidad","fechaRegistro",
     "costo","fechaAdquisicion","dadoDeBaja","bajaAt"
   ];
+  const ANDROID_ACTIVOS_CSV_HEADERS_UBICACIONES = [
+    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(0, 11),
+    "cantidadesPorUbicacion",
+    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(11)
+  ];
   const ANDROID_ACTIVOS_SELECT_COLS = [
     "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
     "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion",
     "dado_de_baja","baja_at"
   ];
+  const ANDROID_ACTIVOS_SELECT_COLS_UBICACIONES = [
+    "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+    "responsable","codigo_barras","cantidad","cantidades_ubicacion","created_at","costo","fecha_adquisicion",
+    "dado_de_baja","baja_at"
+  ];
 
-  function activoRowToAndroidCsv(r){
-    return [
+  function formatCantidadesUbicacionCsv(value){
+    let partidas = value;
+    if(typeof partidas === 'string'){
+      try{ partidas = JSON.parse(partidas); }catch{ partidas = []; }
+    }
+    if(!Array.isArray(partidas)) return '';
+    return partidas.map(partida => {
+      const ubicacion = String(partida?.ubicacion ?? '').trim();
+      const cantidad = Number(partida?.cantidad);
+      return ubicacion && Number.isInteger(cantidad) && cantidad > 0
+        ? `${ubicacion} = ${cantidad}`
+        : '';
+    }).filter(Boolean).join(', ');
+  }
+
+  function activoRowToAndroidCsv(r, incluirCantidadesPorUbicacion = false){
+    const campos = [
       r?.sku,
       r?.descripcion,
       r?.marca,
@@ -1317,12 +1347,18 @@ document.addEventListener('keydown', (e)=>{
       r?.responsable,
       r?.codigo_barras,
       r?.cantidad,
+    ];
+    if(incluirCantidadesPorUbicacion){
+      campos.push(formatCantidadesUbicacionCsv(r?.cantidades_ubicacion ?? r?.cantidadesUbicacion));
+    }
+    campos.push(
       formatCsvDateTimeMexico(r?.created_at),
       (r?.costo ?? ""),
       formatCsvDateOnly(r?.fecha_adquisicion),
       (r?.dado_de_baja ? 1 : 0),
       formatCsvDateTimeMexico(r?.baja_at)
-    ].map(csvEscape).join(",");
+    );
+    return campos.map(csvEscape).join(",");
   }
 
     async function descargarMachoteSkus(){
@@ -1360,8 +1396,8 @@ document.addEventListener('keydown', (e)=>{
         const row = [
           sku, "", "", "", "",
           "", "", "", "",
-          "", "1", "",
-          "", "", "0", ""
+          "", "1", "", "",
+          "", "0", ""
         ];
         out.push(row.map(csvEscape).join(","));
       }
@@ -1422,6 +1458,47 @@ document.addEventListener('keydown', (e)=>{
       setSkusMsg("Error al exportar: " + (t || "Error"));
     }
   }
+
+  async function exportarSkusCsvConUbicaciones(){
+    if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
+    if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
+    setSkusMsg("Exportando cantidades por ubicación...");
+    try{
+      const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
+      const selectCols = ANDROID_ACTIVOS_SELECT_COLS_UBICACIONES;
+      const limit = 1000;
+      let offset = 0;
+      const all = [];
+      while(true){
+        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}&order=sku.asc&limit=${limit}&offset=${offset}`;
+        const res = await fetch(url, { headers });
+        if(!res.ok){
+          const t = await res.text().catch(()=> "");
+          throw new Error(t || `Error HTTP ${res.status}`);
+        }
+        const rows = await res.json();
+        if(Array.isArray(rows) && rows.length) all.push(...rows);
+        if(!Array.isArray(rows) || rows.length < limit) break;
+        offset += limit;
+      }
+
+      const out = [ANDROID_ACTIVOS_CSV_HEADERS_UBICACIONES.join(",")];
+      for(const r of all) out.push(activoRowToAndroidCsv(r, true));
+      const emp = (empresaSeleccionada?.nombre || empresaSeleccionada?.razon_social || "empresa")
+        .toString().trim().replace(/\s+/g,'_');
+      downloadTextFile(`activos_con_ubicaciones_${emp}.csv`, out.join("\n"), "text/csv;charset=utf-8");
+      setSkusMsg(`Exportación con cantidades por ubicación lista: ${all.length} registros`);
+      setTimeout(()=>setSkusMsg(""), 3000);
+    }catch(e){
+      console.error(e);
+      setSkusMsg("Error al exportar cantidades por ubicación: " + (e?.message || "Error"));
+    }
+  }
+
+  qs('btn-export-skus-csv-ubicaciones')?.addEventListener('click', () => {
+    closeCsvModal();
+    exportarSkusCsvConUbicaciones();
+  });
 
     async function exportarSkusCsvFiltrado(){
     if(!canSkusCsv()){ alert('Sin permiso para CSV'); return; }
@@ -2267,8 +2344,8 @@ async function cargarEmpresasAutorizadas(){
   }
 
   // ✅ Permisos por empresa (servidor: empresa_user_permissions)
-  //    (usa cache interno por email|empresaNombre; no forzamos red salvo que sea necesario)
-  await cargarPermisosEmpresaActual(false);
+  // Actualiza los permisos al entrar a la empresa: pueden cambiar desde Android.
+  await cargarPermisosEmpresaActual(true);
 
   switchView('view-selector');
   try{ applyPermisosUI(); }catch{}
@@ -2413,6 +2490,7 @@ function resetChipFiltroUI(){
       'modelo',
       'genero',
       'cantidad',
+      'cantidades_ubicacion',
       'costo',
       'ubicacion',
       'responsable',
@@ -2708,6 +2786,297 @@ function resetChipFiltroUI(){
     enfocarSkuEnLista(skuActual);
   }
 
+  let qtyLocationEditingSku = '';
+  let qtyLocationEditingEmpresaId = '';
+  let qtyLocationDrafts = [];
+  let qtyLocationValidationAttempted = false;
+  let qtyLocationSaving = false;
+  let qtyLocationServerError = '';
+  let qtyLocationToastTimer = 0;
+
+  function canEditarCantidadesUbicacion(){
+    const perms = getPerms();
+    return !!(perms?.esSuperAdmin || perms?.esAdminEmpresa || perms?.puedeAccederEditorMasivo);
+  }
+
+  function parseCantidadesUbicacion(value){
+    let raw = value;
+    if(typeof raw === 'string'){
+      try{ raw = JSON.parse(raw); }catch{ return []; }
+    }
+    if(!Array.isArray(raw)) return [];
+    return raw.map(item => ({
+      cantidad: Number(item?.cantidad),
+      ubicacion: norm(item?.ubicacion)
+    })).filter(item => Number.isInteger(item.cantidad) && item.cantidad > 0 && item.ubicacion);
+  }
+
+  function renderDetalleCantidadesUbicacion(activo){
+    const card = qs('det-cantidad-ubicacion-card');
+    const rowsEl = qs('det-cantidad-ubicacion-rows');
+    const chip = qs('chip-cantidad-text');
+    const editButton = qs('btn-edit-cantidad-ubicacion');
+    if(!card || !rowsEl || !editButton) return;
+
+    const partidas = parseCantidadesUbicacion(getRaw(activo, 'cantidades_ubicacion', 'cantidadesUbicacion'));
+    const total = partidas.length
+      ? partidas.reduce((sum, item) => sum + item.cantidad, 0)
+      : (Number(getRaw(activo, 'cantidad')) || 0);
+    if(chip) chip.textContent = `Cantidad: ${total}`;
+
+    const puedeEditar = canEditarCantidadesUbicacion();
+    editButton.classList.toggle('hidden', !puedeEditar);
+    card.classList.toggle('hidden', !partidas.length && !puedeEditar);
+
+    if(!partidas.length){
+      rowsEl.classList.remove('qty-location-table');
+      rowsEl.innerHTML = '<div class="qty-location-empty">Sin cantidades por ubicación</div>';
+      return;
+    }
+
+    rowsEl.classList.add('qty-location-table');
+    rowsEl.innerHTML = [
+      '<div class="qty-location-table-row head"><span>Ubicación</span><span>Cantidad</span></div>',
+      ...partidas.map(item => `<div class="qty-location-table-row"><span>${escapeHtml(item.ubicacion)}</span><span>${item.cantidad}</span></div>`)
+    ].join('');
+  }
+
+  function qtyLocationReadDraftsFromDom(){
+    const root = qs('qty-location-editor-rows');
+    if(!root) return qtyLocationDrafts;
+    qtyLocationDrafts = Array.from(root.querySelectorAll('.qty-location-editor-row')).map(row => ({
+      cantidad: row.querySelector('[data-qty-field="cantidad"]')?.value ?? '',
+      ubicacion: row.querySelector('[data-qty-field="ubicacion"]')?.value ?? ''
+    }));
+    return qtyLocationDrafts;
+  }
+
+  function qtyLocationValidateDrafts(){
+    const total = qtyLocationDrafts.reduce((sum, row) => sum + (Number(row.cantidad) || 0), 0);
+    const rowsValid = qtyLocationDrafts.every(row =>
+      Number.isInteger(Number(row.cantidad)) && Number(row.cantidad) > 0 && String(row.ubicacion || '').trim()
+    );
+    const valid = qtyLocationDrafts.length === 0 || (rowsValid && total <= 2147483647);
+    return { total, rowsValid, valid };
+  }
+
+  function updateQtyLocationDialogValidation(){
+    const root = qs('qty-location-modal');
+    if(!root) return;
+    qtyLocationReadDraftsFromDom();
+    const result = qtyLocationValidateDrafts();
+    const totalEl = qs('qty-location-total');
+    if(totalEl) totalEl.textContent = String(result.total);
+
+    Array.from(root.querySelectorAll('.qty-location-editor-row')).forEach(row => {
+      const quantity = row.querySelector('[data-qty-field="cantidad"]');
+      const location = row.querySelector('[data-qty-field="ubicacion"]');
+      if(quantity) quantity.classList.toggle(
+        'is-invalid',
+        qtyLocationValidationAttempted && !(Number.isInteger(Number(quantity.value)) && Number(quantity.value) > 0)
+      );
+      if(location) location.classList.toggle(
+        'is-invalid',
+        qtyLocationValidationAttempted && !String(location.value || '').trim()
+      );
+    });
+
+    const error = qs('qty-location-error');
+    if(error){
+      const msg = qtyLocationServerError || (qtyLocationValidationAttempted && !result.valid
+        ? (result.total > 2147483647
+            ? 'El total excede el máximo permitido.'
+            : 'Revisa las cantidades y ubicaciones. Usa cantidades enteras mayores que cero.')
+        : '');
+      error.textContent = msg;
+      error.classList.toggle('hidden', !msg);
+    }
+    return result;
+  }
+
+  function renderQtyLocationDrafts(){
+    const root = qs('qty-location-editor-rows');
+    if(!root) return;
+    root.innerHTML = qtyLocationDrafts.map((row, index) => `
+      <div class="qty-location-editor-row" data-index="${index}">
+        <div class="qty-location-field">
+          <label for="qty-location-count-${index}">Cantidad</label>
+          <input id="qty-location-count-${index}" data-qty-field="cantidad" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(row.cantidad)}" aria-label="Cantidad en ubicación ${index + 1}"/>
+        </div>
+        <div class="qty-location-field">
+          <label for="qty-location-place-${index}">Ubicación</label>
+          <input id="qty-location-place-${index}" data-qty-field="ubicacion" type="text" value="${escapeHtml(row.ubicacion)}" autocomplete="off" aria-label="Nombre de ubicación ${index + 1}"/>
+        </div>
+        <button class="qty-location-remove" type="button" data-qty-action="remove" data-index="${index}" title="Eliminar ubicación" aria-label="Eliminar ubicación">
+          <span class="material-symbols-rounded">delete</span>
+        </button>
+      </div>
+    `).join('');
+    updateQtyLocationDialogValidation();
+  }
+
+  function abrirEdicionCantidadesUbicacion(){
+    if(!canEditarCantidadesUbicacion()){
+      alert('No tienes permiso para editar cantidades por ubicación.');
+      return;
+    }
+    const activo = cacheSkus[indiceActual];
+    if(!activo){ alert('No se encontró el activo actual.'); return; }
+
+    qtyLocationEditingSku = String(getv(activo, 'sku') || '').trim();
+    qtyLocationEditingEmpresaId = String(empresaSeleccionada?.id || '').trim();
+    if(!qtyLocationEditingSku || !qtyLocationEditingEmpresaId){
+      alert('Faltan datos de empresa o SKU para editar las cantidades.');
+      return;
+    }
+
+    qtyLocationDrafts = parseCantidadesUbicacion(getRaw(activo, 'cantidades_ubicacion', 'cantidadesUbicacion'))
+      .map(item => ({ cantidad:String(item.cantidad), ubicacion:item.ubicacion }));
+    if(!qtyLocationDrafts.length) qtyLocationDrafts = [{ cantidad:'', ubicacion:'' }];
+    qtyLocationValidationAttempted = false;
+    qtyLocationSaving = false;
+    qtyLocationServerError = '';
+    const skuEl = qs('qty-location-sku');
+    if(skuEl) skuEl.textContent = `SKU ${qtyLocationEditingSku}`;
+    const saveButton = qs('btn-save-cantidad-ubicacion');
+    if(saveButton){ saveButton.disabled = false; saveButton.textContent = 'Guardar'; }
+    renderQtyLocationDrafts();
+    qs('qty-location-modal')?.classList.remove('hidden');
+    setTimeout(() => qs('qty-location-count-0')?.focus(), 60);
+  }
+
+  function cerrarEdicionCantidadesUbicacion(){
+    if(qtyLocationSaving) return;
+    qs('qty-location-modal')?.classList.add('hidden');
+    qtyLocationEditingSku = '';
+    qtyLocationEditingEmpresaId = '';
+  }
+
+  function mostrarQtyLocationToast(message, isError=false){
+    const toast = qs('qty-location-toast');
+    if(!toast) return;
+    toast.textContent = message;
+    toast.classList.toggle('error', !!isError);
+    toast.classList.add('show');
+    if(qtyLocationToastTimer) clearTimeout(qtyLocationToastTimer);
+    qtyLocationToastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+  }
+
+  async function guardarCantidadesUbicacionDetalle(){
+    if(qtyLocationSaving) return;
+    if(!canEditarCantidadesUbicacion()){
+      qtyLocationServerError = 'No tienes permiso para editar este activo.';
+      updateQtyLocationDialogValidation();
+      return;
+    }
+    qtyLocationReadDraftsFromDom();
+    qtyLocationValidationAttempted = true;
+    qtyLocationServerError = '';
+    const validation = updateQtyLocationDialogValidation();
+    if(!validation?.valid) return;
+
+    const empresaId = String(empresaSeleccionada?.id || '').trim();
+    if(!empresaId || empresaId !== qtyLocationEditingEmpresaId){
+      qtyLocationServerError = 'La empresa seleccionada cambió. Cierra y abre de nuevo el editor.';
+      updateQtyLocationDialogValidation();
+      return;
+    }
+    const index = cacheSkus.findIndex(row => String(getv(row, 'sku') || '').trim() === qtyLocationEditingSku);
+    const activo = index >= 0 ? cacheSkus[index] : null;
+    if(!activo){
+      qtyLocationServerError = 'No se encontró el SKU para guardar.';
+      updateQtyLocationDialogValidation();
+      return;
+    }
+
+    const partidas = qtyLocationDrafts.map(row => ({
+      cantidad:Number(row.cantidad),
+      ubicacion:String(row.ubicacion || '').trim()
+    }));
+    const cantidadActualizada = partidas.length
+      ? partidas.reduce((sum, row) => sum + row.cantidad, 0)
+      : (Number(getRaw(activo, 'cantidad')) || 0);
+    const payload = { cantidad:cantidadActualizada, cantidades_ubicacion:partidas };
+    const saveButton = qs('btn-save-cantidad-ubicacion');
+    qtyLocationSaving = true;
+    if(saveButton){ saveButton.disabled = true; saveButton.textContent = 'Guardando…'; }
+
+    try{
+      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&sku=eq.${encodeURIComponent(qtyLocationEditingSku)}&select=sku,cantidad,cantidades_ubicacion`;
+      const response = await fetch(url, {
+        method:'PATCH',
+        headers:{
+          apikey:SB_KEY,
+          Authorization:`Bearer ${sessionToken}`,
+          'Content-Type':'application/json',
+          Prefer:'return=representation'
+        },
+        body:JSON.stringify(payload)
+      });
+      if(!response.ok){
+        const body = await response.text().catch(()=> '');
+        throw new Error(`Error HTTP ${response.status}${body ? `: ${body}` : ''}`);
+      }
+      const savedRows = await response.json().catch(()=> []);
+      if(!Array.isArray(savedRows) || !savedRows.length){
+        throw new Error('El servidor no confirmó el cambio. Verifica el permiso de edición.');
+      }
+
+      const saved = savedRows[0];
+      const actualizado = {
+        ...activo,
+        ...saved,
+        cantidad:Number(saved.cantidad ?? cantidadActualizada),
+        cantidades_ubicacion:Array.isArray(saved.cantidades_ubicacion) ? saved.cantidades_ubicacion : partidas
+      };
+      cacheSkus[index] = actualizado;
+      renderTabla();
+      renderDetalleCantidadesUbicacion(actualizado);
+      qtyLocationSaving = false;
+      cerrarEdicionCantidadesUbicacion();
+      mostrarQtyLocationToast('Cantidades guardadas.');
+    }catch(error){
+      console.error('Error guardando cantidades por ubicación', error);
+      qtyLocationServerError = error?.message || 'No se pudieron guardar las cantidades.';
+      updateQtyLocationDialogValidation();
+      mostrarQtyLocationToast(qtyLocationServerError, true);
+    }finally{
+      qtyLocationSaving = false;
+      if(saveButton && !qs('qty-location-modal')?.classList.contains('hidden')){
+        saveButton.disabled = false;
+        saveButton.textContent = 'Guardar';
+      }
+    }
+  }
+
+  const qtyLocationModal = qs('qty-location-modal');
+  qs('btn-edit-cantidad-ubicacion')?.addEventListener('click', abrirEdicionCantidadesUbicacion);
+  qtyLocationModal?.addEventListener('input', () => {
+    qtyLocationServerError = '';
+    updateQtyLocationDialogValidation();
+  });
+  qtyLocationModal?.addEventListener('click', ev => {
+    const button = ev.target?.closest?.('[data-qty-action]');
+    if(!button) return;
+    const action = button.dataset.qtyAction;
+    if(action === 'close') cerrarEdicionCantidadesUbicacion();
+    else if(action === 'save') guardarCantidadesUbicacionDetalle();
+    else if(action === 'add'){
+      qtyLocationReadDraftsFromDom();
+      qtyLocationDrafts.push({ cantidad:'', ubicacion:'' });
+      renderQtyLocationDrafts();
+    }else if(action === 'remove'){
+      qtyLocationReadDraftsFromDom();
+      qtyLocationDrafts.splice(Number(button.dataset.index), 1);
+      renderQtyLocationDrafts();
+    }
+  });
+  document.addEventListener('keydown', ev => {
+    if(ev.key === 'Escape' && !qs('qty-location-modal')?.classList.contains('hidden')){
+      cerrarEdicionCantidadesUbicacion();
+    }
+  });
+
   function verDetalleByIndex(idx){
     indiceActual = idx;
     const i = cacheSkus[idx];
@@ -2737,6 +3106,7 @@ function resetChipFiltroUI(){
     qs('chip-genero-text').innerText = genero || ''; show(qs('chip-genero'), !!genero);
     qs('chip-costo-text').innerText = costoFmt || ''; show(qs('chip-costo'), !!(costoFmt));
     qs('chip-estatus-text').innerText = estatus || ''; show(qs('chip-estatus'), !!estatus);
+    renderDetalleCantidadesUbicacion(i);
 
     const partes = [desc, marca, modelo, serie].map(norm).filter(Boolean);
     qs('det-descripcion-completa').innerText = partes.join(' · ');
@@ -3248,12 +3618,12 @@ function resetChipFiltroUI(){
   let editorActivosColDragMoved = false;
 
   // Sticky fijas a la izquierda (no se reordenan). El resto se puede arrastrar.
-  const EDITOR_ACTIVOS_STICKY_FIELDS = ['__select', 'sku', 'descripcion'];
+  const EDITOR_ACTIVOS_STICKY_FIELDS = ['__select', 'sku', 'codigo_barras', 'descripcion'];
 
   const EDITOR_ACTIVOS_COLUMNS = [
     { field:'__select', label:'', sticky:'editor-sticky-select', width:44, min:44, readonly:true, nosort:true, always:true },
-    { field:'sku', label:'SKU', sticky:'editor-sticky-1', width:92, min:72, readonly:true, always:true },
-    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-2', width:280, min:80, max:520, always:true },
+    { field:'sku', label:'SKU', sticky:'editor-sticky-1', width:180, min:180, readonly:true, always:true },
+    { field:'descripcion', label:'Descripción', sticky:'editor-sticky-3', width:280, min:80, max:520, always:true },
     { field:'marca', label:'Marca', width:135, min:90 },
     { field:'modelo', label:'Modelo', width:135, min:90 },
     { field:'numero_serie', label:'Serie', width:135, min:90 },
@@ -3261,7 +3631,7 @@ function resetChipFiltroUI(){
     { field:'ubicacion', label:'Ubicación', width:190, min:120 },
     { field:'localizacion', label:'Localización', width:170, min:110 },
     { field:'responsable', label:'Responsable', width:170, min:110 },
-    { field:'codigo_barras', label:'Código barras', width:145, min:100 },
+    { field:'codigo_barras', label:'Código barras', sticky:'editor-sticky-code', width:145, min:100, always:true },
     { field:'cantidad', label:'Cantidad', width:105, min:85, type:'number' },
     { field:'costo', label:'Costo', width:115, min:90, type:'number' },
     { field:'fecha_adquisicion', label:'Fecha adquisición', width:150, min:125, type:'date' },
@@ -3380,9 +3750,11 @@ function resetChipFiltroUI(){
     });
     const sel = editorActivosColByField('__select');
     const sku = editorActivosColByField('sku');
+    const code = editorActivosColByField('codigo_barras');
     const desc = editorActivosColByField('descripcion');
     document.documentElement.style.setProperty('--editor-select-w', `${editorActivosColumnWidth(sel || EDITOR_ACTIVOS_COLUMNS[0])}px`);
     document.documentElement.style.setProperty('--editor-sku-w', `${editorActivosColumnWidth(sku || EDITOR_ACTIVOS_COLUMNS[1])}px`);
+    document.documentElement.style.setProperty('--editor-code-w', `${editorActivosColumnWidth(code)}px`);
     document.documentElement.style.setProperty('--editor-desc-w', `${editorActivosColumnWidth(desc || EDITOR_ACTIVOS_COLUMNS[2])}px`);
     table.style.minWidth = `${Math.max(900,total)}px`;
   }
@@ -3687,7 +4059,7 @@ function resetChipFiltroUI(){
     editorActivosModified = new Map(); editorActivosSelected = new Set(); editorActivosOriginal = new Map();
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at'];
+      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at','has_factura_pdf'];
       const limit = 1000;
       let offset = 0;
       let all = [];
@@ -3706,14 +4078,17 @@ function resetChipFiltroUI(){
         descripcion: String(r.descripcion ?? ''),
         marca: r.marca ?? '', modelo: r.modelo ?? '', numero_serie: r.numero_serie ?? '',
         genero: r.genero ?? '', ubicacion: r.ubicacion ?? '', localizacion: r.localizacion ?? '', responsable: r.responsable ?? '', codigo_barras: r.codigo_barras ?? '',
-        cantidad: r.cantidad ?? '', costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
+        cantidad: r.cantidad ?? '', cantidades_ubicacion: parseCantidadesUbicacion(r.cantidades_ubicacion), costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
         dado_de_baja: !!r.dado_de_baja, baja_at: editorActivosToInputDate(r.baja_at), created_at: r.created_at ?? '',
         _hasFoto: false,
-        _fotoCount: 0
+        _fotoCount: 0,
+        _hasPdf: editorActivosBool(r.has_factura_pdf),
+        _pdfCount: editorActivosBool(r.has_factura_pdf) ? 1 : 0,
+        _pdfAdjuntos: []
       }));
       editorActivosRows.forEach(r => editorActivosOriginal.set(editorActivosKey(r), editorActivosCloneComparable(r)));
 
-      let totalConFoto = 0, totalMulti = 0, totalTres = 0;
+      let totalConFoto = 0, totalMulti = 0, totalTres = 0, totalConPdf = 0;
       try{
         editorActivosStatus(`Editor cargado: ${editorActivosRows.length} activo(s). Consultando fotos...`);
         const fotosBySku = await editorActivosFetchFotosBatch(editorActivosRows, headers, (actual, total) => {
@@ -3733,12 +4108,33 @@ function resetChipFiltroUI(){
         editorActivosRows.forEach(r => { r._hasFoto = false; r._fotoCount = 0; });
       }
 
+      try{
+        editorActivosStatus('Consultando PDFs por SKU...');
+        const pdfsBySku = await editorActivosFetchPdfsBatch(editorActivosRows, headers, (actual, total) => {
+          editorActivosStatus(`Consultando PDFs de SKUs: ${actual}/${total} bloque(s)...`);
+        });
+        editorActivosRows.forEach(r => {
+          const pdfs = editorActivosSortedPdfs(pdfsBySku.get(String(r.sku || '').trim()));
+          r._pdfAdjuntos = pdfs;
+          r._hasPdf = pdfs.length > 0 || !!r._hasPdf;
+          r._pdfCount = pdfs.length || (r._hasPdf ? 1 : 0);
+          if(r._hasPdf) totalConPdf++;
+        });
+      }catch(e){
+        console.warn('No se pudo consultar el indicador de PDF por SKU', e);
+        editorActivosRows.forEach(r => {
+          r._pdfAdjuntos = [];
+          r._pdfCount = r._hasPdf ? 1 : 0;
+          if(r._hasPdf) totalConPdf++;
+        });
+      }
+
       editorActivosActualizarFiltros();
       editorActivosPage = 1;
       editorActivosLastSignature = '';
       editorActivosStatus(
         `Editor cargado: ${editorActivosRows.length} activo(s). ` +
-        `Con foto: ${totalConFoto} · 2+ fotos: ${totalMulti} · 3 fotos: ${totalTres}.`
+        `Con foto: ${totalConFoto} · 2+ fotos: ${totalMulti} · 3 fotos: ${totalTres} · Con PDF: ${totalConPdf}.`
       );
       aplicarFiltrosEditorActivos();
     }catch(e){
@@ -3870,10 +4266,14 @@ function resetChipFiltroUI(){
     const key = editorActivosKey(row);
     const modified = !!(editorActivosModified.get(key) || {})[field];
     const cls = modified ? 'editor-input editor-modified' : 'editor-input';
+    if(field === 'cantidad' && parseCantidadesUbicacion(row.cantidades_ubicacion).length){
+      return `<td data-col="${field}" class="qty-locked-cell" title="Cantidad calculada por las cantidades registradas por ubicación"><div class="qty-locked-wrap"><input class="editor-input qty-locked-input" type="number" value="${escapeHtml(row[field] ?? '')}" readonly aria-readonly="true"><span class="material-symbols-rounded" title="Edítala desde el lápiz de Cantidad por ubicación">lock</span></div></td>`;
+    }
     if(field === 'dado_de_baja'){
       return `<td data-col="${field}" class="${modified ? 'editor-modified' : ''}"><select class="${cls}" data-key="${escapeHtml(key)}" data-field="${field}" onchange="editorActivosOnInput(this)"><option value="0" ${!row[field]?'selected':''}>No</option><option value="1" ${row[field]?'selected':''}>Sí</option></select></td>`;
     }
-    return `<td data-col="${field}" class="${modified ? 'editor-modified' : ''}"><input class="${cls}" type="${type}" data-key="${escapeHtml(key)}" data-field="${field}" value="${escapeHtml(row[field] ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
+    const stickyClass = field === 'codigo_barras' ? 'editor-sticky-code' : '';
+    return `<td data-col="${field}" class="${stickyClass} ${modified ? 'editor-modified' : ''}"><input class="${cls}" type="${type}" data-key="${escapeHtml(key)}" data-field="${field}" value="${escapeHtml(row[field] ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
   }
 
   function editorActivosTd(row, col){
@@ -3885,17 +4285,21 @@ function resetChipFiltroUI(){
       const fotoBadge = n > 0
         ? `<span class="editor-foto-badge ${badgeClass}" title="${n} foto(s) · clic para ver galería"><span class="material-symbols-rounded">photo_camera</span>×${n}</span>`
         : '';
+      const pdfCount = Number(row._pdfCount || 0) || (row._hasPdf ? 1 : 0);
+      const pdfBadge = pdfCount > 0
+        ? `<button type="button" class="editor-foto-badge editor-pdf-badge" data-key="${escapeHtml(key)}" onclick="editorActivosVerPdfSku(this.dataset.key)" title="Abrir PDF del SKU (${pdfCount})" aria-label="Abrir PDF del SKU"><span class="material-symbols-rounded">picture_as_pdf</span>×${pdfCount}</button>`
+        : '';
       const title = n > 0
         ? (n === 1 ? 'Ver foto del SKU' : `Ver galería (${n} fotos) del SKU`)
         : 'SKU sin foto registrada';
-      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoBadge}</button></td>`;
+      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><div class="editor-sku-actions"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoBadge}</button>${pdfBadge}</div></td>`;
     }
     if(col.field === 'descripcion'){
       // Editable (sticky): misma celda de input que el resto de campos
       const key = editorActivosKey(row);
       const modified = !!(editorActivosModified.get(key) || {})[col.field];
       const cls = modified ? 'editor-input editor-modified' : 'editor-input';
-      return `<td data-col="descripcion" class="editor-sticky-2 ${modified ? 'editor-modified' : ''}" title="${escapeHtml(row.descripcion || '')}"><input class="${cls}" type="text" data-key="${escapeHtml(key)}" data-field="descripcion" value="${escapeHtml(row.descripcion ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
+      return `<td data-col="descripcion" class="editor-sticky-3 ${modified ? 'editor-modified' : ''}" title="${escapeHtml(row.descripcion || '')}"><input class="${cls}" type="text" data-key="${escapeHtml(key)}" data-field="descripcion" value="${escapeHtml(row.descripcion ?? '')}" oninput="editorActivosOnInput(this)"></td>`;
     }
     return editorActivosCell(row, col.field, col.type === 'date' ? 'date' : (col.type === 'number' ? 'number' : 'text'));
   }
@@ -3926,6 +4330,10 @@ function resetChipFiltroUI(){
     const field = input.dataset.field;
     const row = editorActivosRows.find(r => editorActivosKey(r) === key);
     if(!row) return;
+    if(field === 'cantidad' && parseCantidadesUbicacion(row.cantidades_ubicacion).length){
+      input.value = String(row.cantidad ?? '');
+      return;
+    }
     let val = input.value;
     if(field === 'dado_de_baja') val = input.value === '1';
     if(field === 'fecha_adquisicion' || field === 'baja_at') val = parseCsvDateToDateOnly(val) || '';
@@ -3998,11 +4406,15 @@ function resetChipFiltroUI(){
 
   function editorActivosBulkApply(){
     if(!editorActivosSelected.size){ alert('Selecciona primero una o más filas.'); return; }
-    const labels = EDITOR_ACTIVOS_EDITABLES.map((f,i)=>`${i+1}. ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===f)?.label || f}`).join('\n');
+    const selectedRows = editorActivosRows.filter(r => editorActivosSelected.has(editorActivosKey(r)));
+    const editableFields = EDITOR_ACTIVOS_EDITABLES.filter(field =>
+      field !== 'cantidad' || !selectedRows.some(row => parseCantidadesUbicacion(row.cantidades_ubicacion).length)
+    );
+    const labels = editableFields.map((f,i)=>`${i+1}. ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===f)?.label || f}`).join('\n');
     const op = prompt(`Campo a modificar en ${editorActivosSelected.size} activo(s):\n\n${labels}\n\nEscribe el número o nombre del campo:`);
     if(!op) return;
-    let field = EDITOR_ACTIVOS_EDITABLES[Number(op)-1] || EDITOR_ACTIVOS_EDITABLES.find(f => editorActivosNormFilter(f) === editorActivosNormFilter(op)) || EDITOR_ACTIVOS_COLUMNS.find(c => editorActivosNormFilter(c.label) === editorActivosNormFilter(op))?.field;
-    if(!EDITOR_ACTIVOS_EDITABLES.includes(field)){ alert('Campo no válido.'); return; }
+    let field = editableFields[Number(op)-1] || editableFields.find(f => editorActivosNormFilter(f) === editorActivosNormFilter(op)) || EDITOR_ACTIVOS_COLUMNS.find(c => editableFields.includes(c.field) && editorActivosNormFilter(c.label) === editorActivosNormFilter(op))?.field;
+    if(!editableFields.includes(field)){ alert('Campo no válido para la selección actual.'); return; }
     let val = prompt(`Nuevo valor para ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===field)?.label || field}:\n\nPara Dado de baja usa Sí/No o 1/0.\nPara fecha usa AAAA-MM-DD o DD/MM/AAAA.`);
     if(val === null) return;
     if(field === 'dado_de_baja') val = editorActivosBool(val);
@@ -4020,7 +4432,6 @@ function resetChipFiltroUI(){
       if(n === null && String(val).trim() !== ''){ alert('Costo inválido.'); return; }
       val = n;
     }
-    const selectedRows = editorActivosRows.filter(r => editorActivosSelected.has(editorActivosKey(r)));
     if(!confirm(`¿Aplicar el cambio a ${selectedRows.length} activo(s) seleccionado(s)?`)) return;
     selectedRows.forEach(row => {
       const key = editorActivosKey(row);
@@ -4060,6 +4471,10 @@ function resetChipFiltroUI(){
     const errors = [];
     if(!String(sku || '').trim()) errors.push('SKU vacío');
     if(Object.prototype.hasOwnProperty.call(changes,'cantidad')){
+      const row = editorActivosRows.find(item => editorActivosKey(item) === String(sku || '').trim());
+      if(parseCantidadesUbicacion(row?.cantidades_ubicacion).length){
+        errors.push('Cantidad calculada por ubicación; edita las partidas desde el detalle del SKU');
+      }
       const n = Number(String(changes.cantidad ?? '').replace(/,/g,''));
       if(!Number.isFinite(n)) errors.push('Cantidad inválida');
       if(n < 0) errors.push('Cantidad negativa');
@@ -4203,6 +4618,21 @@ function resetChipFiltroUI(){
     });
   }
 
+  function editorActivosSortedPdfs(list){
+    const arr = Array.isArray(list) ? list.filter(x => x && x.bucket && x.path && isPdfAdjunto(x)) : [];
+    const byPath = new Map();
+    arr.forEach(pdf => {
+      const key = `${String(pdf.bucket)}|${String(pdf.path)}`;
+      if(!byPath.has(key)) byPath.set(key, pdf);
+    });
+    return [...byPath.values()].sort((a,b) => {
+      const ta = Date.parse(a.created_at || a.inserted_at || a.updated_at || '') || 0;
+      const tb = Date.parse(b.created_at || b.inserted_at || b.updated_at || '') || 0;
+      if(tb !== ta) return tb - ta;
+      return String(a.filename || a.path || '').localeCompare(String(b.filename || b.path || ''), 'es', { numeric:true, sensitivity:'base' });
+    });
+  }
+
 
   async function editorActivosVerFotoSku(key){
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre){ alert('Selecciona empresa.'); return; }
@@ -4241,6 +4671,43 @@ function resetChipFiltroUI(){
       console.error(e);
       editorActivosStatus(oldStatus || 'Error al abrir foto del SKU.');
       alert('No se pudo abrir la foto del SKU: ' + (e?.message || e));
+    }
+  }
+
+  async function editorActivosVerPdfSku(key){
+    if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre){ alert('Selecciona empresa.'); return; }
+    const row = editorActivosRows.find(r => editorActivosKey(r) === String(key));
+    if(!row){ alert('No se encontró el SKU en el editor.'); return; }
+    const sku = String(row.sku || '').trim();
+    if(!sku){ alert('El activo no tiene SKU.'); return; }
+
+    const oldStatus = qs('editor-activos-status')?.textContent || '';
+    const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
+    try{
+      let pdfs = editorActivosSortedPdfs(row._pdfAdjuntos);
+      if(!pdfs.length){
+        editorActivosStatus(`Buscando PDF del SKU ${sku}...`);
+        const bySku = await editorActivosFetchPdfsBatch([row], headers);
+        pdfs = editorActivosSortedPdfs(bySku.get(sku));
+        row._pdfAdjuntos = pdfs;
+        row._hasPdf = pdfs.length > 0 || !!row._hasPdf;
+        row._pdfCount = pdfs.length || (row._hasPdf ? 1 : 0);
+        renderEditorActivos();
+      }
+      if(!pdfs.length){
+        editorActivosStatus(oldStatus || `SKU ${sku} sin PDF localizado.`);
+        alert(`No se encontró un archivo PDF en Storage para el SKU ${sku}.`);
+        return;
+      }
+
+      const pdf = pdfs[0];
+      editorActivosStatus(`Abriendo PDF del SKU ${sku}...`);
+      await abrirPdfEnVisor(pdf, headers, 'PDF');
+      editorActivosStatus(oldStatus || `PDF abierto: SKU ${sku}${pdfs.length > 1 ? ` · más reciente de ${pdfs.length}` : ''}.`);
+    }catch(e){
+      console.error(e);
+      editorActivosStatus(oldStatus || 'Error al abrir PDF del SKU.');
+      alert('No se pudo abrir el PDF del SKU: ' + (e?.message || e));
     }
   }
 
@@ -4355,6 +4822,73 @@ function resetChipFiltroUI(){
         if(!sku) return;
         if(!bySku.has(sku)) bySku.set(sku, []);
         bySku.get(sku).push(foto);
+      });
+    }
+    return bySku;
+  }
+
+  async function editorActivosFetchPdfsBatch(rows, headers, onProgress){
+    const skus = [...new Set((rows || []).map(r => String(r?.sku || '').trim()).filter(Boolean))];
+    const bySku = new Map();
+    skus.forEach(sku => bySku.set(sku, []));
+    if(!skus.length) return bySku;
+
+    const selectFull = 'sku,bucket,path,filename,mime,tipo,created_at,updated_at';
+    const selectBasic = 'sku,bucket,path,filename,mime,tipo';
+    const chunks = editorActivosChunkArray(skus, 120);
+
+    async function get(url){
+      const res = await fetch(url, { headers });
+      if(!res.ok) throw new Error(await res.text().catch(()=>`HTTP ${res.status}`));
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+
+    async function fetchChunk(chunk, selectCols, withOrder=true){
+      const inList = editorActivosPostgrestInList(chunk);
+      if(!inList) return [];
+      const order = withOrder ? '&order=sku.asc,created_at.desc' : '&order=sku.asc';
+      const urls = [];
+      const tipos = '&tipo=in.(factura,pdf,factura_pdf,documento_pdf)';
+      if(empresaSeleccionada?.id){
+        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})${tipos}&select=${encodeURIComponent(selectCols)}${order}`);
+      }
+      if(empresaSeleccionada?.nombre){
+        urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=in.(${inList})${tipos}&select=${encodeURIComponent(selectCols)}${order}`);
+      }
+
+      let all = [];
+      let lastErr = null;
+      let hadSuccessfulRoute = false;
+      for(const url of urls){
+        try{
+          const data = await get(url);
+          hadSuccessfulRoute = true;
+          if(data.length) all = all.concat(data);
+        }catch(e){
+          lastErr = e;
+        }
+      }
+      if(!hadSuccessfulRoute && lastErr) throw lastErr;
+      return all;
+    }
+
+    for(let i=0; i<chunks.length; i++){
+      const chunk = chunks[i];
+      if(onProgress) onProgress(i + 1, chunks.length, chunk.length);
+      let pdfs = [];
+      try{
+        pdfs = await fetchChunk(chunk, selectFull, true);
+      }catch(e){
+        console.warn('Reintentando consulta masiva de PDFs sin fechas', e);
+        pdfs = await fetchChunk(chunk, selectBasic, false);
+      }
+      pdfs.forEach(pdf => {
+        if(!isPdfAdjunto(pdf)) return;
+        const sku = String(pdf?.sku || '').trim();
+        if(!sku) return;
+        if(!bySku.has(sku)) bySku.set(sku, []);
+        bySku.get(sku).push(pdf);
       });
     }
     return bySku;

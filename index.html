@@ -119,6 +119,17 @@
     .logo-mini.hidden{display:none !important}
     @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
+    /* Entregable HTML de solo lectura */
+    .entregable-intro{display:grid; grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr); gap:16px; align-items:stretch}
+    .entregable-panel{border:1px solid var(--border); border-radius:16px; background:#fff; padding:18px}
+    .entregable-panel h3{margin:0 0 8px; font-size:1.05rem}
+    .entregable-panel p{color:#64748B; line-height:1.5; margin:0 0 14px}
+    .entregable-status{display:flex; align-items:center; gap:8px; margin-top:14px; color:#475569; font-weight:700; min-height:24px}
+    .entregable-progress{display:block; width:100%; height:12px; margin-top:8px; accent-color:var(--primary)}
+    .entregable-summary{margin-top:12px; padding:12px; border-radius:12px; background:#F1F6FF; color:#174A91; font-weight:700; line-height:1.5}
+    .entregable-warning{margin-top:12px; padding:12px; border:1px solid #FCD34D; border-radius:12px; background:#FFFBEB; color:#854D0E; font-weight:700; line-height:1.45}
+    @media(max-width:720px){.entregable-intro{grid-template-columns:1fr}}
+
 
 
     /* Editor masivo tipo escritorio / hoja de trabajo */
@@ -172,21 +183,28 @@
     body.editor-resizing{cursor:col-resize !important; user-select:none}
     body.editor-col-dragging{cursor:grabbing !important; user-select:none}
     .editor-sticky-select{position:sticky; left:0; z-index:10; background:#fff; min-width:var(--editor-select-w,44px); width:var(--editor-select-w,44px); box-shadow:1px 0 0 var(--border); text-align:center!important}
-    .editor-sticky-1{position:sticky; left:var(--editor-select-w,44px); z-index:9; background:#fff; min-width:var(--editor-sku-w,92px); width:var(--editor-sku-w,92px); box-shadow:1px 0 0 var(--border)}
-    .editor-sticky-2{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,92px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,280px); width:var(--editor-desc-w,280px); max-width:var(--editor-desc-w,280px); box-shadow:1px 0 0 var(--border)}
-    thead .editor-sticky-select, thead .editor-sticky-1, thead .editor-sticky-2{z-index:12; background:#EEF4FF}
+    .editor-sticky-1{position:sticky; left:var(--editor-select-w,44px); z-index:9; background:#fff; min-width:var(--editor-sku-w,180px); width:var(--editor-sku-w,180px); box-shadow:1px 0 0 var(--border)}
+    .editor-sticky-code{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,180px)); z-index:9; background:#fff; min-width:var(--editor-code-w,145px); width:var(--editor-code-w,145px); box-shadow:1px 0 0 var(--border)}
+    .editor-sticky-3{position:sticky; left:calc(var(--editor-select-w,44px) + var(--editor-sku-w,180px) + var(--editor-code-w,145px)); z-index:9; background:#fff; min-width:var(--editor-desc-w,280px); width:var(--editor-desc-w,280px); max-width:var(--editor-desc-w,280px); box-shadow:1px 0 0 var(--border)}
+    thead .editor-sticky-select, thead .editor-sticky-1, thead .editor-sticky-code, thead .editor-sticky-3{z-index:12; background:#EEF4FF}
     .editor-input{width:100%; min-width:98px; border:1px solid var(--border); border-radius:9px; padding:6px 8px; font-weight:800; outline:none; background:#fff; font-size:.76rem}
     .editor-filter-input{background:#fff; min-width:0}
     .editor-filter-input::placeholder{color:#94A3B8; font-weight:800}
     .editor-table .editor-input{height:29px}
     .editor-input:focus{border-color:#8CB8FF; box-shadow:0 0 0 3px rgba(11,110,243,.12)}
+    .qty-locked-wrap{display:flex; align-items:center; gap:4px; min-width:0}
+    .qty-locked-wrap .qty-locked-input{min-width:0; background:#F1F5F9; color:#64748B; cursor:not-allowed; border-style:dashed}
+    .qty-locked-wrap .material-symbols-rounded{flex:0 0 auto; color:#64748B; font-size:16px}
     .editor-modified{background:#FFF7D6 !important}
     .editor-select-cell input{width:16px; height:16px}
     .editor-row-baja td{background:#F8FAFC; color:#64748B}
     .editor-readonly{color:#64748B; font-weight:900; overflow:hidden; text-overflow:ellipsis}
-    .editor-sku-link{border:0; background:transparent; color:#0B4CB3; font:inherit; font-weight:950; display:flex; align-items:center; gap:5px; width:100%; padding:0; cursor:pointer; text-align:left; overflow:hidden}
+    .editor-sku-actions{display:flex; align-items:center; gap:3px; width:100%; min-width:0; overflow:hidden}
+    .editor-sku-link{border:0; background:transparent; color:#0B4CB3; font:inherit; font-weight:950; display:flex; align-items:center; gap:5px; flex:1 1 auto; min-width:0; width:auto; padding:0; cursor:pointer; text-align:left; overflow:hidden}
     .editor-sku-link b{overflow:hidden; text-overflow:ellipsis}
     .editor-sku-link .material-symbols-rounded{font-size:16px; opacity:.72; flex:0 0 auto}
+    .editor-pdf-badge{margin:0; padding:1px 5px; cursor:pointer; font:inherit; flex:0 0 auto; background:#FEF2F2; color:#B91C1C; border-color:#FECACA}
+    .editor-pdf-badge:hover{background:#FEE2E2}
     .editor-sku-link:hover{text-decoration:underline}
     .editor-bottombar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 -6px 18px rgba(0,40,100,.04)}
     .editor-bottombar .pagination{margin:0; justify-content:flex-end}
@@ -242,6 +260,41 @@
     .item{background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px}
     .label{color:#6B7280; font-size:.85rem; margin-bottom:4px; font-weight:700; display:flex; align-items:center; gap:6px}
     .value{font-weight:700; word-break:break-word}
+    .qty-location-heading{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+    .qty-location-heading .label{flex:1; margin:0; color:var(--text); font-weight:850}
+    .qty-location-table{display:grid; gap:0; border-top:1px solid var(--border); margin-top:8px}
+    .qty-location-table-row{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:8px 2px; border-bottom:1px solid var(--border); align-items:center}
+    .qty-location-table-row:last-child{border-bottom:0}
+    .qty-location-table-row.head{font-size:.78rem; font-weight:850; color:var(--muted)}
+    .qty-location-table-row span:last-child{text-align:right; min-width:52px; font-variant-numeric:tabular-nums}
+    .qty-location-empty{padding:10px 2px; color:var(--muted); font-size:.88rem}
+    .qty-location-modal{align-items:center; padding:12px}
+    .qty-location-modal .modal-card{width:min(540px,96vw); max-height:min(90vh,760px); display:flex; flex-direction:column}
+    .qty-location-modal .modal-body{overflow:auto; min-height:0}
+    .qty-location-intro{margin:0; color:var(--muted); font-size:.9rem; line-height:1.4}
+    .qty-location-rows{display:grid; gap:10px}
+    .qty-location-editor-row{display:grid; grid-template-columns:82px minmax(0,1fr) 40px; gap:8px; align-items:end}
+    .qty-location-field{min-width:0}
+    .qty-location-field label{display:block; margin:0 0 5px; color:#64748B; font-size:.76rem; font-weight:800; white-space:nowrap}
+    .qty-location-field input{width:100%; min-width:0; height:44px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--text); font:inherit; outline:none; transition:border-color .15s,box-shadow .15s}
+    .qty-location-field input:focus{border-color:#8CB8FF; box-shadow:0 0 0 3px rgba(11,110,243,.12)}
+    .qty-location-field input.is-invalid{border-color:#D92D20; box-shadow:0 0 0 1px rgba(217,45,32,.12)}
+    .qty-location-remove{width:40px; height:40px; border:1px solid transparent; border-radius:10px; background:transparent; color:#64748B; display:grid; place-items:center; cursor:pointer}
+    .qty-location-remove:hover{background:#FEF2F2; color:#B91C1C; border-color:#FECACA}
+    .qty-location-add{align-self:flex-start}
+    .qty-location-summary{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #CFE2FF; border-radius:12px; background:#F4F8FF; font-weight:800}
+    .qty-location-hint{margin:0; color:var(--muted); font-size:.78rem; line-height:1.4}
+    .qty-location-error{margin:0; padding:8px 10px; border-radius:10px; border:1px solid #FCA5A5; background:#FEF2F2; color:#991B1B; font-size:.82rem; font-weight:750; line-height:1.35}
+    .qty-location-footer{display:flex; justify-content:flex-end; gap:8px; padding:10px 12px 12px; border-top:1px solid var(--border)}
+    .qty-location-toast{position:fixed; z-index:10020; left:50%; bottom:22px; transform:translate(-50%,14px); opacity:0; pointer-events:none; padding:10px 14px; border:1px solid #A7F3D0; border-radius:12px; background:#ECFDF3; color:#065F46; box-shadow:var(--shadow); font-weight:800; font-size:.88rem; transition:opacity .18s,transform .18s; max-width:min(92vw,520px); text-align:center}
+    .qty-location-toast.show{opacity:1; transform:translate(-50%,0)}
+    .qty-location-toast.error{background:#FEF2F2; border-color:#FCA5A5; color:#991B1B}
+    @media(max-width:420px){
+      .qty-location-modal{padding:10px}
+      .qty-location-modal .modal-card{width:100%; max-height:88vh; border-radius:18px}
+      .qty-location-editor-row{grid-template-columns:76px minmax(0,1fr) 38px; gap:6px}
+      .qty-location-footer .btn{flex:1}
+    }
 
     /* Lightbox */
     .lightbox{position:fixed; inset:0; background:rgba(15,23,42,.9); display:none; align-items:center; justify-content:center; z-index:50}
@@ -737,9 +790,38 @@
         <button id="btn-mode-skus-dash" class="btn tonal" onclick="abrirDashboardSkus()"><span class="material-symbols-rounded">monitoring</span> Dashboard SKUs</button>
         <button id="btn-mode-hist" class="btn tonal" onclick="abrirHistorialResguardos()"><span class="material-symbols-rounded">history</span> Historial Resguardos</button>
         <button id="btn-mode-editor-activos" class="btn tonal" onclick="abrirEditorActivos()"><span class="material-symbols-rounded">edit_note</span> Editor masivo</button>
+        <button id="btn-mode-entregable-html" class="btn tonal hidden" onclick="abrirModuloEntregableHtml()"><span class="material-symbols-rounded">inventory</span> Entregable HTML</button>
       </div>
     </div>
 
+
+    <!-- ENTREGABLE INTERACTIVO, SOLO LECTURA -->
+    <div id="view-entregable-html" class="card hidden">
+      <div class="header-flex" style="margin-bottom:16px">
+        <div>
+          <h2 style="margin:0">Entregable de activos</h2>
+          <div style="margin-top:4px;color:#64748B;font-weight:600">Genera un visor HTML autocontenido con la información, fotos y PDFs de la empresa.</div>
+        </div>
+        <button class="btn tonal" type="button" onclick="switchView('view-selector')"><span class="material-symbols-rounded">arrow_back</span> Módulos</button>
+      </div>
+      <div class="entregable-intro">
+        <section class="entregable-panel">
+          <h3>Visor fuera de línea</h3>
+          <p>El archivo generado se puede abrir en un navegador sin iniciar sesión ni conectarse a la app. Incluye todos los SKUs y sus adjuntos disponibles; es de solo lectura. Como copia todos los medios, puede ser pesado y tardar según la cantidad de archivos.</p>
+          <div class="btn-group">
+            <button id="btn-generar-entregable-html" class="btn" type="button"><span class="material-symbols-rounded">download</span> Generar entregable HTML</button>
+            <button id="btn-cancelar-entregable-html" class="btn tonal hidden" type="button"><span class="material-symbols-rounded">close</span> Cancelar</button>
+          </div>
+          <div id="entregable-permiso-warning" class="entregable-warning hidden" role="status"></div>
+        </section>
+        <section class="entregable-panel">
+          <h3>Progreso de generación</h3>
+          <div id="entregable-status" class="entregable-status" role="status" aria-live="polite">Listo para generar.</div>
+          <progress id="entregable-progress" class="entregable-progress" max="100" value="0"></progress>
+          <div id="entregable-summary" class="entregable-summary hidden"></div>
+        </section>
+      </div>
+    </div>
 
 
     <!-- EDITOR MASIVO TIPO ESCRITORIO / EXCEL -->
@@ -885,7 +967,7 @@
         <table class="editor-table">
           <thead>
             <tr>
-              <th class="editor-sticky-1">SKU</th><th class="editor-sticky-2">Descripción</th>
+              <th class="editor-sticky-1">SKU</th><th class="editor-sticky-code">Código barras</th><th class="editor-sticky-3">Descripción</th>
               <th>Marca</th><th>Modelo</th><th>Serie</th><th>Género</th><th>Ubicación</th><th>Localización</th><th>Responsable</th>
               <th>Código barras</th><th>Cantidad</th><th>Costo</th><th>Fecha adquisición</th><th>Dado de baja</th><th>Fecha baja</th>
             </tr>
@@ -997,9 +1079,22 @@
       <div class="chips-wrap" style="margin-bottom:8px">
         <span id="chip-sku-wrap" class="chip hidden"><span class="material-symbols-rounded">sell</span><span id="chip-sku"></span></span>
         <span id="chip-cb-wrap" class="chip scroll hidden"><span class="material-symbols-rounded">qr_code_2</span><span id="chip-codbarras"></span></span>
+        <span id="chip-cantidad" class="chip"><span class="material-symbols-rounded">inventory_2</span><span id="chip-cantidad-text"></span></span>
         <span id="chip-genero" class="chip hidden"><span class="material-symbols-rounded">category</span><span id="chip-genero-text"></span></span>
         <span id="chip-costo" class="chip hidden"><span class="material-symbols-rounded">payments</span><span id="chip-costo-text"></span></span>
         <span id="chip-estatus" class="chip hidden"><span class="material-symbols-rounded">verified</span><span id="chip-estatus-text"></span></span>
+      </div>
+
+      <div id="det-cantidad-ubicacion-card" class="section full hidden">
+        <div class="item">
+          <div class="qty-location-heading">
+            <div class="label"><span class="material-symbols-rounded">inventory_2</span> Cantidad por ubicación</div>
+            <button id="btn-edit-cantidad-ubicacion" class="btn tonal icon hidden" type="button" title="Editar cantidades por ubicación" aria-label="Editar cantidades por ubicación">
+              <span class="material-symbols-rounded">edit</span>
+            </button>
+          </div>
+          <div id="det-cantidad-ubicacion-rows" class="qty-location-table"></div>
+        </div>
       </div>
 
       <div id="det-fotos" class="gallery"></div>
@@ -1241,6 +1336,36 @@
 
   </div><!-- /container -->
 
+  <div class="modal qty-location-modal hidden" id="qty-location-modal" role="dialog" aria-modal="true" aria-labelledby="qty-location-title">
+    <div class="modal-backdrop" data-qty-action="close"></div>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="qty-location-title">Cantidad por ubicación</div>
+          <div class="modal-sub" id="qty-location-sku"></div>
+        </div>
+        <button class="icon-btn" type="button" data-qty-action="close" title="Cerrar" aria-label="Cerrar">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="qty-location-intro">Registra una o varias partidas para este SKU.</p>
+        <div id="qty-location-editor-rows" class="qty-location-rows"></div>
+        <button class="btn tonal qty-location-add" type="button" data-qty-action="add">
+          <span class="material-symbols-rounded">add</span> Agregar otra ubicación
+        </button>
+        <div class="qty-location-summary"><span>Total</span><strong id="qty-location-total">0</strong></div>
+        <p class="qty-location-hint">Con partidas guardadas, Cantidad mostrará este total y quedará bloqueada para edición manual.</p>
+        <p id="qty-location-error" class="qty-location-error hidden" role="alert"></p>
+      </div>
+      <div class="qty-location-footer">
+        <button class="btn tonal" type="button" data-qty-action="close">Cancelar</button>
+        <button id="btn-save-cantidad-ubicacion" class="btn" type="button" data-qty-action="save">Guardar</button>
+      </div>
+    </div>
+  </div>
+  <div id="qty-location-toast" class="qty-location-toast" role="status" aria-live="polite"></div>
+
   <!-- LIGHTBOX -->
   <!-- VISOR PDF INTERNO -->
   <div class="modal pdf-modal hidden" id="pdf-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="pdf-viewer-title">
@@ -1356,6 +1481,15 @@
           <span class="material-symbols-rounded action-go">chevron_right</span>
         </button>
 
+        <button class="action-row" type="button" id="btn-export-skus-csv-ubicaciones">
+          <span class="material-symbols-rounded action-ico">location_on</span>
+          <span class="action-text">
+            <span class="action-title">Exportar con cantidades por ubicación</span>
+            <span class="action-desc">Agrega una columna con cada ubicación y su cantidad.</span>
+          </span>
+          <span class="material-symbols-rounded action-go">chevron_right</span>
+        </button>
+
         <button class="action-row" onclick="closeCsvModal(); document.getElementById('input-skus-csv').click();">
           <span class="material-symbols-rounded action-ico">upload</span>
           <span class="action-text">
@@ -1372,7 +1506,8 @@
     </div>
   </div>
 
-  <script src="config.js?v=2026.10.29.1-20"></script>
-  <script src="app.js?v=2026.10.29.1-20"></script>
+  <script src="config.js?v=2026.11.01.2-21"></script>
+  <script src="app.js?v=2026.11.01.1-26"></script>
+  <script src="entregable.js?v=2026.11.01.1-6"></script>
 </body>
 </html>
