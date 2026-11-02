@@ -215,11 +215,82 @@
     return await response.blob();
   }
 
-  function asStandaloneHtml(payload, template){
+  async function asStandaloneHtmlBlob(metadata, rows, archivosBySku, template, signal){
     const placeholder = '__ENTREGABLE_PAYLOAD__';
-    if(!template.includes(placeholder)) throw new Error('No se encontró el marcador de datos en la plantilla del visor.');
-    const safeJson = escapeInlineJson(payload);
-    return template.replace(placeholder, () => safeJson);
+    const filesPlaceholder = '__ENTREGABLE_FILES__';
+    const markerIndex = template.indexOf(placeholder);
+    const filesIndex = template.indexOf(filesPlaceholder);
+    if(filesIndex < 0 || markerIndex < filesIndex) throw new Error('La plantilla del visor necesita actualizarse. Recarga la página.');
+
+    // El inventario contiene referencias pequeñas. Los binarios se codifican
+    // por bloques independientes; nunca forman una única cadena de JSON.
+    const output = [template.slice(0, filesIndex)];
+    const manifest = [];
+    const chunkBytes = 768 * 1024; // Múltiplo de 3: cada bloque Base64 es independiente.
+    let fileId = 0;
+    const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+    for(let index=0; index<rows.length; index++){
+      if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+      const row = rows[index];
+      const sku = String(row?.sku || '').trim();
+      const rowData = {
+        sku:String(row?.sku || ''),
+        descripcion:String(row?.descripcion || ''),
+        marca:String(row?.marca || ''),
+        modelo:String(row?.modelo || ''),
+        serie:String(row?.numero_serie || ''),
+        genero:String(row?.genero || ''),
+        ubicacion:String(row?.ubicacion || ''),
+        localizacion:String(row?.localizacion || ''),
+        responsable:String(row?.responsable || ''),
+        codigoBarras:String(row?.codigo_barras || ''),
+        cantidad:Number(row?.cantidad) || 0,
+        cantidadesUbicacion:typeof parseCantidadesUbicacion === 'function' ? parseCantidadesUbicacion(row?.cantidades_ubicacion) : [],
+        costo:row?.costo ?? '',
+        fechaAdquisicion:row?.fecha_adquisicion || '',
+        fechaRegistro:row?.created_at || '',
+        dadoDeBaja:!!row?.dado_de_baja,
+        bajaAt:row?.baja_at || ''
+      };
+      rowData.adjuntos = [];
+      const files = archivosBySku.get(sku) || [];
+      for(const file of files){
+        setProgress(`Preparando adjunto: ${file.nombre}...`, Math.min(98, 90 + Math.round(8 * index / Math.max(rows.length, 1))));
+        const id = `archivo-${fileId++}`;
+        const count = Math.ceil(file.blob.size / chunkBytes);
+        rowData.adjuntos.push({ tipo:file.tipo, nombre:file.nombre, mime:file.mime, id, parts:count, size:file.blob.size });
+        for(let part=0; part<count; part++){
+          if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+          const data = await blobToBase64(file.blob.slice(part * chunkBytes, (part + 1) * chunkBytes));
+          output.push(new Blob([
+            `<script type="application/octet-stream" id="${id}-${part}">`,
+            data,
+            '</script>\n'
+          ], { type:'text/html;charset=utf-8' }));
+          await yieldToBrowser();
+        }
+        file.blob = null;
+      }
+      manifest.push(rowData);
+      archivosBySku.delete(sku);
+
+      if((index + 1) % 100 === 0){
+        const pct = Math.min(98, 90 + Math.round(8 * (index + 1) / Math.max(rows.length, 1)));
+        setProgress(`Preparando visor: ${ (index + 1).toLocaleString('es-MX') } de ${rows.length.toLocaleString('es-MX')} activos...`, pct);
+        await yieldToBrowser();
+        if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+      }
+    }
+
+    output.push(template.slice(filesIndex + filesPlaceholder.length, markerIndex));
+    output.push('{"empresa":', escapeInlineJson(metadata.empresa), ',"generado":', escapeInlineJson(metadata.generado), ',"activos":[');
+    for(let index=0; index<manifest.length; index++){
+      if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+      output.push(index ? ',' : '', escapeInlineJson(manifest[index]));
+    }
+    output.push(']}', template.slice(markerIndex + placeholder.length));
+    return new Blob(output, { type:'text/html;charset=utf-8' });
   }
 
   async function generarEntregableHtml(){
@@ -250,7 +321,7 @@
     showSummary('', false);
     setProgress('Preparando visor independiente...', 1);
     try{
-      const templateUrl = new URL('entregable-viewer.template.html?v=2026.11.01.1-2', location.href);
+      const templateUrl = new URL('entregable-viewer.template.html?v=2026.11.02.1-3', location.href);
       const templateResponse = await fetch(templateUrl.href, { signal });
       if(!templateResponse.ok) throw new Error(`No se pudo cargar la plantilla del visor (HTTP ${templateResponse.status}).`);
       const template = await templateResponse.text();
@@ -304,7 +375,7 @@
             ? editorActivosSafeFileName(rawName, tarea.tipo === 'pdf' ? 'documento.pdf' : 'foto.jpg')
             : safeFilename(rawName, 'adjunto');
           const cleanSku = typeof editorActivosSafeFileName === 'function' ? editorActivosSafeFileName(tarea.sku, 'SKU') : safeFilename(tarea.sku, 'SKU');
-          const file = { tipo:tarea.tipo, nombre:`${cleanSku}_${cleanName}`, mime, data:await blobToBase64(blob) };
+          const file = { tipo:tarea.tipo, nombre:`${cleanSku}_${cleanName}`, mime, blob };
           if(!archivosBySku.has(tarea.sku)) archivosBySku.set(tarea.sku, []);
           archivosBySku.get(tarea.sku).push(file);
           bytesDescargados += blob.size || 0;
@@ -319,38 +390,19 @@
         throw new Error(`No se generó el HTML porque ${fallidos.length} de ${tareas.length} adjuntos no se pudieron descargar.\n${detalle}${fallidos.length > 6 ? `\n... y ${fallidos.length - 6} más.` : ''}`);
       }
       if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
-      setProgress('Preparando el visor interactivo...', 90);
-
-      const payload = {
-        empresa: empresaInicio.nombre,
-        generado: new Intl.DateTimeFormat('es-MX', { dateStyle:'medium', timeStyle:'short', timeZone:'America/Mexico_City' }).format(new Date()),
-        activos: activos.map(row => ({
-          sku:String(row?.sku || ''),
-          descripcion:String(row?.descripcion || ''),
-          marca:String(row?.marca || ''),
-          modelo:String(row?.modelo || ''),
-          serie:String(row?.numero_serie || ''),
-          genero:String(row?.genero || ''),
-          ubicacion:String(row?.ubicacion || ''),
-          localizacion:String(row?.localizacion || ''),
-          responsable:String(row?.responsable || ''),
-          codigoBarras:String(row?.codigo_barras || ''),
-          cantidad:Number(row?.cantidad) || 0,
-          cantidadesUbicacion:typeof parseCantidadesUbicacion === 'function' ? parseCantidadesUbicacion(row?.cantidades_ubicacion) : [],
-          costo:row?.costo ?? '',
-          fechaAdquisicion:row?.fecha_adquisicion || '',
-          fechaRegistro:row?.created_at || '',
-          dadoDeBaja:!!row?.dado_de_baja,
-          bajaAt:row?.baja_at || '',
-          adjuntos:archivosBySku.get(String(row?.sku || '').trim()) || []
-        }))
-      };
       if(!await refreshPermissions()) throw new Error('El permiso Entregable HTML fue desactivado.');
       if(signal.aborted || String(empresaSeleccionada?.id || '') !== String(empresaInicio.id) || (typeof getCtxVersion === 'function' && getCtxVersion() !== ctxInicio)){
         throw new DOMException('La generación se canceló o la empresa activa cambió.', 'AbortError');
       }
-      const html = asStandaloneHtml(payload, template);
-      const htmlBlob = new Blob([html], { type:'text/html;charset=utf-8' });
+      setProgress('Preparando el visor interactivo...', 90);
+      const htmlBlob = await asStandaloneHtmlBlob({
+        empresa:empresaInicio.nombre,
+        generado:new Intl.DateTimeFormat('es-MX', { dateStyle:'medium', timeStyle:'short', timeZone:'America/Mexico_City' }).format(new Date())
+      }, activos, archivosBySku, template, signal);
+      if(!await refreshPermissions()) throw new Error('El permiso Entregable HTML fue desactivado.');
+      if(signal.aborted || String(empresaSeleccionada?.id || '') !== String(empresaInicio.id) || (typeof getCtxVersion === 'function' && getCtxVersion() !== ctxInicio)){
+        throw new DOMException('La generación se canceló o la empresa activa cambió.', 'AbortError');
+      }
       createdUrl = URL.createObjectURL(htmlBlob);
       const date = new Date().toISOString().slice(0,10);
       const companyName = typeof editorActivosSafeFileName === 'function'

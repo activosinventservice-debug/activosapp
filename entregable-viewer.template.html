@@ -22,7 +22,7 @@
 <body>
   <header class="top">
     <div class="top-inner">
-      <div><div class="eyebrow">Visor de inventario · solo lectura</div><h1 id="company"></h1><p id="generated"></p></div>
+      <div><div class="eyebrow">Visor de inventario · solo lectura</div><h1 id="company">Visor de activos</h1><p id="generated"></p></div>
       <div class="stats" id="stats"></div>
     </div>
   </header>
@@ -42,23 +42,50 @@
       <div id="sku-list" class="sku-list"></div>
       <button id="more" class="more" type="button" hidden>Mostrar más</button>
     </aside>
-    <section id="detail" class="detail" aria-live="polite"></section>
+    <section id="detail" class="detail" aria-live="polite">Cargando inventario…</section>
   </main>
   <div id="photo-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Foto del activo">
     <div class="modal-bar"><span id="photo-title"></span><button id="photo-close" class="modal-close" type="button">Cerrar</button></div>
     <img id="photo-large" alt="Foto del activo">
   </div>
+  __ENTREGABLE_FILES__
   <script type="application/json" id="entregable-data">__ENTREGABLE_PAYLOAD__</script>
   <script>
   (()=>{
     'use strict';
-    const DATA=JSON.parse(document.getElementById('entregable-data').textContent);
+    try{
+    const dataNode=document.getElementById('entregable-data');
+    const DATA=JSON.parse(dataNode.textContent);
+    dataNode.remove();
     const $=id=>document.getElementById(id);
     const rows=Array.isArray(DATA.activos)?DATA.activos:[];
     const search=$('search'),filter=$('filter'),list=$('sku-list'),detail=$('detail'),more=$('more');
-    let selectedSku='',visibleCount=100,pdfObjectUrl='';
+    let selectedSku='',visibleCount=100;
+    const activeUrls=new Map();
     const esc=s=>String(s??'').trim();
-    const fileData=f=>`data:${f.mime||'application/octet-stream'};base64,${f.data||''}`;
+    function fileData(file){
+      if(activeUrls.has(file))return activeUrls.get(file);
+      const chunks=[];
+      const decode=value=>{const raw=atob(value),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);chunks.push(bytes)};
+      if(file.id){
+        for(let part=0;part<file.parts;part++){
+          const node=document.getElementById(`${file.id}-${part}`);
+          if(!node)throw new Error('Falta un bloque del adjunto.');
+          decode(node.textContent);
+        }
+      }else{
+        // Compatibilidad con los primeros entregables, también en bloques pequeños.
+        const data=file.data||'';
+        for(let offset=0;offset<data.length;offset+=1048576)decode(data.slice(offset,offset+1048576));
+      }
+      const url=URL.createObjectURL(new Blob(chunks,{type:file.mime||'application/octet-stream'}));
+      activeUrls.set(file,url);return url;
+    }
+    function releaseFileUrls(){
+      $('photo-modal').hidden=true;$('photo-large').removeAttribute('src');
+      for(const url of activeUrls.values())URL.revokeObjectURL(url);
+      activeUrls.clear();
+    }
     const totalFiles=rows.reduce((n,r)=>n+(r.adjuntos||[]).length,0);
     const totalPhotos=rows.reduce((n,r)=>n+(r.adjuntos||[]).filter(f=>f.tipo==='foto').length,0);
     const totalPdfs=rows.reduce((n,r)=>n+(r.adjuntos||[]).filter(f=>f.tipo==='pdf').length,0);
@@ -100,11 +127,11 @@
       const row=rows.find(x=>x.sku===selectedSku);
       if(row)renderDetail(row);else renderEmpty();
     }
-    function renderEmpty(){detail.replaceChildren();const box=el('div','empty');const msg=el('div');msg.append(el('strong','',rows.length?'No hay coincidencias':'No hay activos'),el('span','',rows.length?'Ajusta la búsqueda o el filtro.':'El entregable no contiene SKUs.'));box.append(msg);detail.append(box)}
+    function renderEmpty(){releaseFileUrls();detail.replaceChildren();const box=el('div','empty');const msg=el('div');msg.append(el('strong','',rows.length?'No hay coincidencias':'No hay activos'),el('span','',rows.length?'Ajusta la búsqueda o el filtro.':'El entregable no contiene SKUs.'));box.append(msg);detail.append(box)}
     function field(grid,label,value){const card=el('div','field');card.append(el('label','',label),el('div','',esc(value)||'—'));grid.append(card)}
     function section(parent,title){const s=el('section','section');s.append(el('h3','',title));parent.append(s);return s}
     function renderDetail(row){
-      if(pdfObjectUrl){URL.revokeObjectURL(pdfObjectUrl);pdfObjectUrl=''}
+      releaseFileUrls();
       detail.replaceChildren();
       const head=el('header','detail-head'),title=el('div');title.append(el('h2','',`SKU ${row.sku||'—'}`),el('p','',row.descripcion||'Sin descripción'));head.append(title,el('span','status'+(row.dadoDeBaja?' retired':''),row.dadoDeBaja?'Dado de baja':'Activo'));detail.append(head);
       const fields=el('div','fields');
@@ -118,7 +145,12 @@
       renderPdfs(detail,filesOf(row,'pdf'));
     }
     function downloadLink(file,label='Descargar'){
-      const a=el('a','link',label);a.href=fileData(file);a.download=file.nombre||'adjunto';a.rel='noopener';return a;
+      const a=el('a','link',label);a.href='#';a.download=file.nombre||'adjunto';a.rel='noopener';
+      a.addEventListener('click',event=>{
+        event.preventDefault();
+        try{const save=document.createElement('a');save.href=fileData(file);save.download=a.download;document.body.append(save);save.click();save.remove()}
+        catch(error){alert('No se pudo descargar el adjunto: '+error.message)}
+      });return a;
     }
     function renderPhotos(parent,photos){
       const sec=section(parent,`Fotos (${photos.length})`);if(!photos.length){sec.append(el('div','no-files','Este SKU no tiene fotos disponibles.'));return}
@@ -129,14 +161,13 @@
         const row=el('div','file-row');row.append(el('span','file-name',file.nombre||`Foto ${index+1}`),downloadLink(file));card.append(button,row);gallery.append(card);
       });sec.append(gallery);
     }
-    function bytesFromBase64(value){const raw=atob(value),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
     function renderPdfs(parent,pdfs){
       const sec=section(parent,`Documentos PDF (${pdfs.length})`);if(!pdfs.length){sec.append(el('div','no-files','Este SKU no tiene PDFs disponibles.'));return}
-      const list=el('div','pdf-list');const frameWrap=el('div','pdf-frame-wrap'),frame=el('iframe','pdf-frame');frame.title='Visor de PDF';frameWrap.append(frame);
+      const list=el('div','pdf-list');const frameWrap=el('div','pdf-frame-wrap'),frame=el('iframe','pdf-frame');frame.title='Visor de PDF';frameWrap.hidden=true;frameWrap.append(frame);
       pdfs.forEach((file,index)=>{
         const item=el('div','pdf-item');item.append(el('span','pdf-title',file.nombre||`PDF ${index+1}`));const actions=el('span','pdf-actions');
         const preview=el('button','pdf-open','Vista previa');preview.type='button';preview.addEventListener('click',()=>{
-          try{if(pdfObjectUrl)URL.revokeObjectURL(pdfObjectUrl);const blob=new Blob([bytesFromBase64(file.data)],{type:'application/pdf'});pdfObjectUrl=URL.createObjectURL(blob);frame.src=pdfObjectUrl+'#toolbar=1&navpanes=0&view=FitH';frameWrap.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('No se pudo abrir el PDF en este navegador. Puedes descargarlo.')}
+          try{frameWrap.hidden=false;frame.src=fileData(file)+'#toolbar=1&navpanes=0&view=FitH';frameWrap.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('No se pudo abrir el PDF en este navegador. Puedes descargarlo.')}
         });
         actions.append(preview,downloadLink(file));item.append(actions);list.append(item);
       });sec.append(list,frameWrap,el('p','hint','Si el navegador no muestra la vista previa, usa Descargar PDF.'));
@@ -144,7 +175,13 @@
     list.addEventListener('click',event=>{const button=event.target.closest('.sku-item');if(!button)return;const row=rows[Number(button.dataset.index)];if(!row)return;selectedSku=row.sku;visibleCount=Math.max(visibleCount,Math.ceil((Number(button.dataset.index)+1)/100)*100);renderList()});
     search.addEventListener('input',()=>{visibleCount=100;renderList()});filter.addEventListener('change',()=>{visibleCount=100;renderList()});more.addEventListener('click',()=>{visibleCount+=100;renderList()});
     $('photo-close').addEventListener('click',()=>{$('photo-modal').hidden=true;$('photo-large').removeAttribute('src')});$('photo-modal').addEventListener('click',event=>{if(event.target===$('photo-modal'))$('photo-close').click()});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('photo-modal').hidden)$('photo-close').click()});
+    window.addEventListener('pagehide',releaseFileUrls);
+    window.addEventListener('pageshow',event=>{if(event.persisted)renderList()});
     renderList();
+    }catch(error){
+      document.getElementById('detail').textContent='No se pudo cargar el inventario: '+error.message;
+      console.error('Error al abrir el entregable',error);
+    }
   })();
   </script>
 </body>
