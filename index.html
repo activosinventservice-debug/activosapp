@@ -1152,9 +1152,11 @@
           <input type="text" id="cat-search" placeholder="Buscar en el catálogo actual…" onkeyup="filtrarCatalogo()">
           <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaCatalogo()"><span class="material-symbols-rounded">close</span></button>
         </div>
+        <button class="btn tonal" id="btn-cat-refresh" type="button" onclick="actualizarCatalogosWeb()"><span class="material-symbols-rounded">refresh</span> Actualizar</button>
         <div id="cat-total" class="chip hidden"><span class="material-symbols-rounded">list_alt</span><span id="cat-total-text">0</span></div>
       </div>
 
+      <p id="cat-status" class="meta" role="status" aria-live="polite"></p>
       <div id="cat-list" class="cat-list" style="margin-top:10px"></div>
     </div>
 
@@ -1506,8 +1508,9 @@
     </div>
   </div>
 
-  <script src="config.js?v=2026.11.02.1-22"></script>
-  <script src="app.js?v=2026.11.01.1-26"></script>
+  <script src="config.js?v=2026.11.02.2-23"></script>
+  <script src="catalogos-realtime.js?v=2026.11.02.2-1"></script>
+  <script src="app.js?v=2026.11.02.2-27"></script>
   <script src="entregable.js?v=2026.11.02.1-8"></script>
 </body>
 </html>

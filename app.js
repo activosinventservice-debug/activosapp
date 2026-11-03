@@ -441,6 +441,7 @@ window.fetch = async function(input, init){
     __permsEffective = Object.assign({}, __PERMS_NONE);
     window.__permsEffective = __permsEffective;
     try{ applyPermisosUI(); }catch{}
+    try{ syncCatalogosRealtime(); }catch{}
   }
 
   async function ensureSuperAdminFlag(){
@@ -480,6 +481,7 @@ window.fetch = async function(input, init){
     window.__permsEffective = __permsEffective;
     try{ applyPermisosUI(); }catch{}
     try{ updatePrintButtonState(); }catch{}
+    try{ syncCatalogosRealtime(); }catch{}
   }
 
   async function cargarPermisosEmpresaActual(force){
@@ -678,6 +680,7 @@ function restoreEmpresaCache(empresaId){
 
     // Catálogos
     if(snap.catalogoCache) catalogoCache = __deepCopy(snap.catalogoCache);
+    invalidateCatalogosCache();
     currentTab = snap.currentTab || currentTab || 'genero';
     catalogoFilter = (snap.catalogoFilter ?? "");
 
@@ -803,6 +806,9 @@ function updatePrintButtonState(){
     try{ __resetAbortSession(); }catch{}
     try{ bumpCtxVersion(); }catch{}
     // Auth / sesión
+    stopCatalogosRealtime();
+    __catalogSkuCountsByEmpresa.clear();
+    invalidateCatalogosCache();
     sessionToken = "";
     refreshToken = "";
     sessionExpiresAt = 0;
@@ -1013,6 +1019,7 @@ function getCtxVersion(){ return __ctxVersion; }
 
     // ✅ Re-aplicar permisos al cambiar de vista (por si hay botones en esa vista)
     try{ applyPermisosUI(); }catch{}
+    try{ syncCatalogosRealtime(); }catch{}
   }
 
   
@@ -1520,7 +1527,7 @@ document.addEventListener('keydown', (e)=>{
       const selectCols = ANDROID_ACTIVOS_SELECT_COLS;
 
       function buildBaseUrl(){
-        let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}`;
+        let url = `${SB_URL}/rest/v1/${hasExtra?'web_activos_catalogos_v':'activos'}?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}`;
         url += `&order=sku.asc`;
         if(q.length > 0){
           const qenc = encodeURIComponent(q);
@@ -1529,8 +1536,8 @@ document.addEventListener('keydown', (e)=>{
         if(soloBaja) url += `&dado_de_baja=eq.true`;
         if(hasExtra){
           const col = skuExtraFiltro.tipo;
-          const val = encodeURIComponent(skuExtraFiltro.valor);
-          url += `&${col}=eq.${val}`;
+          const val = encodeURIComponent(catalogoKey(skuExtraFiltro.valor));
+          url += `&${col}_key=eq.${val}`;
         }
         return url;
       }
@@ -2280,6 +2287,8 @@ async function cargarEmpresasAutorizadas(){
 
   async function seleccionarEmpresa(id,nombre,razonSocial,legalText,controlLabel){
   try{ if(typeof editorActivosConfirmDiscard === 'function' && !editorActivosConfirmDiscard('Tienes cambios sin guardar en el editor masivo.\n\n¿Cambiar de empresa y descartar esos cambios?')) return; }catch{}
+  stopCatalogosRealtime();
+  invalidateCatalogosCache();
   // ✅ Antes de cambiar: guardar snapshot de la empresa previa (por usuario)
   try{ saveEmpresaCache(); }catch{}
 
@@ -2503,7 +2512,7 @@ function resetChipFiltroUI(){
       'dado_de_baja'
     ].join(',');
 
-    let url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${empresaSeleccionada.id}&select=${encodeURIComponent(skuListSelect)}`;
+    let url = `${SB_URL}/rest/v1/${skuExtraFiltro?.valor?'web_activos_catalogos_v':'activos'}?empresa_id=eq.${empresaSeleccionada.id}&select=${encodeURIComponent(skuListSelect)}`;
 
     // Ordenamiento
     if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
@@ -2521,8 +2530,8 @@ function resetChipFiltroUI(){
     // Filtro extra catálogo
     if (skuExtraFiltro && skuExtraFiltro.valor) {
       const col = skuExtraFiltro.tipo;
-      const val = encodeURIComponent(skuExtraFiltro.valor);
-      url += `&${col}=eq.${val}`;
+      const val = encodeURIComponent(catalogoKey(skuExtraFiltro.valor));
+      url += `&${col}_key=eq.${val}`;
     } else {
       resetChipFiltroUI();
     }
@@ -5726,6 +5735,7 @@ function resetChipFiltroUI(){
     }catch{}
 
     cargarCatalogoActual(false);
+    syncCatalogosRealtime();
   }
 
   let currentTab = 'genero';
@@ -5754,7 +5764,7 @@ function resetChipFiltroUI(){
       const bucket = __catalogCountBucket();
       const map = bucket?.[tipo];
       if(!map) return null;
-      return map.has(value) ? map.get(value) : (bucket.ready ? 0 : null);
+      return map.has(catalogoKey(value)) ? map.get(catalogoKey(value)) : (bucket.ready ? 0 : null);
     }catch{ return null; }
   }
   function __setCatalogCount(tipo, value, count){
@@ -5762,7 +5772,7 @@ function resetChipFiltroUI(){
       const bucket = __catalogCountBucket();
       const map = bucket?.[tipo];
       if(!map) return;
-      map.set(value, Number.isFinite(count) ? count : 0);
+      map.set(catalogoKey(value), Number.isFinite(count) ? count : 0);
     }catch{}
   }
   function __updateCatalogBadge(tipo, value, count){
@@ -5774,72 +5784,43 @@ function resetChipFiltroUI(){
     }catch{}
   }
   async function precalcularConteoSkusCatalogos(){
-    if(!['genero','ubicacion','localizacion','responsable'].includes(currentTab)) return;
-    const empresaId = empresaSeleccionada?.id;
-    if(!empresaId) return;
-    try{
-      const bucket = __catalogCountBucket();
-      ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
-        bucket[tipo].clear();
-        (catalogoCache?.[tipo] || []).forEach(val=> __updateCatalogBadge(tipo, val, null));
-      });
-      bucket.ready = false;
-
-      const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
-      const pageSize = 1000;
-      let desde = 0;
-      let total = null;
-      const sets = {
-        genero: new Map(),
-        ubicacion: new Map(),
-        localizacion: new Map(),
-        responsable: new Map()
-      };
-      while(true){
-        const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaId)}&select=genero,ubicacion,localizacion,responsable,sku&sku=not.is.null&order=sku.asc`;
-        const res = await fetch(url, { headers: { ...headers, 'Range': `${desde}-${desde+pageSize-1}` } });
-        if(!res.ok){
-          const t = await res.text().catch(()=>"");
-          console.warn('Conteo catálogos:', res.status, t);
-          break;
-        }
-        const batch = await res.json();
-        const range = res.headers.get('Content-Range');
-        if (range){
-          const parts = range.split('/');
-          total = parseInt(parts[1] || '0', 10);
-        }
-        (batch||[]).forEach(o=>{
-          const sku = String(o?.sku ?? '').trim();
-          if(!sku) return;
-          ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
-            const raw = String(o?.[tipo] ?? '');
-            if(!raw) return;
-            if(!sets[tipo].has(raw)) sets[tipo].set(raw, new Set());
-            sets[tipo].get(raw).add(sku);
-          });
+    const company=empresaSeleccionada?.id, owner=userEmail, context=getCtxVersion();
+    if(!company||!sessionToken) return;
+    const bucket=__catalogCountBucket();
+    if(bucket.promise) return bucket.promise;
+    if(bucket.ready&&Date.now()-(bucket.at||0)<60000) return;
+    const revision=bucket.revision||0;
+    const work=(async()=>{
+      try{
+        const res=await fetch(`${SB_URL}/rest/v1/rpc/web_catalogo_counts`,{
+          method:'POST',cache:'no-store',headers:{apikey:SB_KEY,Authorization:`Bearer ${sessionToken}`,'Content-Type':'application/json'},
+          body:JSON.stringify({p_empresa_id:company})
         });
-        desde += Array.isArray(batch) ? batch.length : pageSize;
-        if (!Array.isArray(batch) || batch.length < pageSize) break;
-        if (total !== null && desde >= total) break;
+        if(!res.ok) throw new Error('No se pudieron actualizar los conteos');
+        const counts=await res.json();
+        if(empresaSeleccionada?.id!==company||userEmail!==owner||getCtxVersion()!==context||revision!==(bucket.revision||0)) return;
+        for(const tipo of CATALOGO_TYPES){
+          bucket[tipo]=new Map(Object.entries(counts?.[tipo]||{}).map(([key,n])=>[key,Number(n)||0]));
+          for(const value of catalogoCache[tipo]||[]) __updateCatalogBadge(tipo,value,bucket[tipo].get(catalogoKey(value))||0);
+        }
+        bucket.ready=true;bucket.at=Date.now();
+        if(skuExtraFiltro?.tipo&&skuExtraFiltro?.valor) actualizarChipFiltroConConteo();
+      }catch(e){ if(e?.name!=='AbortError') setCatalogosStatus('No se pudieron actualizar los conteos. Puedes reintentar con Actualizar.'); }
+    })();
+    bucket.promise=work;
+    try{await work;}finally{
+      if(bucket.promise===work)bucket.promise=null;
+      if(revision!==(bucket.revision||0)&&empresaSeleccionada?.id===company&&userEmail===owner&&catalogosVisible()&&!bucket.retryTimer){
+        bucket.retryTimer=setTimeout(()=>{bucket.retryTimer=null;if(empresaSeleccionada?.id===company&&userEmail===owner&&catalogosVisible())precalcularConteoSkusCatalogos();},5000);
       }
-
-      ['genero','ubicacion','localizacion','responsable'].forEach(tipo=>{
-        (catalogoCache?.[tipo] || []).forEach(val=>{
-          const count = sets[tipo].has(val) ? sets[tipo].get(val).size : 0;
-          __setCatalogCount(tipo, val, count);
-          __updateCatalogBadge(tipo, val, count);
-        });
-      });
-      bucket.ready = true;
-      try{ if (skuExtraFiltro?.tipo && skuExtraFiltro?.valor) actualizarChipFiltroConConteo(); }catch{}
-    }catch(e){ console.warn(e); }
+    }
   }
 
   let catalogoFilter = '';
 
 
   function resetCatalogosState(){
+    try{ invalidateCatalogosCache(); }catch{}
     try{ currentTab = 'genero'; }catch{}
     try{ catalogoCache = { genero: [], ubicacion: [], localizacion: [], responsable: [] }; }catch{}
     try{ __resetCatalogCountsForEmpresa(); }catch{}
@@ -5879,7 +5860,7 @@ function resetChipFiltroUI(){
       .toString()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .trim()
+      .trim().replace(/\s+/g,' ')
       .toLocaleLowerCase('es-MX');
   }
 
@@ -5889,59 +5870,121 @@ function resetChipFiltroUI(){
     try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
   }
 
+  const CATALOGO_TYPES=['genero','ubicacion','localizacion','responsable'];
+  const catalogMeta={};
+  const catalogFlights=new Map();
+  const catalogTypeVersion={};
+  let catalogEpoch=0;
+  function catalogoKey(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();}
+  function setCatalogosStatus(message){const el=qs('cat-status');if(el)el.textContent=message||'';}
+  function invalidateCatalogosCache(tipo){
+    if(tipo) catalogTypeVersion[tipo]=(catalogTypeVersion[tipo]||0)+1;
+    else catalogEpoch++;
+    for(const t of tipo?[tipo]:CATALOGO_TYPES) delete catalogMeta[t];
+  }
+  async function actualizarCatalogosWeb(){
+    invalidateCatalogosCache();
+    const bucket=__catalogCountBucket();bucket.at=0;bucket.revision=(bucket.revision||0)+1;
+    await cargarCatalogoActual(true);
+    syncCatalogosRealtime();
+  }
   async function cargarCatalogoActual(forceNetwork){
-    if(!forceNetwork && catalogoCache[currentTab] && catalogoCache[currentTab].length){ renderCatalogo(); try{ precalcularConteoSkusCatalogos(); }catch(e){console.warn(e);} return; }
-    await cargarCatalogoCompleto(currentTab);
-    renderCatalogo();
-    try{ precalcularConteoSkusCatalogos(); }catch(e){ console.warn(e); }
-  }
-
-  async function cargarCatalogoCompleto(tipo){
-    const col = tipo;
-    const baseHeaders = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
-    const pageSize = 1000;
-    let desde = 0;
-    let total = null;
-    const values = new Set();
-
-    // Traemos SOLO la columna y hacemos dedupe client-side (con Range)
-    while (true){
-      const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(col)}&${encodeURIComponent(col)}=not.is.null&order=${encodeURIComponent(col)}.asc`;
-      const res = await fetch(url, {
-        headers: { ...baseHeaders, 'Range': `${desde}-${desde+pageSize-1}` }
-      });
-
-      if(!res.ok){
-        const t = await res.text().catch(()=> "");
-        console.error("Error catálogo:", res.status, t);
-        break;
-      }
-
-      const batch = await res.json();
-      const range = res.headers.get('Content-Range');
-      if (range){
-        const parts = range.split('/');
-        total = parseInt(parts[1] || "0", 10);
-      }
-
-      (batch||[]).forEach(o=>{
-        const raw = String(o?.[col] ?? '');
-        if (!raw) return;
-        values.add(raw);
-      });
-
-      desde += Array.isArray(batch) ? batch.length : pageSize;
-      if (!Array.isArray(batch) || batch.length < pageSize) break;
-      if (total !== null && desde >= total) break;
+    const tipo=currentTab, company=empresaSeleccionada?.id, owner=userEmail;
+    if(!company||!sessionToken||!CATALOGO_TYPES.includes(tipo)||!canCatalogos()) return;
+    const meta=catalogMeta[tipo];
+    if(!forceNetwork&&meta?.company===company&&meta?.owner===owner&&Date.now()-meta.at<60000){
+      renderCatalogo();precalcularConteoSkusCatalogos();return;
     }
-
-    const arr = Array.from(values).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-    catalogoCache[tipo] = arr;
-    qs('cat-total-text').innerText = `${arr.length} valores`;
-    show(qs('cat-total'), true);
+    const version=catalogEpoch, typeVersion=catalogTypeVersion[tipo]||0, context=getCtxVersion();
+    const key=JSON.stringify([owner,company,tipo,version,typeVersion]);
+    if(!catalogFlights.has(key)){
+      const flight=cargarCatalogoCompleto(tipo,company).then(values=>{
+        if(company===empresaSeleccionada?.id&&owner===userEmail&&version===catalogEpoch&&typeVersion===(catalogTypeVersion[tipo]||0)&&context===getCtxVersion()){
+          catalogoCache[tipo]=values;catalogMeta[tipo]={company,owner,at:Date.now()};
+        }
+      }).finally(()=>catalogFlights.delete(key));
+      catalogFlights.set(key,flight);
+    }
+    setCatalogosStatus('Actualizando catálogo…');
+    try{
+      await catalogFlights.get(key);
+      if(company!==empresaSeleccionada?.id||owner!==userEmail||currentTab!==tipo||context!==getCtxVersion()) return;
+      renderCatalogo();
+      setCatalogosStatus('Catálogo actualizado');
+      precalcularConteoSkusCatalogos();
+    }catch(e){
+      if(company===empresaSeleccionada?.id&&owner===userEmail&&currentTab===tipo&&e?.name!=='AbortError'){
+        renderCatalogo();setCatalogosStatus('No se pudo actualizar. Se conservan los datos anteriores; pulsa Actualizar para reintentar.');
+      }
+    }
+  }
+  async function cargarCatalogoCompleto(tipo,company=empresaSeleccionada?.id){
+    if(!CATALOGO_TYPES.includes(tipo)) throw new Error('Tipo de catálogo inválido');
+    const values=new Map(),pageSize=1000;
+    for(let offset=0;;offset+=pageSize){
+      const url=`${SB_URL}/rest/v1/catalogos_values?empresa_id=eq.${encodeURIComponent(company)}&tipo=eq.${encodeURIComponent(tipo)}&select=valor,valor_key&order=valor_key.asc,id.asc&limit=${pageSize}&offset=${offset}`;
+      const res=await fetch(url,{cache:'no-store',headers:{apikey:SB_KEY,Authorization:`Bearer ${sessionToken}`}});
+      if(!res.ok) throw new Error('No se pudo consultar el catálogo');
+      const batch=await res.json();
+      if(!Array.isArray(batch))throw new Error('Respuesta de catálogo inválida');
+      for(const row of batch){const value=String(row.valor??'').trim();if(value&&!values.has(catalogoKey(value)))values.set(catalogoKey(value),value);}
+      if(batch.length<pageSize)break;
+    }
+    return [...values.values()].sort((a,b)=>catalogoKey(a).localeCompare(catalogoKey(b),'es')||a.localeCompare(b,'es'));
   }
 
-  
+  // El socket solo vive en la vista visible de Catálogos y pertenece a una cuenta/empresa.
+  let catalogRealtime=null, catalogRealtimeOwner='', catalogRealtimeTimer=null;
+  let catalogRealtimeRevision=0, catalogRealtimeLoading=false, catalogRealtimeLast=0, catalogRealtimeEpoch=0;
+  function catalogosVisible(){return !!qs('view-catalogos')&&!document.hidden&&navigator.onLine!==false&&!!sessionToken&&!!empresaSeleccionada?.id&&canCatalogos()&&!qs('view-catalogos')?.classList.contains('hidden');}
+  function stopCatalogosRealtime(){
+    catalogRealtime?.close();catalogRealtime=null;catalogRealtimeOwner='';
+    clearTimeout(catalogRealtimeTimer);catalogRealtimeTimer=null;
+    catalogRealtimeEpoch++;catalogRealtimeRevision=0;catalogRealtimeLoading=false;
+  }
+  function scheduleCatalogRealtimeReload(epoch=catalogRealtimeEpoch){
+    if(epoch!==catalogRealtimeEpoch||!catalogosVisible()||catalogRealtimeTimer||catalogRealtimeLoading)return;
+    catalogRealtimeTimer=setTimeout(async()=>{
+      catalogRealtimeTimer=null;
+      if(epoch!==catalogRealtimeEpoch||!catalogosVisible())return;
+      const version=catalogRealtimeRevision;
+      catalogRealtimeLoading=true;catalogRealtimeLast=Date.now();
+      try{await cargarCatalogoActual(true);}finally{
+        if(epoch===catalogRealtimeEpoch){catalogRealtimeLoading=false;if(version!==catalogRealtimeRevision)scheduleCatalogRealtimeReload(epoch);}
+      }
+    },Math.max(1500,5000-(Date.now()-catalogRealtimeLast)));
+  }
+  function syncCatalogosRealtime(){
+    if(!catalogosVisible()||!window.CatalogosRealtime){stopCatalogosRealtime();return;}
+    const owner=JSON.stringify([userEmail,empresaSeleccionada.id]);
+    if(catalogRealtime&&catalogRealtimeOwner===owner)return;
+    stopCatalogosRealtime();catalogRealtimeOwner=owner;
+    const epoch=catalogRealtimeEpoch;
+    catalogRealtime=new window.CatalogosRealtime({url:SB_URL,key:SB_KEY,company:empresaSeleccionada.id,
+      getToken:async()=>{
+        if(!catalogosVisible()||catalogRealtimeOwner!==owner)return '';
+        await refreshSessionToken(false);
+        return catalogosVisible()&&catalogRealtimeOwner===owner?sessionToken:'';
+      },
+      onChange:tipo=>{
+        if(epoch!==catalogRealtimeEpoch||!catalogosVisible())return;
+        invalidateCatalogosCache(tipo);
+        const bucket=__catalogCountBucket();bucket.at=0;bucket.revision=(bucket.revision||0)+1;
+        if(tipo!==null&&tipo!==currentTab)return;
+        catalogRealtimeRevision++;scheduleCatalogRealtimeReload(epoch);
+      },
+      onStatus:message=>{if(epoch===catalogRealtimeEpoch&&catalogosVisible())setCatalogosStatus(message);}
+    }).start();
+  }
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)stopCatalogosRealtime();
+    else if(catalogosVisible()){invalidateCatalogosCache();cargarCatalogoActual(true);syncCatalogosRealtime();}
+  });
+  window.addEventListener('offline',stopCatalogosRealtime);
+  window.addEventListener('online',()=>{if(catalogosVisible()){invalidateCatalogosCache();cargarCatalogoActual(true);syncCatalogosRealtime();}});
+  window.addEventListener('pagehide',stopCatalogosRealtime);
+  window.addEventListener('pageshow',()=>{if(catalogosVisible())syncCatalogosRealtime();});
+
   // ✅ Throttle de render en Catálogos (evita re-render continuo mientras se calculan conteos)
   let __catalogRenderTimer = null;
   function requestRenderCatalogo(){
@@ -5953,13 +5996,15 @@ function resetChipFiltroUI(){
   }
 
 function renderCatalogo(){
+    const total=qs('cat-total-text');if(total)total.textContent=`${(catalogoCache[currentTab]||[]).length} valores`;
+    show(qs('cat-total'),true);
     const list = qs('cat-list');
     const all = catalogoCache[currentTab] || [];
     const needle = normalizeCatalogSearch(catalogoFilter || '');
     const filtered = needle ? all.filter(v=>normalizeCatalogSearch(v).includes(needle)) : all;
 
     if (!all.length){
-      list.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">Cargando ${escapeHtml(currentTab)}…</div>`;
+      list.innerHTML = `<div class="chip" style="background:#FFFBEA; border-color:#FDE68A; color:#92400E">No hay valores en ${escapeHtml(currentTab)}.</div>`;
       return;
     }
     if (!filtered.length){
@@ -5968,18 +6013,19 @@ function renderCatalogo(){
     }
 
     list.innerHTML = filtered.map(v=>{
-      const c = __getCatalogCount(currentTab, v);
-      const badge = `<span class="badge" data-tab="${escapeHtml(currentTab)}" data-value="${encodeURIComponent(v)}" style="background:#EEF2FF; border-color:#C7D2FE; color:#3730A3; font-weight:900" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${c===null ? 'SKUs: …' : ('SKUs: ' + c)}</span>`;
-      return `
-      <div class="cat-row" role="button" tabindex="0"
-           onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')"
-           onkeydown="if(event.key==='Enter'||event.key===' '){ event.preventDefault(); aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}'); }">
-        <div class="label" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${escapeHtml(v)}</div>
-        <div class="count" onclick="aplicarCatalogoFiltro('${escapeHtml(currentTab)}','${encodeURIComponent(v)}')">${badge}<span class="material-symbols-rounded" style="font-size:18px" aria-hidden="true">chevron_right</span></div>
-      </div>
-    `;
+      const c=__getCatalogCount(currentTab,v);
+      return `<div class="cat-row" tabindex="0" role="button" data-catalog-type="${escapeHtml(currentTab)}" data-catalog-value="${escapeHtml(encodeURIComponent(v))}">
+        <div class="label">${escapeHtml(v)}</div>
+        <div class="count"><span class="badge" data-tab="${escapeHtml(currentTab)}" data-value="${escapeHtml(encodeURIComponent(v))}">${c===null?'SKUs: …':`SKUs: ${c}`}</span><span class="material-symbols-rounded" aria-hidden="true">chevron_right</span></div>
+      </div>`;
     }).join('');
-
+    const activate=event=>{
+      if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;
+      const row=event.target.closest('[data-catalog-value]');
+      if(!row||!list.contains(row))return;
+      event.preventDefault();aplicarCatalogoFiltro(row.dataset.catalogType,row.dataset.catalogValue);
+    };
+    list.onclick=activate;list.onkeydown=activate;
   }
 
   function aplicarCatalogoFiltro(tipo, valorEnc){
