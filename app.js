@@ -402,6 +402,8 @@ window.fetch = async function(input, init){
     puedeAccederCatalogos:false,
     puedeAccederResguardoDashboard:false,
     puedeAccederResguardosHistorial:false,
+    puedeBorrarResguardosHistorial:false,
+    puedeAutorizarAplicarResguardosHistorial:false,
     puedeExportarResCvsPDF:false,
     puedeCambiarFechaResguardosHistorial:false,
     puedeDescargarFoto:false,
@@ -418,6 +420,8 @@ window.fetch = async function(input, init){
     puedeAccederCatalogos:true,
     puedeAccederResguardoDashboard:true,
     puedeAccederResguardosHistorial:true,
+    puedeBorrarResguardosHistorial:true,
+    puedeAutorizarAplicarResguardosHistorial:true,
     puedeExportarResCvsPDF:true,
     puedeCambiarFechaResguardosHistorial:true,
     puedeDescargarFoto:true,
@@ -465,6 +469,8 @@ window.fetch = async function(input, init){
       puedeAccederCatalogos: isSuper || esAdmin || raw?.puedeAccederCatalogos === true,
       puedeAccederResguardoDashboard: isSuper || esAdmin || raw?.puedeAccederResguardoDashboard === true,
       puedeAccederResguardosHistorial: isSuper || esAdmin || raw?.puedeAccederResguardosHistorial === true,
+      puedeBorrarResguardosHistorial: isSuper || esAdmin || raw?.puedeBorrarResguardosHistorial === true,
+      puedeAutorizarAplicarResguardosHistorial: isSuper || esAdmin || raw?.puedeAutorizarAplicarResguardosHistorial === true,
 
       puedeExportarResCvsPDF: isSuper || esAdmin || raw?.puedeExportarResCvsPDF === true,
       puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
@@ -481,6 +487,7 @@ window.fetch = async function(input, init){
     window.__permsEffective = __permsEffective;
     try{ applyPermisosUI(); }catch{}
     try{ updatePrintButtonState(); }catch{}
+    try{ updateSessionActionButtons(); }catch{}
     try{ syncCatalogosRealtime(); }catch{}
   }
 
@@ -514,6 +521,7 @@ window.fetch = async function(input, init){
         "esAdminEmpresa",
         "puedeAccederSkus","puedeAccederCatalogos",
         "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
+        "puedeBorrarResguardosHistorial","puedeAutorizarAplicarResguardosHistorial",
         "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
         "puedeDescargarFoto",
         "puedeImportarExportarSkusCsv",
@@ -553,6 +561,8 @@ window.fetch = async function(input, init){
   function canCatalogos(){ return !!getPerms().puedeAccederCatalogos; }
   function canDash(){ return !!getPerms().puedeAccederResguardoDashboard; }
   function canHist(){ return !!getPerms().puedeAccederResguardosHistorial; }
+  function canDeleteResguardoHist(){ return !!getPerms().puedeBorrarResguardosHistorial; }
+  function canAuthorizeApplyResguardo(){ return !!getPerms().puedeAutorizarAplicarResguardosHistorial; }
   function canExportPdf(){ return !!getPerms().puedeExportarResCvsPDF; }
   function canChangeFechaPdf(){ return !!getPerms().puedeCambiarFechaResguardosHistorial; }
   function canDescargarFoto(){ return !!getPerms().puedeDescargarFoto; }
@@ -7018,7 +7028,7 @@ function renderCatalogo(){
     aplicarFiltrosHistorial();
   }
 
-  let histRango = 'todo';
+  let histRango = 'hoy';
   let histSearchDebounce = null;
   let histCustomRange = { start: '', end: '' };
   let histNamesMap = new Map();
@@ -7026,6 +7036,7 @@ function renderCatalogo(){
   let currentSessionId = null;
   let sessionInfo = null;
   let sessionEntries = [];
+  let sessionPdfGenerations = [];
   let sessionActivosMap = new Map();
   let sessionShowOriginal = true;
   let sessionShowActual = true;
@@ -7077,6 +7088,158 @@ function renderCatalogo(){
     else btn.title = 'Generar PDF de esta sesión';
   }
 
+  function updateSessionActionButtons(){
+    const hasData = !!sessionInfo && Array.isArray(sessionEntries) && sessionEntries.length > 0;
+    const pending = !!sessionInfo && !isSessionAutorizada(sessionInfo);
+    const authBtn = qs('btn-session-authorize-apply');
+    const deleteBtn = qs('btn-session-delete');
+    const csvBtn = qs('btn-session-csv');
+
+    if(authBtn){
+      const allowed = canAuthorizeApplyResguardo() && pending;
+      authBtn.classList.toggle('hidden', !allowed);
+      authBtn.disabled = !hasData;
+      authBtn.title = allowed ? 'Autorizar la sesión y aplicar los cambios a los activos' : '';
+    }
+    if(deleteBtn){
+      const allowed = canDeleteResguardoHist() && pending;
+      deleteBtn.classList.toggle('hidden', !allowed);
+      deleteBtn.disabled = !sessionInfo?.id;
+      deleteBtn.title = allowed ? 'Eliminar la sesión pendiente' : '';
+    }
+    if(csvBtn){
+      const allowed = canExportPdf() && hasData && isSessionAutorizada(sessionInfo);
+      csvBtn.classList.toggle('hidden', !allowed);
+      csvBtn.disabled = !hasData;
+      csvBtn.title = allowed ? 'Descargar CSV de los activos de esta sesión' : '';
+    }
+  }
+
+  async function callResguardoRpc(name, sessionId){
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/${name}`, {
+      method:'POST',
+      headers:{
+        'apikey':SB_KEY,
+        'Authorization':`Bearer ${sessionToken}`,
+        'Content-Type':'application/json',
+        'Prefer':'return=representation'
+      },
+      body:JSON.stringify({ p_session_id: sessionId })
+    });
+    if(!res.ok){
+      const text = await res.text().catch(()=> '');
+      throw new Error(`No se pudo ${name === 'authorize_resguardo_session' ? 'autorizar' : 'aplicar'} la sesión (HTTP ${res.status}). ${text}`);
+    }
+  }
+
+  window.autorizarAplicarSesionResguardo = async function(){
+    if(!canAuthorizeApplyResguardo()){
+      setSessionMsg('No tienes permiso para autorizar y aplicar resguardos.');
+      return;
+    }
+    if(!sessionInfo?.id || !sessionEntries.length){
+      setSessionMsg('Carga una sesión con activos antes de procesarla.');
+      return;
+    }
+    if(isSessionAutorizada(sessionInfo)){
+      setSessionMsg('Esta sesión ya está autorizada o aplicada.');
+      return;
+    }
+    if(!window.confirm(`Se autorizará la sesión ${sessionInfo.id} y se aplicarán sus cambios a los activos. ¿Continuar?`)) return;
+
+    const id = sessionInfo.id;
+    const btn = qs('btn-session-authorize-apply');
+    if(btn) btn.disabled = true;
+    setSessionMsg('Autorizando y aplicando sesión…');
+    let processMessage = '';
+    try{
+      await callResguardoRpc('authorize_resguardo_session', id);
+      await callResguardoRpc('apply_resguardo_session', id);
+      processMessage = 'Sesión procesada correctamente.';
+    }catch(e){
+      console.error(e);
+      processMessage = e?.message || 'Falló la autorización o aplicación.';
+    }finally{
+      try{ await cargarDetalleSesionResguardo(id, true); }catch(_){ }
+      try{ await cargarHistorialResguardos(true); }catch(_){ }
+      updateSessionActionButtons();
+      setSessionMsg(processMessage);
+    }
+  };
+
+  window.eliminarSesionResguardo = async function(){
+    if(!canDeleteResguardoHist()){
+      setSessionMsg('No tienes permiso para borrar sesiones del historial.');
+      return;
+    }
+    if(!sessionInfo?.id || isSessionAutorizada(sessionInfo)){
+      setSessionMsg('Solo se pueden borrar sesiones pendientes de autorización.');
+      return;
+    }
+    const id = sessionInfo.id;
+    if(!window.confirm(`¿Eliminar la sesión ${id} y todos sus activos? Esta acción no se puede deshacer.`)) return;
+
+    const btn = qs('btn-session-delete');
+    if(btn) btn.disabled = true;
+    setSessionMsg('Eliminando sesión…');
+    try{
+      const url = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(id)}&select=id`;
+      const res = await fetch(url, {
+        method:'DELETE',
+        headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`,
+          'Prefer':'return=representation'
+        }
+      });
+      if(!res.ok){
+        const text = await res.text().catch(()=> '');
+        throw new Error(`No se pudo eliminar la sesión (HTTP ${res.status}). ${text}`);
+      }
+      const deleted = await res.json().catch(()=> []);
+      if(Array.isArray(deleted) && deleted.length === 0) throw new Error('La sesión no fue eliminada. Revisa tus permisos o vuelve a cargar el historial.');
+      histAll = histAll.filter(s=>s.id !== id);
+      currentSessionId = null;
+      sessionInfo = null;
+      sessionEntries = [];
+      aplicarFiltrosHistorial();
+      switchView('view-resguardos-historial');
+      setHistMsg('Sesión eliminada.');
+    }catch(e){
+      console.error(e);
+      setSessionMsg(e?.message || 'No se pudo eliminar la sesión.');
+      if(btn) btn.disabled = false;
+    }
+  };
+
+  window.exportarSesionResguardoCsv = function(){
+    if(!canExportPdf()){
+      setSessionMsg('No tienes permiso para exportar resguardos.');
+      return;
+    }
+    if(!sessionInfo || !sessionEntries.length || !isSessionAutorizada(sessionInfo)){
+      setSessionMsg('El CSV está disponible para sesiones autorizadas o aplicadas.');
+      return;
+    }
+    const header = [
+      'sku','codigo_barras','descripcion','responsableOriginal','localizacionOriginal','ubicacionOriginal',
+      'nuevoResponsable','nuevaLocalizacion','nuevaUbicacion','fecha','id'
+    ];
+    const createdAtRaw = sessionInfo.createdAt;
+    const createdAtMs = Number.isFinite(Number(createdAtRaw)) ? Number(createdAtRaw) : Date.parse(createdAtRaw);
+    const date = new Date(createdAtMs);
+    const fecha = Number.isNaN(date.getTime()) ? '' : date.toLocaleString('sv-SE').replace('T',' ');
+    const rows = sessionEntries.map(e=>[
+      e.codigo, e.codigo_barras, e.descripcion, e.responsable_original, e.localizacion_original, e.ubicacion_original,
+      sessionInfo.nuevoResponsable, sessionInfo.nuevaLocalizacion, sessionInfo.nuevaUbicacion, fecha,
+      `${sessionInfo.id}-${e.codigo}`
+    ].map(csvEscape).join(','));
+    const safeId = String(sessionInfo.id).replace(/[^A-Za-z0-9_-]/g,'_');
+    const safeEmpresa = String(empresaSeleccionada?.nombre || 'empresa').replace(/[^A-Za-z0-9_-]/g,'_');
+    downloadTextFile(`resguardo_${safeEmpresa}_${safeId}.csv`, [header.join(','), ...rows].join('\n'), 'text/csv;charset=utf-8');
+    setSessionMsg('CSV descargado.');
+  };
+
   // ✅ Botón: Generar PDF desde Historial (con opción de cambiar fecha si tiene permiso)
   window.imprimirResguardoSesionActual = async function(){
     try{
@@ -7117,6 +7280,7 @@ function renderCatalogo(){
         nuevoResponsable: sessionInfo.nuevoResponsable,
         nuevaUbicacion: sessionInfo.nuevaUbicacion,
         nuevaLocalizacion: sessionInfo.nuevaLocalizacion,
+        observacionesPdf: sessionInfo.observacionesPdf,
         autorizada: sessionInfo.autorizada,
         aplicada: sessionInfo.aplicada,
         entries: sessionEntries
@@ -7142,7 +7306,7 @@ function renderCatalogo(){
     const inp = qs('hist-search');
     if(inp) inp.value = emailPref ? String(emailPref) : "";
 
-    histRango = 'todo';
+    histRango = 'hoy';
     histCustomRange = { start:'', end:'' };
     const ds = qs('hist-date-start'); if(ds) ds.value = '';
     const de = qs('hist-date-end'); if(de) de.value = '';
@@ -7187,7 +7351,12 @@ function renderCatalogo(){
 
   function onHistDateChange(){
     const s = qs('hist-date-start')?.value || '';
-    const e = qs('hist-date-end')?.value || '';
+    let e = qs('hist-date-end')?.value || '';
+    if(s && e && e < s){
+      e = s;
+      const endInput = qs('hist-date-end');
+      if(endInput) endInput.value = s;
+    }
     histCustomRange = { start:s, end:e };
     histRango = (s || e) ? 'pers' : 'todo';
     histPage = 0;
@@ -7246,19 +7415,20 @@ function renderCatalogo(){
   function getBoundsMs(rango){
     const now = new Date();
     const startOfDayMs = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
+    const endOfDayMs = (d)=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999).getTime();
     if(rango === 'hoy'){
       const s = startOfDayMs(now);
-      return { start:s, end:s + 86400000 - 1 };
+      return { start:s, end:endOfDayMs(now) };
     }
     if(rango === 'mes'){
-      const s = new Date(now.getFullYear(), now.getMonth(), 1, 0,0,0,0).getTime();
-      const e = new Date(now.getFullYear(), now.getMonth()+1, 1, 0,0,0,0).getTime() - 1;
-      return { start:s, end:e };
+      const first = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+      first.setDate(first.getDate() - 29);
+      return { start:first.getTime(), end:endOfDayMs(now) };
     }
     if(rango === 'semana'){
-      const day = (x)=> (x.getDay()+6)%7;
-      const s = startOfDayMs(now) - day(now)*86400000;
-      return { start:s, end:s + 7*86400000 - 1 };
+      const first = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+      first.setDate(first.getDate() - 6);
+      return { start:first.getTime(), end:endOfDayMs(now) };
     }
     if(rango === 'pers'){
       let start = parseHistDateStart(histCustomRange.start);
@@ -7266,7 +7436,6 @@ function renderCatalogo(){
       if(start == null && end == null) return null;
       if(start == null) start = Number.MIN_SAFE_INTEGER;
       if(end == null) end = Number.MAX_SAFE_INTEGER;
-      if(start > end){ const tmp = start; start = end; end = tmp; }
       return { start, end };
     }
     return null;
@@ -7282,6 +7451,9 @@ function renderCatalogo(){
       createdBy,
       authBy,
       pdfBy,
+      s?.autorizada ? 'autorizada' : '',
+      s?.aplicada ? 'aplicada' : '',
+      s?.sincronizado ? 'sincronizada' : 'pendiente',
       s?.nuevoResponsable,
       s?.nuevaUbicacion,
       s?.nuevaLocalizacion,
@@ -7362,8 +7534,8 @@ function renderCatalogo(){
 
     const idFull = String(s.id || "");
     const autorizado = isSessionAutorizada(s);
-    const estatusLabel = autorizado ? "Autorizado" : "Pendiente";
-    const estatusIcon  = autorizado ? "verified_user" : "gpp_maybe";
+    const estatusLabel = isTrue(s.aplicada) ? "Aplicada" : isTrue(s.autorizada) ? "Autorizada" : isTrue(s.sincronizado) ? "Sincronizada" : "Pendiente";
+    const estatusIcon  = isTrue(s.aplicada) ? "task_alt" : isTrue(s.autorizada) ? "verified_user" : isTrue(s.sincronizado) ? "cloud_done" : "gpp_maybe";
     const estatusClass = autorizado ? "good" : "warn";
 
     const badges = [
@@ -7371,6 +7543,8 @@ function renderCatalogo(){
       `<span class="badge mono scroll" title="${escapeHtml(idFull)}">#${escapeHtml(idFull)}</span>`,
       `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px; color:#0B4CB3">person</span> Creó: ${escapeHtml(createdBy)}</span>`,
       `<span class="badge ${estatusClass}"><span class="material-symbols-rounded" style="font-size:18px">${estatusIcon}</span> ${escapeHtml(estatusLabel)}</span>`,
+      (norm(s.syncError) ? `<span class="badge warn" title="${escapeHtml(s.syncError)}">Error sync: ${escapeHtml(s.syncError)}</span>` : ``),
+      (norm(s.applyError) ? `<span class="badge warn" title="${escapeHtml(s.applyError)}">Error aplicar: ${escapeHtml(s.applyError)}</span>` : ``),
       (norm(s.autorizadaPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">person_check</span> Autorizó: ${escapeHtml(authBy)}</span>` : ``),
       (norm(s.pdfGeneradoPor) ? `<span class="badge"><span class="material-symbols-rounded" style="font-size:18px">picture_as_pdf</span> PDF: ${escapeHtml(pdfBy)}</span>` : ``),
     ].filter(Boolean).join('');
@@ -7399,7 +7573,7 @@ function renderCatalogo(){
 
   async function fetchResguardoSessionsRemote(empresaId, batchSize=500){
     const select =
-      "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
+      "id,created_at,creada_por_email,autorizada_por,pdf_generado_por,observaciones_pdf," +
       "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
       "sincronizado,sincronizado_at,sync_error," +
       "autorizada,autorizada_at," +
@@ -7450,6 +7624,7 @@ function renderCatalogo(){
       creadaPorEmail: norm(o?.creada_por_email),
       autorizadaPor: norm(o?.autorizada_por),
       pdfGeneradoPor: norm(o?.pdf_generado_por),
+      observacionesPdf: String(o?.observaciones_pdf ?? ""),
 
       nuevoResponsable: norm(o?.nuevo_responsable),
       nuevaLocalizacion: norm(o?.nueva_localizacion),
@@ -7500,6 +7675,7 @@ function renderCatalogo(){
     // reset UI state
     sessionInfo = null; sessionEntries = [];
     updateSessionPdfButtonState();
+    updateSessionActionButtons();
     cargarDetalleSesionResguardo(id, false);
   }
 
@@ -7532,6 +7708,41 @@ function renderCatalogo(){
     `;
   }
 
+  function renderSessionPdfHistory(rows){
+    const host = qs('session-pdf-history');
+    if(!host) return;
+    const list = Array.isArray(rows) ? rows : [];
+    const content = list.length ? list.map(row=>{
+      const generatedAt = row?.generated_at ? new Date(row.generated_at).toLocaleString() : '—';
+      const notes = norm(row?.observaciones);
+      return `<div class="item" style="margin-top:8px">
+        <div class="label"><span class="material-symbols-rounded">picture_as_pdf</span> ${escapeHtml(norm(row?.generated_by_email) || 'Usuario')}</div>
+        <div class="value">Generado: ${escapeHtml(generatedAt)} · Fecha en PDF: ${escapeHtml(norm(row?.fecha_pdf) || '—')} · ${escapeHtml(norm(row?.plataforma) || '—')}</div>
+        ${notes ? `<div class="value" style="margin-top:4px">Notas: ${escapeHtml(notes)}</div>` : ''}
+      </div>`;
+    }).join('') : `<div class="value" style="margin-top:8px">Aún no hay generaciones registradas.</div>`;
+    host.innerHTML = `<div class="item">
+      <div class="label"><span class="material-symbols-rounded">history</span> Historial de PDFs (${list.length})</div>
+      ${content}
+    </div>`;
+  }
+
+  async function cargarHistorialPdfSesion(id){
+    const host = qs('session-pdf-history');
+    if(!host) return;
+    host.innerHTML = `<div class="item"><div class="label">Cargando historial de PDFs…</div></div>`;
+    const select = 'id,generated_at,generated_by_email,fecha_pdf,observaciones,plataforma';
+    const url = `${SB_URL}/rest/v1/resguardo_pdf_generations?select=${encodeURIComponent(select)}&resguardo_id=eq.${encodeURIComponent(id)}&order=generated_at.desc`;
+    const response = await fetch(url, { headers:{ 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` } });
+    if(!response.ok){
+      const details = await response.text().catch(()=>"");
+      throw new Error(`No se pudo cargar el historial de PDFs (HTTP ${response.status}). ${details}`);
+    }
+    sessionPdfGenerations = await response.json();
+    if(!Array.isArray(sessionPdfGenerations)) sessionPdfGenerations = [];
+    renderSessionPdfHistory(sessionPdfGenerations);
+  }
+
   async function cargarDetalleSesionResguardo(id, force){
     setSessionMsg("");
     if(!empresaSeleccionada?.id || !id) return;
@@ -7545,7 +7756,7 @@ function renderCatalogo(){
       const nombresMap = await cargarNombresUsuariosPorEmpresa();
 
       const selectS =
-        "id,created_at,creada_por_email,autorizada_por,pdf_generado_por," +
+        "id,created_at,creada_por_email,autorizada_por,pdf_generado_por,observaciones_pdf," +
         "nuevo_responsable,nueva_localizacion,nueva_ubicacion," +
         "sincronizado,sincronizado_at,sync_error," +
         "autorizada,autorizada_at,aplicada,aplicada_at,apply_error";
@@ -7561,9 +7772,25 @@ function renderCatalogo(){
       if(!rawS) throw new Error("No se encontró la sesión.");
 
       sessionInfo = normalizeSessionRow({ ...rawS, resguardo_entries: [] });
+      sessionPdfGenerations = [];
+      try{
+        await cargarHistorialPdfSesion(id);
+      }catch(historyError){
+        console.warn(historyError);
+        const historyHost = qs('session-pdf-history');
+        if(historyHost) historyHost.innerHTML = `<div class="item"><div class="label">No se pudo cargar el historial de PDFs.</div></div>`;
+      }
+      updateSessionActionButtons();
 
       safeSetText('session-id', `#${String(id)}`);
       safeSetText('session-date', fmtDate(sessionInfo.createdAt) || "—");
+      const sessionStatus = norm(sessionInfo.applyError) ? `Error al aplicar: ${sessionInfo.applyError}`
+        : norm(sessionInfo.syncError) ? `Error de sincronización: ${sessionInfo.syncError}`
+        : isTrue(sessionInfo.aplicada) ? 'Aplicada'
+        : isTrue(sessionInfo.autorizada) ? 'Autorizada'
+        : isTrue(sessionInfo.sincronizado) ? 'Sincronizada'
+        : 'Pendiente';
+      safeSetText('session-status', sessionStatus);
 
       const createdBy = resolveUserDisplay(sessionInfo.creadaPorEmail, nombresMap);
       const authBy = resolveUserDisplay(sessionInfo.autorizadaPor, nombresMap);
@@ -7616,6 +7843,7 @@ function renderCatalogo(){
 
       // ✅ habilitar/deshabilitar PDF en base a permisos y datos
       updateSessionPdfButtonState();
+      updateSessionActionButtons();
     }catch(e){
       console.error(e);
       if(qs('session-entries')) qs('session-entries').innerHTML = "";
@@ -7623,6 +7851,7 @@ function renderCatalogo(){
       setSessionMsg(e.message || "Error cargando sesión.");
 
       updateSessionPdfButtonState();
+      updateSessionActionButtons();
     }
   }
 
@@ -7912,45 +8141,86 @@ function upperEs(s){ return norm(s).toUpperCase(); }
   }
 
 
-  // Preguntar si se desea cambiar la fecha antes de generar el PDF
-  function pedirFechaResguardo(){
-    const today = new Date();
-    const iso = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0,10); // AAAA-MM-DD
-    // ✅ Solo permitir cambiar fecha si tiene permiso
-    if(typeof canChangeFechaPdf === 'function' && !canChangeFechaPdf()){
-      return today;
-    }
+  let resolverOpcionesPdfResguardo = null;
 
-    const wants = window.confirm("¿Deseas cambiar la fecha del resguardo antes de generar el PDF?");
-    if(!wants) return today;
-
-    const input = window.prompt("Ingresa la fecha (AAAA-MM-DD o DD/MM/AAAA):", iso);
-    if(!input) return today;
-
-    const v = String(input).trim();
-    let d = null;
-
-    // AAAA-MM-DD
-    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){
-      d = new Date(v + "T12:00:00");
-    } else if(/^\d{2}\/\d{2}\/\d{4}$/.test(v)){
-      const [dd,mm,yyyy] = v.split("/").map(Number);
-      d = new Date(yyyy, mm-1, dd, 12, 0, 0);
-    }
-
-    if(!d || isNaN(d.getTime())){
-      window.alert("Fecha inválida. Se usará la fecha de hoy.");
-      return today;
-    }
-    return d;
+  function fechaLocalInput(date = new Date()){
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   }
 
-
-  function pedirObservacionesGenerales(){
-    // Se muestra siempre (igual que Android): después del cambio de fecha
-    const input = window.prompt("Observaciones generales (opcional):", "");
-    return (input == null) ? "" : String(input).trim();
+  function cerrarOpcionesPdfResguardo(result){
+    const modal = qs('pdf-options-modal');
+    modal?.classList.add('hidden');
+    const resolve = resolverOpcionesPdfResguardo;
+    resolverOpcionesPdfResguardo = null;
+    if(resolve) resolve(result);
   }
+
+  function pedirOpcionesPdfResguardo(initialNotes = '', allowDateChange = true){
+    const modal = qs('pdf-options-modal');
+    const dateRow = qs('pdf-options-change-date-row');
+    const dateToggle = qs('pdf-options-change-date');
+    const dateWrap = qs('pdf-options-date-wrap');
+    const dateInput = qs('pdf-options-date');
+    const notesInput = qs('pdf-options-notes');
+    const error = qs('pdf-options-error');
+    if(!modal || !dateRow || !dateToggle || !dateWrap || !dateInput || !notesInput){
+      return Promise.reject(new Error('No está disponible el formulario para generar el PDF.'));
+    }
+
+    return new Promise(resolve=>{
+      resolverOpcionesPdfResguardo = resolve;
+      dateToggle.checked = false;
+      dateRow.classList.toggle('hidden', !allowDateChange);
+      dateWrap.classList.add('hidden');
+      dateInput.value = fechaLocalInput();
+      dateInput.disabled = true;
+      notesInput.value = String(initialNotes ?? '');
+      error?.classList.add('hidden');
+      error && (error.textContent = '');
+      modal.classList.remove('hidden');
+      notesInput.focus();
+    });
+  }
+
+  qs('pdf-options-change-date')?.addEventListener('change', ev=>{
+    const enabled = !!ev.target.checked;
+    qs('pdf-options-date-wrap')?.classList.toggle('hidden', !enabled);
+    const input = qs('pdf-options-date');
+    if(input) input.disabled = !enabled;
+  });
+  qs('pdf-options-modal')?.addEventListener('click', ev=>{
+    const cancel = ev.target?.closest?.('[data-pdf-options-action="cancel"]');
+    if(cancel){
+      cerrarOpcionesPdfResguardo({ cancelled:true });
+      return;
+    }
+    if(!ev.target?.closest?.('#pdf-options-generate')) return;
+
+    const error = qs('pdf-options-error');
+    const wantsDate = !qs('pdf-options-change-date-row')?.classList.contains('hidden') && !!qs('pdf-options-change-date')?.checked;
+    let fechaOverride = null;
+    if(wantsDate){
+      const raw = String(qs('pdf-options-date')?.value || '');
+      const [year, month, day] = raw.split('-').map(Number);
+      const candidate = new Date(year, month-1, day, 12, 0, 0);
+      if(!raw || Number.isNaN(candidate.getTime()) || candidate.getFullYear() !== year || candidate.getMonth() !== month-1 || candidate.getDate() !== day){
+        if(error){ error.textContent = 'Selecciona una fecha válida.'; error.classList.remove('hidden'); }
+        return;
+      }
+      fechaOverride = candidate;
+    }
+
+    cerrarOpcionesPdfResguardo({
+      cancelled:false,
+      fechaOverride,
+      observacionesGenerales:String(qs('pdf-options-notes')?.value || '').trim()
+    });
+  });
+  document.addEventListener('keydown', ev=>{
+    if(ev.key === 'Escape' && !qs('pdf-options-modal')?.classList.contains('hidden')){
+      cerrarOpcionesPdfResguardo({ cancelled:true });
+    }
+  });
 
   function safeFileName(s){
     return norm(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim() || "resguardo";
@@ -8566,8 +8836,10 @@ function fitText2Lines(text, maxW, baseSize, minSize){
       }
 
       setSkusMsg("Generando PDF…");
-      const fechaOverride = pedirFechaResguardo();
-      const observacionesGenerales = pedirObservacionesGenerales();
+      const pdfOptions = await pedirOpcionesPdfResguardo("", typeof canChangeFechaPdf === 'function' && canChangeFechaPdf());
+      if(pdfOptions.cancelled){ setSkusMsg(""); return; }
+      const fechaOverride = pdfOptions.fechaOverride;
+      const observacionesGenerales = pdfOptions.observacionesGenerales;
       const doc = drawPdf(resp, activos, branding, fechaOverride, observacionesGenerales);
       const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(resp)}.pdf`;
       doc.save(fname);
@@ -8595,6 +8867,14 @@ function fitText2Lines(text, maxW, baseSize, minSize){
     if(!empresaNombre || !sessionId) throw new Error('Faltan datos para generar el PDF.');
     if(!entries.length) throw new Error('Esta sesión no tiene entradas para imprimir.');
 
+    const pdfOptions = await pedirOpcionesPdfResguardo(
+      payload?.observacionesPdf,
+      typeof canChangeFechaPdf === 'function' && canChangeFechaPdf()
+    );
+    if(pdfOptions.cancelled){ setSessionMsg(''); return; }
+    const fechaOverride = pdfOptions.fechaOverride;
+    const observacionesGenerales = pdfOptions.observacionesGenerales;
+
     await ensureJsPdf();
     const branding = await fetchBrandingImages(empresaNombre);
 
@@ -8612,12 +8892,57 @@ function fitText2Lines(text, maxW, baseSize, minSize){
 
     if(!itemsPdf.length) throw new Error('No se pudieron preparar los items del PDF.');
 
-    // ✅ Preguntar fecha SOLO si tiene permiso (pedirFechaResguardo ya lo respeta)
-    const fechaOverride = pedirFechaResguardo();
-    const observacionesGenerales = pedirObservacionesGenerales();
+    const notesUrl = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(sessionId)}`;
+    const notesResponse = await fetch(notesUrl, {
+      method:'PATCH',
+      headers:{
+        'apikey':SB_KEY,
+        'Authorization':`Bearer ${sessionToken}`,
+        'Content-Type':'application/json',
+        'Prefer':'return=representation'
+      },
+      body:JSON.stringify({ observaciones_pdf: observacionesGenerales })
+    });
+    if(!notesResponse.ok){
+      const details = await notesResponse.text().catch(()=>"");
+      throw new Error(`No se pudieron guardar las notas en Supabase (HTTP ${notesResponse.status}). ${details}`);
+    }
+    const savedRows = await notesResponse.json().catch(()=>[]);
+    if(!Array.isArray(savedRows) || savedRows.length !== 1){
+      throw new Error('Supabase no encontró el resguardo para guardar sus notas.');
+    }
     const doc = drawPdf(responsablePdf, itemsPdf, branding, fechaOverride, observacionesGenerales);
     const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(responsablePdf)}.pdf`;
-    doc.save(fname);
+    await doc.save(fname, { returnPromise:true });
+
+    let generationHistoryError = null;
+    try{
+      const fechaPdf = fechaOverride instanceof Date ? fechaOverride : new Date();
+      const fechaPdfIso = `${fechaPdf.getFullYear()}-${String(fechaPdf.getMonth()+1).padStart(2,'0')}-${String(fechaPdf.getDate()).padStart(2,'0')}`;
+      const historyResponse = await fetch(`${SB_URL}/rest/v1/resguardo_pdf_generations`, {
+        method:'POST',
+        headers:{
+          'apikey':SB_KEY,
+          'Authorization':`Bearer ${sessionToken}`,
+          'Content-Type':'application/json',
+          'Prefer':'return=representation'
+        },
+        body:JSON.stringify([{
+          resguardo_id:sessionId,
+          fecha_pdf:fechaPdfIso,
+          observaciones:observacionesGenerales,
+          plataforma:'web'
+        }])
+      });
+      if(!historyResponse.ok){
+        const details = await historyResponse.text().catch(()=>"");
+        throw new Error(`HTTP ${historyResponse.status}. ${details}`);
+      }
+      const historyRows = await historyResponse.json().catch(()=>[]);
+      if(!Array.isArray(historyRows) || historyRows.length !== 1){
+        throw new Error('Supabase no confirmó el registro de generación.');
+      }
+    }catch(e){ generationHistoryError = e; }
 
     // ✅ Marcar en nube quién generó el PDF (mismo concepto que Android)
     try{
@@ -8642,6 +8967,11 @@ function fitText2Lines(text, maxW, baseSize, minSize){
         }).catch(()=>{});
       }
     }catch(_){ /* no bloquear por fallo de marca */ }
+
+    if(generationHistoryError){
+      throw new Error(`PDF generado y descargado, pero no se pudo guardar su historial: ${generationHistoryError.message || generationHistoryError}`);
+    }
+    try{ await cargarHistorialPdfSesion(sessionId); }catch(_){ }
   };
 
   // Estado inicial

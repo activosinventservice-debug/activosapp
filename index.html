@@ -271,6 +271,9 @@
     .qty-location-modal{align-items:center; padding:12px}
     .qty-location-modal .modal-card{width:min(540px,96vw); max-height:min(90vh,760px); display:flex; flex-direction:column}
     .qty-location-modal .modal-body{overflow:auto; min-height:0}
+    .pdf-options-modal{align-items:center; padding:12px}
+    .pdf-options-modal .modal-card{width:min(540px,96vw); max-height:min(90vh,760px); display:flex; flex-direction:column}
+    .pdf-options-modal .modal-body{overflow:auto; min-height:0}
     .qty-location-intro{margin:0; color:var(--muted); font-size:.9rem; line-height:1.4}
     .qty-location-rows{display:grid; gap:10px}
     .qty-location-editor-row{display:grid; grid-template-columns:82px minmax(0,1fr) 40px; gap:8px; align-items:end}
@@ -292,6 +295,8 @@
     @media(max-width:420px){
       .qty-location-modal{padding:10px}
       .qty-location-modal .modal-card{width:100%; max-height:88vh; border-radius:18px}
+      .pdf-options-modal{padding:10px}
+      .pdf-options-modal .modal-card{width:100%; max-height:88vh; border-radius:18px}
       .qty-location-editor-row{grid-template-columns:76px minmax(0,1fr) 38px; gap:6px}
       .qty-location-footer .btn{flex:1}
     }
@@ -1242,15 +1247,15 @@
       <div class="hist-toolbar" style="margin-top:10px">
         <div class="pill" style="flex:1; min-width:280px;">
           <div class="leading"><span class="material-symbols-rounded">search</span></div>
-          <input type="text" id="hist-search" placeholder="Filtrar por usuario (nombre o email)…" onkeyup="onHistSearchKey(event)">
+          <input type="text" id="hist-search" placeholder="Buscar (id, responsable, ubicación, estado)…" onkeyup="onHistSearchKey(event)">
           <button class="btn tonal icon" title="Buscar" onclick="reiniciarYBuscarHistorial()"><span class="material-symbols-rounded">manage_search</span></button>
           <button class="btn tonal icon" title="Limpiar" onclick="limpiarBusquedaHistorial()"><span class="material-symbols-rounded">close</span></button>
         </div>
 
         <div class="hist-chips" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; align-items:center;">
           <button id="hist-chip-hoy" class="hist-chip" onclick="setHistRango('hoy')"><span class="material-symbols-rounded">today</span> Hoy</button>
-          <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> Semana</button>
-          <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> Mes</button>
+          <button id="hist-chip-semana" class="hist-chip" onclick="setHistRango('semana')"><span class="material-symbols-rounded">date_range</span> 7 días</button>
+          <button id="hist-chip-mes" class="hist-chip" onclick="setHistRango('mes')"><span class="material-symbols-rounded">calendar_month</span> 30 días</button>
           <button id="hist-chip-todo" class="hist-chip active" onclick="setHistRango('todo')"><span class="material-symbols-rounded">all_inclusive</span> Todo</button>
           <button id="hist-chip-pers" class="hist-chip" onclick="activarRangoPersonalizado()"><span class="material-symbols-rounded">edit_calendar</span> Pers.</button>
 
@@ -1292,6 +1297,16 @@
         <span class="divider"></span>
         <button class="btn" onclick="cargarDetalleSesionResguardo(currentSessionId, true)"><span class="material-symbols-rounded">refresh</span> Recargar</button>
 
+        <button id="btn-session-authorize-apply" class="btn tonal hidden" onclick="autorizarAplicarSesionResguardo()">
+          <span class="material-symbols-rounded">verified_user</span> Autorizar y aplicar
+        </button>
+        <button id="btn-session-csv" class="btn tonal hidden" onclick="exportarSesionResguardoCsv()">
+          <span class="material-symbols-rounded">download</span> CSV
+        </button>
+        <button id="btn-session-delete" class="btn tonal hidden" onclick="eliminarSesionResguardo()">
+          <span class="material-symbols-rounded">delete</span> Borrar sesión
+        </button>
+
         <!-- ✅ NUEVO: Imprimir/Generar PDF desde Historial (con opción de cambiar fecha si tiene permiso) -->
         <button id="btn-session-print-pdf" class="btn tonal" disabled onclick="imprimirResguardoSesionActual()" title="Generar PDF de esta sesión">
           <span class="material-symbols-rounded">picture_as_pdf</span> Generar PDF
@@ -1306,6 +1321,7 @@
           <div class="value" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
             <span id="session-id" class="badge primary scroll mono" title="—">—</span>
             <span id="session-date" class="badge">—</span>
+            <span id="session-status" class="badge">Pendiente</span>
             <span id="session-creada" class="badge">Creó: —</span>
             <span id="session-autorizada" class="badge">Autorizó: —</span>
             <span id="session-pdf" class="badge">PDF: —</span>
@@ -1322,6 +1338,8 @@
           </div>
         </div>
       </div>
+
+      <div id="session-pdf-history" class="section full" style="margin-top:8px"></div>
 
       <div class="section full">
         <div class="pill" style="flex:1; min-width:280px;">
@@ -1367,6 +1385,41 @@
     </div>
   </div>
   <div id="qty-location-toast" class="qty-location-toast" role="status" aria-live="polite"></div>
+
+  <div class="modal pdf-options-modal hidden" id="pdf-options-modal" role="dialog" aria-modal="true" aria-labelledby="pdf-options-title">
+    <div class="modal-backdrop" data-pdf-options-action="cancel"></div>
+    <div class="modal-card" role="document">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="pdf-options-title">Generar PDF</div>
+          <div class="modal-sub">Confirma la fecha y las notas que aparecerán en el documento.</div>
+        </div>
+        <button class="icon-btn" type="button" data-pdf-options-action="cancel" title="Cerrar" aria-label="Cerrar">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label id="pdf-options-change-date-row" class="action-row" style="align-items:center; cursor:pointer">
+          <input id="pdf-options-change-date" type="checkbox" style="width:18px;height:18px">
+          <span class="action-text">
+            <span class="action-title">Cambiar fecha del resguardo</span>
+            <span class="action-desc">Si no marcas esta opción, se usará la fecha de hoy.</span>
+          </span>
+        </label>
+        <div id="pdf-options-date-wrap" class="hidden">
+          <label class="action-title" for="pdf-options-date">Fecha que aparecerá en el PDF</label>
+          <input id="pdf-options-date" class="select" type="date" style="width:100%;margin-top:6px">
+        </div>
+        <label class="action-title" for="pdf-options-notes">Notas</label>
+        <textarea id="pdf-options-notes" rows="5" maxlength="4000" placeholder="Escribe notas" style="width:100%;resize:vertical;border:1px solid var(--border);border-radius:12px;padding:12px;font:inherit;color:var(--text)"></textarea>
+        <p id="pdf-options-error" class="qty-location-error hidden" role="alert"></p>
+      </div>
+      <div class="qty-location-footer">
+        <button class="btn tonal" type="button" data-pdf-options-action="cancel">Cancelar</button>
+        <button class="btn" id="pdf-options-generate" type="button">Generar PDF</button>
+      </div>
+    </div>
+  </div>
 
   <!-- LIGHTBOX -->
   <!-- VISOR PDF INTERNO -->
@@ -1508,9 +1561,9 @@
     </div>
   </div>
 
-  <script src="config.js?v=2026.11.02.2-23"></script>
+  <script src="config.js?v=2026.11.05.3-24"></script>
   <script src="catalogos-realtime.js?v=2026.11.02.2-1"></script>
-  <script src="app.js?v=2026.11.02.2-27"></script>
+  <script src="app.js?v=2026.11.05.3-24"></script>
   <script src="entregable.js?v=2026.11.02.1-8"></script>
 </body>
 </html>
