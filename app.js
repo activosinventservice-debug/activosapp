@@ -223,7 +223,7 @@ const WEBAPP_PLATFORM = String(window.APP_PLATFORM || "web");
       }
     }
   });
-let sessionToken = "", userEmail = "", empresaSeleccionada = null;
+let sessionToken = "", userEmail = "", userName = "", empresaSeleccionada = null;
 let refreshToken = "";
 let sessionExpiresAt = 0;
 
@@ -237,6 +237,7 @@ function persistAuthSession(){
       sessionToken: sessionToken || "",
       refreshToken: refreshToken || "",
       userEmail: userEmail || "",
+      userName: userName || "",
       sessionExpiresAt: Number(sessionExpiresAt || 0) || 0,
       empresaSeleccionada: empresaSeleccionada || null
     };
@@ -258,6 +259,7 @@ function restoreAuthSession(){
     sessionToken = String(data?.sessionToken || "");
     refreshToken = String(data?.refreshToken || "");
     userEmail = String(data?.userEmail || "");
+    userName = String(data?.userName || "");
     sessionExpiresAt = Number(data?.sessionExpiresAt || 0) || 0;
     empresaSeleccionada = data?.empresaSeleccionada || null;
     if(!sessionToken || !refreshToken) {
@@ -280,10 +282,13 @@ function applyAuthPayload(data, fallbackEmail){
   sessionToken = String(data?.access_token || "");
   refreshToken = String(data?.refresh_token || refreshToken || "");
   userEmail = String(data?.user?.email || fallbackEmail || userEmail || "");
+  const metadata = data?.user?.user_metadata || {};
+  userName = String(metadata.full_name || metadata.name || metadata.nombre || metadata.display_name || userName || "").trim();
   const expiresIn = Number(data?.expires_in || 0) || 0;
   sessionExpiresAt = expiresIn > 0 ? (Date.now() + Math.max(0, expiresIn - 30) * 1000) : 0;
   window.sessionToken = sessionToken || null;
   window.userEmail = userEmail || null;
+  window.userName = userName || null;
   persistAuthSession();
   syncGlobals();
 }
@@ -405,6 +410,7 @@ window.fetch = async function(input, init){
     puedeBorrarResguardosHistorial:false,
     puedeAutorizarAplicarResguardosHistorial:false,
     puedeExportarResCvsPDF:false,
+    puedeDescargarMasivoResguardosPDF:false,
     puedeCambiarFechaResguardosHistorial:false,
     puedeDescargarFoto:false,
     puedeImportarExportarSkusCsv:false,
@@ -423,6 +429,7 @@ window.fetch = async function(input, init){
     puedeBorrarResguardosHistorial:true,
     puedeAutorizarAplicarResguardosHistorial:true,
     puedeExportarResCvsPDF:true,
+    puedeDescargarMasivoResguardosPDF:true,
     puedeCambiarFechaResguardosHistorial:true,
     puedeDescargarFoto:true,
     puedeImportarExportarSkusCsv:true,
@@ -444,6 +451,7 @@ window.fetch = async function(input, init){
     __isSuperAdmin = false;
     __permsEffective = Object.assign({}, __PERMS_NONE);
     window.__permsEffective = __permsEffective;
+    updateActiveUserUI();
     try{ applyPermisosUI(); }catch{}
     try{ syncCatalogosRealtime(); }catch{}
   }
@@ -473,6 +481,7 @@ window.fetch = async function(input, init){
       puedeAutorizarAplicarResguardosHistorial: isSuper || esAdmin || raw?.puedeAutorizarAplicarResguardosHistorial === true,
 
       puedeExportarResCvsPDF: isSuper || esAdmin || raw?.puedeExportarResCvsPDF === true,
+      puedeDescargarMasivoResguardosPDF: isSuper || esAdmin || raw?.puedeDescargarMasivoResguardosPDF === true,
       puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
       puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true,
 
@@ -485,9 +494,14 @@ window.fetch = async function(input, init){
   function setPermisosEfectivos(eff){
     __permsEffective = Object.assign({}, eff || __PERMS_NONE);
     window.__permsEffective = __permsEffective;
+    updateActiveUserUI();
     try{ applyPermisosUI(); }catch{}
     try{ updatePrintButtonState(); }catch{}
     try{ updateSessionActionButtons(); }catch{}
+    try{
+      if(!canDescargarMasivoResguardosPdf()) histSelectedIds.clear();
+      updateHistBulkControls();
+    }catch{}
     try{ syncCatalogosRealtime(); }catch{}
   }
 
@@ -522,7 +536,7 @@ window.fetch = async function(input, init){
         "puedeAccederSkus","puedeAccederCatalogos",
         "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
         "puedeBorrarResguardosHistorial","puedeAutorizarAplicarResguardosHistorial",
-        "puedeExportarResCvsPDF","puedeCambiarFechaResguardosHistorial",
+        "puedeExportarResCvsPDF","puedeDescargarMasivoResguardosPDF","puedeCambiarFechaResguardosHistorial",
         "puedeDescargarFoto",
         "puedeImportarExportarSkusCsv",
         "puedeAccederEditorMasivo",
@@ -564,6 +578,7 @@ window.fetch = async function(input, init){
   function canDeleteResguardoHist(){ return !!getPerms().puedeBorrarResguardosHistorial; }
   function canAuthorizeApplyResguardo(){ return !!getPerms().puedeAutorizarAplicarResguardosHistorial; }
   function canExportPdf(){ return !!getPerms().puedeExportarResCvsPDF; }
+  function canDescargarMasivoResguardosPdf(){ return !!getPerms().puedeDescargarMasivoResguardosPDF; }
   function canChangeFechaPdf(){ return !!getPerms().puedeCambiarFechaResguardosHistorial; }
   function canDescargarFoto(){ return !!getPerms().puedeDescargarFoto; }
   function canSkusCsv(){ return !!getPerms().puedeImportarExportarSkusCsv; }
@@ -624,8 +639,12 @@ window.fetch = async function(input, init){
   let skuAdjuntosMap = new Map();
   let skuAdjuntosPendientes = new Set();
   let skusConsultaSeq = 0;
+  let skusCargando = false, skusCargandoMas = false, skusTieneMas = false;
+  let skusTotalConocido = false, skusErrorCarga = '', skusErrorEsAppend = false;
+  let skusConsultaKey = '', skusScrollObserver = null;
   let sortField = "reciente", sortAsc = false, soloBaja = false;
   const TAMANO_PAGINA = 100;
+  const MAX_CACHED_SKU_ROWS = 500;
 // =========================
 // ✅ Cache por empresa (por usuario) + restauración rápida
 //    Evita datos cruzados entre usuarios/empresas y acelera regreso a una empresa ya visitada.
@@ -647,6 +666,8 @@ function saveEmpresaCache(){
   try{
     if(!userEmail || !empresaSeleccionada?.id) return;
     const key = __empresaCacheKey(userEmail, empresaSeleccionada.id);
+    const cachedSkuRows = __deepCopy(cacheSkus.slice(0, MAX_CACHED_SKU_ROWS));
+    const cachedSkuNextPage = Math.min(paginaActual, Math.ceil(cachedSkuRows.length / TAMANO_PAGINA));
 
     const snapshot = {
       ts: Date.now(),
@@ -657,9 +678,11 @@ function saveEmpresaCache(){
       catalogoFilter: catalogoFilter,
 
       // SKUs
-      cacheSkus: __deepCopy(cacheSkus),
-      paginaActual: paginaActual,
+      cacheSkus: cachedSkuRows,
+      paginaActual: cachedSkuNextPage,
       totalActivos: totalActivos,
+      skusTieneMas: skusTieneMas || cachedSkuRows.length < cacheSkus.length,
+      skusTotalConocido: skusTotalConocido,
       sortField: sortField,
       sortAsc: !!sortAsc,
       soloBaja: !!soloBaja,
@@ -698,6 +721,14 @@ function restoreEmpresaCache(empresaId){
     cacheSkus = __deepCopy(snap.cacheSkus || []);
     paginaActual = Number.isFinite(+snap.paginaActual) ? +snap.paginaActual : 0;
     totalActivos = Number.isFinite(+snap.totalActivos) ? +snap.totalActivos : 0;
+    skusCargando = false;
+    skusCargandoMas = false;
+    skusTotalConocido = typeof snap.skusTotalConocido === 'boolean' ? snap.skusTotalConocido : totalActivos > 0;
+    skusTieneMas = typeof snap.skusTieneMas === 'boolean'
+      ? snap.skusTieneMas
+      : cacheSkus.length > 0 && paginaActual * TAMANO_PAGINA < totalActivos;
+    skusErrorCarga = '';
+    skusErrorEsAppend = false;
     sortField = snap.sortField || "reciente";
     sortAsc = !!snap.sortAsc;
     soloBaja = !!snap.soloBaja;
@@ -706,6 +737,7 @@ function restoreEmpresaCache(empresaId){
     // Restaurar inputs/chips
     try{ const inp = qs('sku-search'); if(inp) inp.value = snap.skusSearch || ""; }catch{}
     try{ const chk = qs('solo-baja'); if(chk) chk.checked = soloBaja; }catch{}
+    skusConsultaKey = firmaConsultaSkus();
     try{
       if(skuExtraFiltro && skuExtraFiltro.valor){
         actualizarChipFiltroConConteo(); // usa totalActivos guardado
@@ -751,14 +783,32 @@ window.__fromCatalogos = window.__fromCatalogos || false;
 
 function syncGlobals(){
   window.sessionToken = sessionToken || null;
+  window.userEmail = userEmail || null;
+  window.userName = userName || null;
   window.empresaSeleccionada = empresaSeleccionada || null;
   window.skuExtraFiltro = skuExtraFiltro || null;
   window.soloBaja = !!soloBaja;
   // ✅ Permisos efectivos para que otras secciones (ej. PDF) los puedan leer
   window.__permsEffective = __permsEffective || null;
+  updateActiveUserUI();
   if(sessionToken || refreshToken){
     try{ persistAuthSession(); }catch{}
   }
+}
+
+function updateActiveUserUI(){
+  const chip = document.getElementById('chip-usuario');
+  const nameLabel = document.getElementById('chip-usuario-nombre');
+  const label = document.getElementById('chip-usuario-email');
+  if(!chip || !nameLabel || !label) return;
+  const email = String(userEmail || window.userEmail || '').trim();
+  let permissionName = '';
+  try{ permissionName = String(getPerms()?.usuarioNombre || '').trim(); }catch{}
+  const displayName = String(permissionName || userName || window.userName || 'Usuario').trim();
+  nameLabel.textContent = displayName;
+  label.textContent = email || 'Sin sesión';
+  chip.title = email ? `Sesión iniciada como ${displayName} · ${email}` : 'No hay una sesión iniciada';
+  chip.classList.toggle('hidden', !email);
 }
 
 function getResponsableFiltroActual(){
@@ -823,6 +873,10 @@ function updatePrintButtonState(){
     refreshToken = "";
     sessionExpiresAt = 0;
     userEmail = "";
+    userName = "";
+    window.userEmail = null;
+    window.userName = null;
+    updateActiveUserUI();
     empresaSeleccionada = null;
     clearPersistedAuthSession();
 
@@ -833,6 +887,16 @@ function updatePrintButtonState(){
     try{ clearAllEmpresaCaches(); }catch{}
 
     // Datos / filtros
+    skusConsultaSeq++;
+    skusCargando = false;
+    skusCargandoMas = false;
+    skusTieneMas = false;
+    skusTotalConocido = false;
+    skusErrorCarga = '';
+    skusErrorEsAppend = false;
+    skusConsultaKey = '';
+    try{ desconectarObservadorSkus(); }catch{}
+    isLoading = false;
     cacheSkus = [];
     paginaActual = 0;
     totalActivos = 0;
@@ -1030,6 +1094,7 @@ function getCtxVersion(){ return __ctxVersion; }
     // ✅ Re-aplicar permisos al cambiar de vista (por si hay botones en esa vista)
     try{ applyPermisosUI(); }catch{}
     try{ syncCatalogosRealtime(); }catch{}
+    try{ window.__updateScrollTopButton?.(); }catch{}
   }
 
   
@@ -2217,7 +2282,7 @@ async function cargarEmpresasAutorizadas(){
     }
 
     const email = encodeURIComponent(userEmail);
-    const permisosUrl = `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresa_id,empresaNombre`;
+    const permisosUrl = `${SB_URL}/rest/v1/empresa_user_permissions?email=eq.${email}&or=(puedeVerEmpresa.eq.true,esAdminEmpresa.eq.true)&select=empresa_id,empresaNombre,usuarioNombre`;
     const { data: permisosRaw } = await fetchSupabaseJsonWithRetry(
       permisosUrl,
       headers,
@@ -2227,9 +2292,15 @@ async function cargarEmpresasAutorizadas(){
     const setIds = new Set();
     const setNames = new Set();
     (permisosRaw || []).forEach(p => {
+      if(!userName && String(p?.usuarioNombre || '').trim()) userName = String(p.usuarioNombre).trim();
       if(p?.empresa_id) setIds.add(String(p.empresa_id).trim());
       else if(p?.empresaNombre) setNames.add(String(p.empresaNombre).trim());
     });
+    if(userName){
+      window.userName = userName;
+      updateActiveUserUI();
+      try{ persistAuthSession(); }catch{}
+    }
 
     if(!setIds.size && !setNames.size){
       lista.innerHTML = "<p>No tienes empresas asignadas.</p>";
@@ -2299,8 +2370,18 @@ async function cargarEmpresasAutorizadas(){
   try{ if(typeof editorActivosConfirmDiscard === 'function' && !editorActivosConfirmDiscard('Tienes cambios sin guardar en el editor masivo.\n\n¿Cambiar de empresa y descartar esos cambios?')) return; }catch{}
   stopCatalogosRealtime();
   invalidateCatalogosCache();
-  // ✅ Antes de cambiar: guardar snapshot de la empresa previa (por usuario)
+  // Guardar el listado acumulado y su siguiente bloque antes de cambiar empresa.
   try{ saveEmpresaCache(); }catch{}
+  skusConsultaSeq++;
+  skusCargando = false;
+  skusCargandoMas = false;
+  skusTieneMas = false;
+  skusTotalConocido = false;
+  skusErrorCarga = '';
+  skusErrorEsAppend = false;
+  skusConsultaKey = '';
+  isLoading = false;
+  try{ desconectarObservadorSkus(); }catch{}
 
   // ✅ Abort de fetch en vuelo del contexto anterior + bump de contexto
   try{ __resetAbortEmpresa(); }catch{}
@@ -2347,6 +2428,9 @@ async function cargarEmpresasAutorizadas(){
   if(!restored){
     // Estado SKUs limpio
     cacheSkus=[]; totalActivos=0; paginaActual=0; indiceActual=-1;
+    skusCargando = false; skusCargandoMas = false; skusTieneMas = false;
+    skusTotalConocido = false; skusErrorCarga = ''; skusErrorEsAppend = false;
+    skusConsultaKey = '';
     qs('rows').innerHTML="";
     qs('pagination').innerHTML="";
     skuExtraFiltro = null;
@@ -2421,6 +2505,18 @@ async function cargarEmpresasAutorizadas(){
     resetChipFiltroUI();
     updatePrintButtonState();
     switchView('view-skus');
+    skusConsultaSeq++;
+    skusCargando = false;
+    skusCargandoMas = false;
+    skusTieneMas = false;
+    skusTotalConocido = false;
+    skusErrorCarga = '';
+    skusErrorEsAppend = false;
+    skusConsultaKey = '';
+    isLoading = false;
+    cacheSkus = [];
+    totalActivos = 0;
+    desconectarObservadorSkus();
     paginaActual = 0;
 
     const input = qs('sku-search');
@@ -2473,134 +2569,213 @@ function resetChipFiltroUI(){
     updateExportCsvFilteredUI();
   }
 
-  async function consultarSkus(){
-    const consultaSeq = ++skusConsultaSeq;
-    setSkusMsg("");
+  function firmaConsultaSkus(){
+    return JSON.stringify({
+      empresa:String(empresaSeleccionada?.id || ''),
+      query:norm(qs('sku-search')?.value ?? ''),
+      filtroTipo:String(skuExtraFiltro?.tipo || ''),
+      filtroValor:String(skuExtraFiltro?.valor || ''),
+      soloBaja:!!soloBaja,
+      orden:sortField,
+      asc:!!sortAsc
+    });
+  }
+
+  function desconectarObservadorSkus(){
+    try{ skusScrollObserver?.disconnect(); }catch{}
+    skusScrollObserver = null;
+  }
+
+  function skuRowKey(row, fallbackIndex){
+    const id = String(getv(row, 'id') || '').trim();
+    if(id) return `id:${id}`;
+    const sku = String(getv(row, 'sku') || '').trim().toLowerCase();
+    return sku ? `sku:${sku}` : `row:${fallbackIndex}`;
+  }
+
+  function buildSkusQueryUrl(q){
+    const skuListSelect = [
+      'id','sku','descripcion','codigo_barras','numero_serie','marca','modelo','genero',
+      'cantidad','cantidades_ubicacion','costo','ubicacion','responsable','localizacion',
+      'fecha_adquisicion','has_foto','has_factura_pdf','created_at','updated_at','dado_de_baja'
+    ].join(',');
+    let url = `${SB_URL}/rest/v1/${skuExtraFiltro?.valor?'web_activos_catalogos_v':'activos'}?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(skuListSelect)}`;
+
+    // Orden estable entre bloques: evita repetir u omitir filas con la misma fecha.
+    if(sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
+    else url += `&order=updated_at.desc,sku.asc`;
+
+    if(q.length > 0){
+      const qenc = encodeURIComponent(q);
+      url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
+    }
+    if(soloBaja) url += `&dado_de_baja=eq.true`;
+    if(skuExtraFiltro?.valor){
+      const col = skuExtraFiltro.tipo;
+      const val = encodeURIComponent(catalogoKey(skuExtraFiltro.valor));
+      url += `&${col}_key=eq.${val}`;
+    }else{
+      resetChipFiltroUI();
+    }
+    return url;
+  }
+
+  async function consultarSkus(options={}){
+    const append = options?.append === true;
+    const consultaKey = firmaConsultaSkus();
     if(!empresaSeleccionada) return;
 
-    const qInput = norm(qs('sku-search')?.value ?? "");
+    if(append && skusConsultaKey && consultaKey !== skusConsultaKey){
+      return consultarSkus();
+    }
+    if(append && (skusCargando || !skusTieneMas)) return;
 
+    const consultaSeq = append ? skusConsultaSeq : ++skusConsultaSeq;
+    const q = norm(qs('sku-search')?.value ?? '');
     const minSearchChars = 2;
+    const desdePagina = append ? paginaActual : 0;
+    const desde = desdePagina * TAMANO_PAGINA;
+    const hasta = desde + TAMANO_PAGINA - 1;
 
-    // ✅ Si no hay texto suficiente, ni filtros, ni solo-baja: no cargar nada
-    if (qInput.length < minSearchChars && !skuExtraFiltro && !soloBaja) {
+    if(!append){
+      skusConsultaKey = consultaKey;
+      skusCargando = false;
+      skusCargandoMas = false;
+      skusTieneMas = false;
+      skusTotalConocido = false;
+      skusErrorCarga = '';
+      skusErrorEsAppend = false;
+      paginaActual = 0;
+      totalActivos = 0;
+      cacheSkus = [];
+      desconectarObservadorSkus();
+    }else{
+      skusErrorCarga = '';
+      skusErrorEsAppend = false;
+      skusCargandoMas = true;
+    }
+    setSkusMsg('');
+    updateExportCsvFilteredUI();
+
+    // Al entrar sin criterio de búsqueda seguimos evitando descargar toda la empresa.
+    if(!append && q.length < minSearchChars && !skuExtraFiltro && !soloBaja){
       qs('rows').innerHTML = `
         <div style="text-align:center; padding:40px; color:var(--muted)">
           <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3">search</span>
           <p>Escribe al menos ${minSearchChars} caracteres para ver los activos</p>
         </div>`;
-      qs('pagination').innerHTML = "";
+      qs('pagination').innerHTML = '';
       totalActivos = 0;
-      cacheSkus = [];
-      updateExportCsvFilteredUI();
+      paginaActual = 0;
+      skusCargando = false;
+      skusCargandoMas = false;
+      skusTieneMas = false;
+      isLoading = false;
       return;
     }
 
-    const q = qInput;
-    const desde = paginaActual * TAMANO_PAGINA, hasta = desde + TAMANO_PAGINA - 1;
-
-    const skuListSelect = [
-      'id',
-      'sku',
-      'descripcion',
-      'codigo_barras',
-      'numero_serie',
-      'marca',
-      'modelo',
-      'genero',
-      'cantidad',
-      'cantidades_ubicacion',
-      'costo',
-      'ubicacion',
-      'responsable',
-      'localizacion',
-      'fecha_adquisicion',
-      'has_foto',
-      'has_factura_pdf',
-      'created_at',
-      'updated_at',
-      'dado_de_baja'
-    ].join(',');
-
-    let url = `${SB_URL}/rest/v1/${skuExtraFiltro?.valor?'web_activos_catalogos_v':'activos'}?empresa_id=eq.${empresaSeleccionada.id}&select=${encodeURIComponent(skuListSelect)}`;
-
-    // Ordenamiento
-    if (sortField === 'sku') url += `&order=sku.${sortAsc?'asc':'desc'}`;
-    else url += `&order=updated_at.desc`;
-
-    // Búsqueda
-    if (q.length > 0) {
-      const qenc = encodeURIComponent(q);
-      url += `&or=(sku.ilike.*${qenc}*,descripcion.ilike.*${qenc}*,codigo_barras.ilike.*${qenc}*)`;
-    }
-
-    // Solo baja
-    if (soloBaja) url += `&dado_de_baja=eq.true`;
-
-    // Filtro extra catálogo
-    if (skuExtraFiltro && skuExtraFiltro.valor) {
-      const col = skuExtraFiltro.tipo;
-      const val = encodeURIComponent(catalogoKey(skuExtraFiltro.valor));
-      url += `&${col}_key=eq.${val}`;
-    } else {
-      resetChipFiltroUI();
-    }
-
-    updateExportCsvFilteredUI();
-
+    skusCargando = true;
     isLoading = true;
+    if(!append){
+      qs('rows').innerHTML = `<div class="sku-scroll-message"><span class="material-symbols-rounded">progress_activity</span> Consultando activos…</div>`;
+    }
+    renderPaginacion();
+
+    const url = buildSkusQueryUrl(q);
     try{
       const headers = {
         'apikey':SB_KEY,
         'Authorization':`Bearer ${sessionToken}`,
         'Range': `${desde}-${hasta}`
       };
-      const shouldRequestCount = (paginaActual === 0);
-      if (shouldRequestCount) headers['Prefer'] = 'count=planned';
+      if(desdePagina === 0) headers['Prefer'] = 'count=planned';
 
       const res = await fetch(url, { headers });
-
       if(!res.ok){
-        const t = await res.text().catch(()=> "");
-        throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? "Detalle: " + t : ""}`);
+        const t = await res.text().catch(()=> '');
+        throw new Error(`Error al cargar activos (HTTP ${res.status}). ${t ? `Detalle: ${t}` : ''}`);
       }
-
-
-      if (skuExtraFiltro && skuExtraFiltro.valor) actualizarChipFiltroConConteo();
-      updatePrintButtonState();
-      syncGlobals();
 
       const dataSkus = await res.json();
       if(consultaSeq !== skusConsultaSeq) return;
-      cacheSkus = dataSkus;
-      guardarIndicadoresDesdeActivos(cacheSkus);
-      // Primero pinta la lista con lo que ya esté en cache, y luego refresca indicadores.
-      // Así al cambiar de página o volver atrás no se pierden los iconos por un render intermedio.
-      renderTabla();
-      cargarIndicadoresAdjuntosSkus(cacheSkus).then(() => {
-        if(consultaSeq === skusConsultaSeq) renderTabla();
+      if(!Array.isArray(dataSkus)) throw new Error('La respuesta de activos no tiene el formato esperado.');
+
+      const appendedIndices = [];
+      const changedIndices = [];
+      if(append){
+        const byKey = new Map(cacheSkus.map((row, idx) => [skuRowKey(row, idx), idx]));
+        dataSkus.forEach(row => {
+          const key = skuRowKey(row, cacheSkus.length);
+          const existingIndex = byKey.get(key);
+          if(existingIndex !== undefined){
+            cacheSkus[existingIndex] = row;
+            changedIndices.push(existingIndex);
+          }else{
+            const index = cacheSkus.length;
+            cacheSkus.push(row);
+            byKey.set(key, index);
+            appendedIndices.push(index);
+          }
+        });
+      }else{
+        cacheSkus = dataSkus.slice();
+        dataSkus.forEach((_, idx) => appendedIndices.push(idx));
+      }
+
+      guardarIndicadoresDesdeActivos(dataSkus);
+      const range = String(res.headers.get('Content-Range') || '');
+      const totalPart = String(range.split('/')[1] || '').trim();
+      if(totalPart && totalPart !== '*' && Number.isFinite(Number(totalPart))){
+        totalActivos = Math.max(0, Number(totalPart), desde + dataSkus.length);
+        skusTotalConocido = true;
+      }else if(!append){
+        totalActivos = cacheSkus.length;
+        skusTotalConocido = false;
+      }else if(!skusTotalConocido){
+        totalActivos = cacheSkus.length;
+      }
+      totalActivos = Math.max(totalActivos, desde + dataSkus.length, cacheSkus.length);
+
+      paginaActual = desdePagina + 1;
+      skusTieneMas = dataSkus.length >= TAMANO_PAGINA;
+
+      if(skuExtraFiltro?.valor) actualizarChipFiltroConConteo();
+      updatePrintButtonState();
+      syncGlobals();
+
+      if(append){
+        renderTabla({ append:true, indices:appendedIndices });
+        renderSkusFilasPorIndices(changedIndices);
+      }else{
+        renderTabla();
+      }
+
+      const indicesConIndicadores = [...new Set([...appendedIndices, ...changedIndices])];
+      cargarIndicadoresAdjuntosSkus(dataSkus).then(() => {
+        if(consultaSeq === skusConsultaSeq) renderSkusFilasPorIndices(indicesConIndicadores);
       }).catch(err => {
         console.warn('No se pudieron refrescar los indicadores de foto/PDF en SKUs.', err);
       });
-      if (paginaActual === 0) {
-        const range = res.headers.get('Content-Range');
-        const totalPart = String((range || '').split('/')[1] || '').trim();
-        if (totalPart && totalPart !== '*') {
-          totalActivos = parseInt(totalPart || '0', 10);
-        } else {
-          totalActivos = cacheSkus.length;
-        }
-      } else if (cacheSkus.length === 0 && paginaActual > 0) {
-        totalActivos = Math.max(0, paginaActual * TAMANO_PAGINA);
-      }
-      renderPaginacion();
     }catch(e){
+      if(consultaSeq !== skusConsultaSeq) return;
       console.error(e);
-      qs('rows').innerHTML = "<p style='color:var(--muted)'>Sin resultados</p>";
-      qs('pagination').innerHTML = "";
-      setSkusMsg(e.message || "Error al consultar activos.");
+      skusErrorCarga = e.message || 'Error al consultar activos.';
+      skusErrorEsAppend = append;
+      setSkusMsg(skusErrorCarga);
+      if(!append){
+        cacheSkus = [];
+        totalActivos = 0;
+        paginaActual = 0;
+        skusTieneMas = false;
+        renderTabla();
+      }
     }finally{
-      isLoading=false;
+      if(consultaSeq === skusConsultaSeq){
+        skusCargando = false;
+        skusCargandoMas = false;
+        isLoading = false;
+        renderPaginacion();
+      }
     }
   }
 
@@ -2720,60 +2895,108 @@ function resetChipFiltroUI(){
     return icons.length ? `<div class="asset-icons">${icons.join('')}</div>` : '';
   }
 
-  function renderTabla(){
-    const rows = cacheSkus.map((i, idx) => {
-      const sku = getv(i,'sku');
-      const cb = getv(i,'codigo_barras','codigoBarras');
-      const desc = getv(i,'descripcion');
-      const genero = getv(i,'genero');
-      const cant = getv(i,'cantidad','qty','existencia');
-      const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
-      const costoFmt = fmtMoney(costoRaw);
+  function buildSkuRowHtml(i, idx){
+    const sku = getv(i,'sku');
+    const cb = getv(i,'codigo_barras','codigoBarras');
+    const desc = getv(i,'descripcion');
+    const genero = getv(i,'genero');
+    const cant = getv(i,'cantidad','qty','existencia');
+    const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
+    const costoFmt = fmtMoney(costoRaw);
+    const metaBits = [
+      genero && `<span><b>Género:</b> ${escapeHtml(genero)}</span>`,
+      cant && `<span><b>Cant.:</b> ${escapeHtml(cant)}</span>`,
+      costoFmt && `<span><b>Costo:</b> ${escapeHtml(costoFmt)}</span>`
+    ].filter(Boolean).join('');
+    const adjuntosIcons = renderSkuAdjuntosIndicadores(sku);
 
-      const metaBits = [
-        genero && `<span><b>Género:</b> ${escapeHtml(genero)}</span>`,
-        cant && `<span><b>Cant.:</b> ${escapeHtml(cant)}</span>`,
-        costoFmt && `<span><b>Costo:</b> ${escapeHtml(costoFmt)}</span>`
-      ].filter(Boolean).join('');
-
-      const adjuntosIcons = renderSkuAdjuntosIndicadores(sku);
-
-      return `<div class="row" data-sku="${escapeHtml(sku)}">
-        <div>
-          <div class="sku-line">
-            <div class="sku">${escapeHtml(sku)}</div>
-            ${adjuntosIcons}
-          </div>
-          ${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}
+    return `<div class="row" data-sku="${escapeHtml(sku)}" data-index="${idx}">
+      <div>
+        <div class="sku-line">
+          <div class="sku">${escapeHtml(sku)}</div>
+          ${adjuntosIcons}
         </div>
-        <div>
-          <div class="desc">${escapeHtml(desc)}</div>
-          ${metaBits ? `<div class="meta">${metaBits}</div>`:''}
-        </div>
-        <div>
-          <button class="btn tonal" onclick="verDetalleByIndex(${idx})" title="Ver detalle">
-            <span class="material-symbols-rounded">visibility</span> Ver
-          </button>
-        </div>
-      </div>`;
-    }).join('');
+        ${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}
+      </div>
+      <div>
+        <div class="desc">${escapeHtml(desc)}</div>
+        ${metaBits ? `<div class="meta">${metaBits}</div>`:''}
+      </div>
+      <div>
+        <button class="btn tonal" onclick="verDetalleByIndex(${idx})" title="Ver detalle">
+          <span class="material-symbols-rounded">visibility</span> Ver
+        </button>
+      </div>
+    </div>`;
+  }
 
-    qs('rows').innerHTML = rows || "<p style='color:var(--muted)'>Sin resultados</p>";
+  function renderTabla(options={}){
+    const list = qs('rows');
+    if(!list) return;
+    if(options.append){
+      const indices = Array.isArray(options.indices) ? options.indices : [];
+      const rows = indices.map(idx => buildSkuRowHtml(cacheSkus[idx], idx)).join('');
+      if(rows) list.insertAdjacentHTML('beforeend', rows);
+      return;
+    }
+    const rows = cacheSkus.map((item, idx) => buildSkuRowHtml(item, idx)).join('');
+    list.innerHTML = rows || "<p style='color:var(--muted)'>Sin resultados</p>";
+  }
+
+  function renderSkusFilasPorIndices(indices){
+    const list = qs('rows');
+    if(!list || !Array.isArray(indices) || !indices.length) return;
+    [...new Set(indices)].forEach(idx => {
+      const item = cacheSkus[idx];
+      if(!item) return;
+      const row = list.querySelector(`.row[data-index="${idx}"]`);
+      if(row) row.outerHTML = buildSkuRowHtml(item, idx);
+    });
+  }
+
+  function observarCargaContinuaSkus(){
+    desconectarObservadorSkus();
+    const sentinel = qs('sku-load-sentinel');
+    if(!sentinel || !skusTieneMas || skusCargando || skusErrorCarga || !('IntersectionObserver' in window)) return;
+    skusScrollObserver = new IntersectionObserver(entries => {
+      if(entries.some(entry => entry.isIntersecting) && !skusCargando && skusTieneMas){
+        consultarSkus({ append:true });
+      }
+    }, { root:null, rootMargin:'700px 0px', threshold:0 });
+    skusScrollObserver.observe(sentinel);
   }
 
   function renderPaginacion(){
     const pag = qs('pagination');
-    const total = Math.ceil((totalActivos || 0) / TAMANO_PAGINA);
-    let h = "";
-    for(let i=0;i<total;i++){
-      const visible = (i<2 || i>total-3 || (i>=paginaActual-1 && i<=paginaActual+1));
-      if(visible) h += `<button class="page-btn ${i===paginaActual?'active':''}" onclick="irAPagina(${i})">${i+1}</button>`;
-      else if(i===2 || i===total-3) h += `<span style="padding:8px 6px; color:#9CA3AF">…</span>`;
-    }
-    pag.innerHTML = h;
-  }
+    if(!pag) return;
+    const loaded = cacheSkus.length.toLocaleString('es-MX');
+    const total = Number(totalActivos || 0).toLocaleString('es-MX');
+    let html = '';
 
-  function irAPagina(p){ paginaActual=p; consultarSkus(); }
+    if(cacheSkus.length || skusTotalConocido){
+      html += `<div class="sku-scroll-status">Mostrando <strong>${loaded}</strong>${skusTotalConocido ? ` de <strong>${total}</strong>` : ' activos cargados'}</div>`;
+    }
+
+    if(skusErrorCarga){
+      html += `<div class="sku-scroll-error">${escapeHtml(skusErrorEsAppend ? 'No se pudieron cargar más activos.' : 'No se pudo cargar la lista.')}</div>
+        <button type="button" class="btn tonal" id="sku-load-retry"><span class="material-symbols-rounded">refresh</span> Reintentar</button>`;
+    }else if(skusCargandoMas){
+      html += `<div class="sku-scroll-message"><span class="material-symbols-rounded">progress_activity</span> Cargando más activos…</div>`;
+    }else if(skusTieneMas){
+      html += `<button type="button" class="btn tonal" id="sku-load-more"><span class="material-symbols-rounded">expand_more</span> Cargar más</button>
+        <div id="sku-load-sentinel" class="sku-load-sentinel" aria-hidden="true"></div>`;
+    }else if(cacheSkus.length){
+      html += `<div class="sku-scroll-end">Fin de la lista</div>`;
+    }
+
+    pag.innerHTML = html;
+    qs('sku-load-more')?.addEventListener('click', () => consultarSkus({ append:true }));
+    qs('sku-load-retry')?.addEventListener('click', () => {
+      if(skusErrorEsAppend) consultarSkus({ append:true });
+      else consultarSkus();
+    });
+    observarCargaContinuaSkus();
+  }
 
 
   function enfocarSkuEnLista(sku){
@@ -2782,8 +3005,12 @@ function resetChipFiltroUI(){
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const rows = Array.from(document.querySelectorAll('#rows .row'));
-        const row = rows.find(el => String(el?.dataset?.sku || '').trim() === targetSku);
+        let row = indiceActual >= 0 ? qs('rows')?.querySelector(`.row[data-index="${indiceActual}"]`) : null;
+        if(row && String(row.dataset?.sku || '').trim() !== targetSku) row = null;
+        if(!row){
+          const rows = Array.from(document.querySelectorAll('#rows .row'));
+          row = rows.find(el => String(el?.dataset?.sku || '').trim() === targetSku);
+        }
         if(!row) return;
 
         try{
@@ -2801,7 +3028,11 @@ function resetChipFiltroUI(){
   function volverASkusDesdeDetalle(){
     const skuActual = String(getv(cacheSkus[indiceActual] || {}, 'sku') || skuRetornoDetalle || '').trim();
     if(skuActual) skuRetornoDetalle = skuActual;
+    // switchView limpia filtros de catálogo al entrar directamente; al volver
+    // del detalle conservar el filtro con el que se llegó a esta lista.
+    window.__fromCatalogos = !!skuExtraFiltro?.valor;
     switchView('view-skus');
+    observarCargaContinuaSkus();
     enfocarSkuEnLista(skuActual);
   }
 
@@ -3136,15 +3367,21 @@ function resetChipFiltroUI(){
     qs('det-fecha-reg').innerText = fmtDate(fReg);
 
     qs('btn-prev').disabled = (idx===0);
-    qs('btn-next').disabled = (idx===cacheSkus.length-1);
+    qs('btn-next').disabled = (idx===cacheSkus.length-1 && !skusTieneMas);
 
     cargarFotos(sku);
     cargarFacturas(sku);
   }
 
-  function navegarDetalle(dir){
+  async function navegarDetalle(dir){
     let n = indiceActual + dir;
     if(n>=0 && n<cacheSkus.length) verDetalleByIndex(n);
+    else if(dir > 0 && n === cacheSkus.length && skusTieneMas && !skusCargando){
+      const previousLength = cacheSkus.length;
+      await consultarSkus({ append:true });
+      if(cacheSkus.length > previousLength) verDetalleByIndex(previousLength);
+      else if(!skusTieneMas) qs('btn-next').disabled = true;
+    }
   }
 
   async function cargarAdjuntosDetalleSku(sku){
@@ -7019,7 +7256,44 @@ function renderCatalogo(){
   let histFiltered = [];
   let histPage = 0;
   const HIST_PAGE_SIZE = 25;
+  const histSelectedIds = new Set();
+  let histBulkBusy = false;
+  function updateHistBulkControls(){
+    const allowed = canHist() && canExportPdf() && canDescargarMasivoResguardosPdf();
+    qs('hist-bulk-bar')?.classList.toggle('hidden', !allowed);
+    safeSetText('hist-bulk-count', `${histSelectedIds.size} seleccionados`);
+    document.querySelectorAll('[data-hist-bulk-control]').forEach(el=>{
+      const session = el.dataset.sessionId ? histAll.find(s=>s.id===el.dataset.sessionId) : null;
+      el.disabled = !allowed || histBulkBusy || (el.dataset.sessionId && (!session || !isSessionAutorizada(session)));
+    });
+    const generate = qs('hist-bulk-generate');
+    if(generate) generate.disabled = histBulkBusy || !histSelectedIds.size || !allowed;
+  }
+  function seleccionarResguardoPdf(id, checked){
+    if(histBulkBusy || !canHist() || !canExportPdf() || !canDescargarMasivoResguardosPdf()) return;
+    const row = histAll.find(s=>s.id===id);
+    if(!row || !isSessionAutorizada(row)) return;
+    checked ? histSelectedIds.add(id) : histSelectedIds.delete(id);
+    updateHistBulkControls();
+  }
+  function seleccionarPaginaResguardosPdf(){
+    if(histBulkBusy || !canHist() || !canExportPdf() || !canDescargarMasivoResguardosPdf()) return;
+    histFiltered.slice(histPage*HIST_PAGE_SIZE,(histPage+1)*HIST_PAGE_SIZE)
+      .filter(isSessionAutorizada).forEach(s=>histSelectedIds.add(s.id));
+    renderHistorial();
+  }
+  function limpiarSeleccionResguardosPdf(){
+    if(histBulkBusy) return;
+    histSelectedIds.clear(); renderHistorial();
+  }
+
   let histSoloPendientes = false;
+  const HIST_FIELD_FILTER_KEYS = ['nuevoResponsable','nuevaLocalizacion','nuevaUbicacion','creadaPorEmail','autorizadaPor'];
+  const histFieldFilters = { nuevoResponsable:'', nuevaLocalizacion:'', nuevaUbicacion:'', creadaPorEmail:'', autorizadaPor:'' };
+  let histFieldFiltersOpen = false;
+  const histFieldOptionCache = {};
+  const histFieldSearchTerms = {};
+  let histFieldDropdownOpen = '';
   function toggleHistPendientes(){
     histSoloPendientes = !histSoloPendientes;
     const btn = qs('hist-chip-pend');
@@ -7032,6 +7306,206 @@ function renderCatalogo(){
   let histSearchDebounce = null;
   let histCustomRange = { start: '', end: '' };
   let histNamesMap = new Map();
+
+  const HIST_FIELD_FILTER_DEFS = [
+    { key:'nuevoResponsable', label:'Responsable', get:s=>s?.nuevoResponsable, display:v=>v },
+    { key:'nuevaLocalizacion', label:'Localización', get:s=>s?.nuevaLocalizacion, display:v=>v },
+    { key:'nuevaUbicacion', label:'Ubicación', get:s=>s?.nuevaUbicacion, display:v=>v },
+    { key:'creadaPorEmail', label:'Creada por', get:s=>s?.creadaPorEmail, display:v=>resolveUserDisplay(v,histNamesMap) },
+    { key:'autorizadaPor', label:'Autorizó', get:s=>s?.autorizadaPor, display:v=>resolveUserDisplay(v,histNamesMap) }
+  ];
+
+  function renderHistFieldFilters(){
+    const panel = qs('hist-field-filters-panel');
+    if(!panel) return;
+    HIST_FIELD_FILTER_DEFS.forEach(field=>{ histFieldOptionCache[field.key] = []; });
+    panel.innerHTML = HIST_FIELD_FILTER_DEFS.map(field=>{
+      const options = new Map();
+      (histAll || []).forEach(session=>{
+        const raw = norm(field.get(session));
+        if(raw && !options.has(raw.toLowerCase())) options.set(raw.toLowerCase(), raw);
+      });
+      const values = Array.from(options.values()).sort((a,b)=>
+        String(field.display(a)).localeCompare(String(field.display(b)), 'es', { sensitivity:'base' })
+      );
+      const selected = histFieldFilters[field.key] || '';
+      if(selected && !values.some(value=>value.toLowerCase() === selected.toLowerCase())) values.unshift(selected);
+      histFieldOptionCache[field.key] = values.map(value=>({ value, label:String(field.display(value)) }));
+      const selectedOption = histFieldOptionCache[field.key].find(option=>option.value.toLowerCase() === selected.toLowerCase());
+      const isOpen = histFieldDropdownOpen === field.key;
+      return `<div class="hist-field-filter">${escapeHtml(field.label)}
+        <div class="hist-field-select-wrap">
+          <button id="hist-field-${field.key}" class="hist-field-select-trigger ${selected?'active':''}" type="button" aria-haspopup="listbox" aria-expanded="${isOpen}" onclick="toggleOpcionHistorial('${field.key}')">
+            <span>${escapeHtml(selectedOption?.label || 'Todos')}</span><span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+          </button>
+          <div id="hist-field-menu-${field.key}" class="hist-field-select-menu" ${isOpen?'':'hidden'}>
+            <input id="hist-field-search-${field.key}" class="hist-field-select-search" type="search" placeholder="Buscar coincidencias…" aria-label="Buscar ${escapeHtml(field.label)}" value="${escapeHtml(histFieldSearchTerms[field.key] || '')}" oninput="buscarOpcionHistorial('${field.key}',this.value)" onkeydown="teclaOpcionHistorial(event,'${field.key}')">
+            <div id="hist-field-options-${field.key}" class="hist-field-select-options" role="listbox" aria-label="Opciones de ${escapeHtml(field.label)}"></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    panel.classList.toggle('hidden', !histFieldFiltersOpen);
+    HIST_FIELD_FILTER_DEFS.forEach(field=>renderOpcionesHistorial(field.key));
+    updateHistFieldFilterControls();
+  }
+
+  function renderOpcionesHistorial(key){
+    const host = qs(`hist-field-options-${key}`);
+    if(!host) return;
+    const term = norm(histFieldSearchTerms[key]).toLocaleLowerCase('es-MX');
+    const selected = histFieldFilters[key] || '';
+    const matches = (histFieldOptionCache[key] || []).filter(option=>
+      !term || `${option.label} ${option.value}`.toLocaleLowerCase('es-MX').includes(term)
+    );
+    const rows = [{value:'',label:'Todos'}, ...matches];
+    host.innerHTML = rows.length
+      ? rows.map(option=>{
+          const encodedValue = encodeURIComponent(option.value).replace(/'/g,'%27');
+          const active = option.value.toLowerCase() === selected.toLowerCase();
+          return `<button type="button" class="hist-field-option ${active?'selected':''}" role="option" aria-selected="${active}" title="${escapeHtml(option.label)}" onclick="seleccionarOpcionHistorial('${key}',decodeURIComponent('${encodedValue}'))">${escapeHtml(option.label)}</button>`;
+        }).join('')
+      : `<div class="hist-field-option-empty">Sin coincidencias.</div>`;
+  }
+
+  function positionHistFieldMenu(key){
+    const menu = qs(`hist-field-menu-${key}`);
+    const trigger = qs(`hist-field-${key}`);
+    if(!menu || !trigger || menu.hidden) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
+    const viewportHeight = Math.max(1, window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 1);
+    const margin = 12;
+    const width = Math.min(Math.max(rect.width, Math.min(300, viewportWidth - margin*2)), 380, viewportWidth - margin*2);
+    const left = Math.max(margin, Math.min(rect.left, viewportWidth - width - margin));
+    const gap = 6;
+    const roomBelow = Math.max(0, viewportHeight - rect.bottom - margin - gap);
+    const roomAbove = Math.max(0, rect.top - margin - gap);
+    const openAbove = roomBelow < 260 && roomAbove > roomBelow;
+    const available = openAbove ? roomAbove : roomBelow;
+    const maxHeight = Math.max(120, Math.min(420, available || viewportHeight - margin*2));
+
+    menu.style.position = 'fixed';
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.right = 'auto';
+    menu.style.width = `${Math.round(width)}px`;
+    menu.style.maxWidth = `${Math.max(1, viewportWidth - margin*2)}px`;
+    menu.style.transform = 'none';
+    menu.style.maxHeight = `${Math.round(maxHeight)}px`;
+
+    const search = qs(`hist-field-search-${key}`);
+    const options = qs(`hist-field-options-${key}`);
+    const searchHeight = search?.getBoundingClientRect().height || 42;
+    if(options) options.style.maxHeight = `${Math.max(56, Math.round(maxHeight - searchHeight - 24))}px`;
+
+    const menuHeight = Math.min(menu.scrollHeight, maxHeight);
+    const top = openAbove
+      ? Math.max(margin, rect.top - menuHeight - gap)
+      : Math.min(rect.bottom + gap, viewportHeight - menuHeight - margin);
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.bottom = 'auto';
+  }
+
+  let histFieldMenuPositionFrame = 0;
+  function scheduleHistFieldMenuPosition(){
+    if(!histFieldDropdownOpen || histFieldMenuPositionFrame) return;
+    histFieldMenuPositionFrame = requestAnimationFrame(()=>{
+      histFieldMenuPositionFrame = 0;
+      positionHistFieldMenu(histFieldDropdownOpen);
+    });
+  }
+  window.addEventListener('resize', scheduleHistFieldMenuPosition, {passive:true});
+  window.addEventListener('scroll', scheduleHistFieldMenuPosition, {passive:true,capture:true});
+  window.visualViewport?.addEventListener('resize', scheduleHistFieldMenuPosition, {passive:true});
+
+  function toggleOpcionHistorial(key){
+    if(!HIST_FIELD_FILTER_KEYS.includes(key)) return;
+    histFieldDropdownOpen = histFieldDropdownOpen === key ? '' : key;
+    HIST_FIELD_FILTER_DEFS.forEach(field=>{
+      const menu = qs(`hist-field-menu-${field.key}`);
+      const trigger = qs(`hist-field-${field.key}`);
+      const open = histFieldDropdownOpen === field.key;
+      if(menu) menu.hidden = !open;
+      if(trigger) trigger.setAttribute('aria-expanded', String(open));
+    });
+    if(histFieldDropdownOpen){
+      positionHistFieldMenu(key);
+      const input = qs(`hist-field-search-${key}`);
+      if(input){
+        requestAnimationFrame(()=>{
+          positionHistFieldMenu(key);
+          input.focus();
+          input.select();
+          setTimeout(()=>positionHistFieldMenu(key),120);
+        });
+      }
+    }
+  }
+
+  function seleccionarOpcionHistorial(key, value){
+    if(!HIST_FIELD_FILTER_KEYS.includes(key)) return;
+    histFieldFilters[key] = norm(value);
+    histFieldSearchTerms[key] = '';
+    histFieldDropdownOpen = '';
+    histPage = 0;
+    renderHistFieldFilters();
+    aplicarFiltrosHistorial();
+  }
+
+  function buscarOpcionHistorial(key, query){
+    if(!HIST_FIELD_FILTER_KEYS.includes(key)) return;
+    histFieldSearchTerms[key] = query;
+    renderOpcionesHistorial(key);
+  }
+
+  function teclaOpcionHistorial(event, key){
+    if(event.key === 'Escape'){
+      event.preventDefault();
+      histFieldDropdownOpen = '';
+      const menu = qs(`hist-field-menu-${key}`);
+      const trigger = qs(`hist-field-${key}`);
+      if(menu) menu.hidden = true;
+      if(trigger){ trigger.setAttribute('aria-expanded','false'); trigger.focus(); }
+    }
+  }
+
+  function updateHistFieldFilterControls(){
+    const count = HIST_FIELD_FILTER_KEYS.filter(key=>norm(histFieldFilters[key])).length;
+    const toggle = qs('hist-field-filters-toggle');
+    const countEl = qs('hist-field-filters-count');
+    const clear = qs('hist-field-filters-clear');
+    const panel = qs('hist-field-filters-panel');
+    if(countEl) countEl.textContent = count ? `(${count})` : '';
+    if(toggle) toggle.classList.toggle('active', count > 0 || histFieldFiltersOpen);
+    if(clear) clear.classList.toggle('hidden', count === 0);
+    if(panel) panel.classList.toggle('hidden', !histFieldFiltersOpen);
+  }
+
+  function toggleHistFieldFilters(){
+    histFieldFiltersOpen = !histFieldFiltersOpen;
+    updateHistFieldFilterControls();
+  }
+
+  function onHistFieldFilterChange(key, value){
+    if(!HIST_FIELD_FILTER_KEYS.includes(key)) return;
+    histFieldFilters[key] = norm(value);
+    histPage = 0;
+    updateHistFieldFilterControls();
+    aplicarFiltrosHistorial();
+  }
+
+  function limpiarFiltrosCampoHistorial(){
+    HIST_FIELD_FILTER_KEYS.forEach(key=>{
+      histFieldFilters[key] = '';
+      histFieldSearchTerms[key] = '';
+    });
+    histPage = 0;
+    histFieldDropdownOpen = '';
+    renderHistFieldFilters();
+    updateHistFieldFilterControls();
+    aplicarFiltrosHistorial();
+  }
 
   let currentSessionId = null;
   let sessionInfo = null;
@@ -7242,6 +7716,7 @@ function renderCatalogo(){
 
   // ✅ Botón: Generar PDF desde Historial (con opción de cambiar fecha si tiene permiso)
   window.imprimirResguardoSesionActual = async function(){
+    if(histBulkBusy){ setSessionMsg('Espera a que termine el lote de PDFs.'); return; }
     try{
       updateSessionPdfButtonState();
 
@@ -7306,7 +7781,13 @@ function renderCatalogo(){
     const inp = qs('hist-search');
     if(inp) inp.value = emailPref ? String(emailPref) : "";
 
+    histSelectedIds.clear();
+    qs('hist-bulk-status')?.classList.add('hidden');
+    updateHistBulkControls();
     histRango = 'hoy';
+    HIST_FIELD_FILTER_KEYS.forEach(key=>{ histFieldFilters[key] = ''; });
+    histFieldFiltersOpen = false;
+    updateHistFieldFilterControls();
     histCustomRange = { start:'', end:'' };
     const ds = qs('hist-date-start'); if(ds) ds.value = '';
     const de = qs('hist-date-end'); if(de) de.value = '';
@@ -7384,6 +7865,8 @@ function renderCatalogo(){
       const el = qs(id);
       if(el) el.classList.toggle('active', k===histRango);
     });
+    const customRange = qs('hist-custom-range');
+    if(customRange) customRange.hidden = histRango !== 'pers';
   }
 
   function onHistSearchKey(ev){
@@ -7474,6 +7957,11 @@ function renderCatalogo(){
 
       if(histSoloPendientes && isSessionAutorizada(s)) return false;
 
+      for(const key of HIST_FIELD_FILTER_KEYS){
+        const wanted = norm(histFieldFilters[key]).toLowerCase();
+        if(wanted && norm(s?.[key]).toLowerCase() !== wanted) return false;
+      }
+
       if(term){
         const blob = sessionSearchBlob(s);
         if(!blob.includes(term)) return false;
@@ -7489,6 +7977,7 @@ function renderCatalogo(){
   }
 
   function renderHistorial(){
+    updateHistBulkControls();
     const list = qs('hist-list');
     const pag  = qs('hist-pagination');
     if(!list || !pag) return;
@@ -7563,6 +8052,7 @@ function renderCatalogo(){
           ${destinoBits ? `<div class="hist-sub" style="margin-top:6px">${destinoBits}</div>` : ``}
         </div>
         <div class="btn-group" onclick="event.stopPropagation()">
+          ${canExportPdf() && canHist() && canDescargarMasivoResguardosPdf() ? `<label class="hist-pdf-check" title="${autorizado?'Seleccionar para descarga masiva de PDF':'Requiere autorización o aplicación'}"><input type="checkbox" data-hist-bulk-control aria-label="Seleccionar ${escapeHtml(idFull)} para descarga masiva de PDF" data-session-id="${escapeHtml(idFull)}" onchange="seleccionarResguardoPdf(this.dataset.sessionId,this.checked)" ${histSelectedIds.has(s.id)?'checked':''} ${!autorizado || histBulkBusy?'disabled':''}> PDF</label>` : ''}
           <button class="btn tonal" onclick="abrirDetalleSesionResguardo('${escapeHtml(String(s.id||''))}')">
             <span class="material-symbols-rounded">visibility</span> Ver
           </button>
@@ -7658,8 +8148,12 @@ function renderCatalogo(){
       histNamesMap = await cargarNombresUsuariosPorEmpresa();
       const raw = await fetchResguardoSessionsRemote(empresaSeleccionada.id, 500);
       histAll = raw.map(normalizeSessionRow).filter(s=>s.id);
+      for(const id of histSelectedIds){
+        if(!histAll.some(s=>s.id===id && isSessionAutorizada(s))) histSelectedIds.delete(id);
+      }
 
       histPage = 0;
+      renderHistFieldFilters();
       aplicarFiltrosHistorial();
     }catch(e){
       console.error(e);
@@ -8155,7 +8649,8 @@ function upperEs(s){ return norm(s).toUpperCase(); }
     if(resolve) resolve(result);
   }
 
-  function pedirOpcionesPdfResguardo(initialNotes = '', allowDateChange = true){
+  function pedirOpcionesPdfResguardo(initialNotes = '', allowDateChange = true, batch = false){
+    if(resolverOpcionesPdfResguardo) return Promise.reject(new Error('Ya hay un formulario de PDF abierto.'));
     const modal = qs('pdf-options-modal');
     const dateRow = qs('pdf-options-change-date-row');
     const dateToggle = qs('pdf-options-change-date');
@@ -8169,6 +8664,11 @@ function upperEs(s){ return norm(s).toUpperCase(); }
 
     return new Promise(resolve=>{
       resolverOpcionesPdfResguardo = resolve;
+      qs('pdf-options-bulk-notes')?.classList.toggle('hidden', !batch);
+      qs('pdf-options-notes-mode').value = batch ? 'preserve' : 'replace';
+      qs('pdf-options-notes-wrap')?.classList.toggle('hidden', batch);
+      safeSetText('pdf-options-title', batch ? 'Generar PDFs seleccionados' : 'Generar PDF');
+      safeSetText('pdf-options-generate', batch ? 'Generar lote ZIP' : 'Generar PDF');
       dateToggle.checked = false;
       dateRow.classList.toggle('hidden', !allowDateChange);
       dateWrap.classList.add('hidden');
@@ -8178,10 +8678,13 @@ function upperEs(s){ return norm(s).toUpperCase(); }
       error?.classList.add('hidden');
       error && (error.textContent = '');
       modal.classList.remove('hidden');
-      notesInput.focus();
+      (batch ? qs('pdf-options-notes-mode') : notesInput)?.focus();
     });
   }
 
+  qs('pdf-options-notes-mode')?.addEventListener('change', ev=>{
+    qs('pdf-options-notes-wrap')?.classList.toggle('hidden', ev.target.value === 'preserve');
+  });
   qs('pdf-options-change-date')?.addEventListener('change', ev=>{
     const enabled = !!ev.target.checked;
     qs('pdf-options-date-wrap')?.classList.toggle('hidden', !enabled);
@@ -8213,6 +8716,7 @@ function upperEs(s){ return norm(s).toUpperCase(); }
     cerrarOpcionesPdfResguardo({
       cancelled:false,
       fechaOverride,
+      preserveNotes:qs('pdf-options-notes-mode')?.value === 'preserve',
       observacionesGenerales:String(qs('pdf-options-notes')?.value || '').trim()
     });
   });
@@ -8224,6 +8728,26 @@ function upperEs(s){ return norm(s).toUpperCase(); }
 
   function safeFileName(s){
     return norm(s).replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim() || "resguardo";
+  }
+
+  function dateForPdfFileName(value){
+    const date = value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  }
+
+  function shortResguardoFileId(value){
+    const raw = norm(value);
+    const parts = raw.split('-');
+    if(parts.length >= 3 && /^R$/i.test(parts[0]) && /^\d+$/.test(parts[1])){
+      return `R-${parts[1]}-${parts[2].slice(0,8)}`;
+    }
+    return raw.replace(/[^A-Za-z0-9_-]/g,'').slice(0,32) || 'sin_id';
+  }
+
+  function resguardoPdfFileName(sessionId, responsable, pdfDate){
+    const recipient = safeFileName(responsable || 'Sin responsable')
+      .replace(/\s+/g,'_').slice(0,60).replace(/[_-]+$/,'') || 'Sin_responsable';
+    return `Resguardo_${dateForPdfFileName(pdfDate)}_${recipient}_${shortResguardoFileId(sessionId)}.pdf`;
   }
 
   function empresaSafe(nombre){
@@ -8861,13 +9385,16 @@ function fitText2Lines(text, maxW, baseSize, minSize){
     if(typeof canExportPdf === 'function' && !canExportPdf()){
       throw new Error('No tienes permiso para imprimir/exportar PDF.');
     }
+    if(payload?.batchOptions && !canDescargarMasivoResguardosPdf()){
+      throw new Error('No tienes permiso para la descarga masiva de PDFs de resguardo.');
+    }
     if(!isSessionAutorizada(payload)){
       throw new Error('Solo puedes imprimir el PDF cuando la sesión esté autorizada o aplicada.');
     }
     if(!empresaNombre || !sessionId) throw new Error('Faltan datos para generar el PDF.');
     if(!entries.length) throw new Error('Esta sesión no tiene entradas para imprimir.');
 
-    const pdfOptions = await pedirOpcionesPdfResguardo(
+    const pdfOptions = payload?.batchOptions || await pedirOpcionesPdfResguardo(
       payload?.observacionesPdf,
       typeof canChangeFechaPdf === 'function' && canChangeFechaPdf()
     );
@@ -8876,7 +9403,7 @@ function fitText2Lines(text, maxW, baseSize, minSize){
     const observacionesGenerales = pdfOptions.observacionesGenerales;
 
     await ensureJsPdf();
-    const branding = await fetchBrandingImages(empresaNombre);
+    const branding = payload.branding || await fetchBrandingImages(empresaNombre);
 
     // Responsable/ubicación: replica lógica Android (ResguardosHistorial.kt)
     const responsablePdf = norm(payload?.nuevoResponsable) || 'SIN RESPONSABLE ASIGNADO';
@@ -8892,6 +9419,7 @@ function fitText2Lines(text, maxW, baseSize, minSize){
 
     if(!itemsPdf.length) throw new Error('No se pudieron preparar los items del PDF.');
 
+    if(!payload.keepNotes){
     const notesUrl = `${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(sessionId)}`;
     const notesResponse = await fetch(notesUrl, {
       method:'PATCH',
@@ -8911,9 +9439,11 @@ function fitText2Lines(text, maxW, baseSize, minSize){
     if(!Array.isArray(savedRows) || savedRows.length !== 1){
       throw new Error('Supabase no encontró el resguardo para guardar sus notas.');
     }
+    }
     const doc = drawPdf(responsablePdf, itemsPdf, branding, fechaOverride, observacionesGenerales);
     const fname = `Resguardo_${safeFileName(empresaNombre)}_${safeFileName(responsablePdf)}.pdf`;
-    await doc.save(fname, { returnPromise:true });
+    const blob = payload.batchOptions ? doc.output('blob') : null;
+    if(!payload.batchOptions) await doc.save(fname, { returnPromise:true });
 
     let generationHistoryError = null;
     try{
@@ -8968,11 +9498,204 @@ function fitText2Lines(text, maxW, baseSize, minSize){
       }
     }catch(_){ /* no bloquear por fallo de marca */ }
 
+    if(payload.batchOptions) return {blob, warning:generationHistoryError?.message || ''};
     if(generationHistoryError){
       throw new Error(`PDF generado y descargado, pero no se pudo guardar su historial: ${generationHistoryError.message || generationHistoryError}`);
     }
     try{ await cargarHistorialPdfSesion(sessionId); }catch(_){ }
   };
+
+  window.generarPdfsSeleccionados = async function(){
+    if(histBulkBusy) return;
+    if(!canHist() || !canExportPdf() || !canDescargarMasivoResguardosPdf()){
+      setHistMsg('No tienes permiso para la descarga masiva de PDFs de resguardo.');
+      return;
+    }
+    if(!histSelectedIds.size) return;
+    const company = {...empresaSeleccionada};
+    const token = sessionToken;
+    const ids = Array.from(histSelectedIds);
+    const status = qs('hist-bulk-status');
+    const show = (message, completed=false)=>{
+      if(!status) return;
+      safeSetText('hist-bulk-status-message', message);
+      status.classList.remove('hidden');
+      qs('hist-bulk-status-close')?.classList.toggle('hidden', !completed);
+    };
+    const assertContext = ()=>{
+      if(company.id !== empresaSeleccionada?.id || token !== sessionToken || !canHist() || !canExportPdf() || !canDescargarMasivoResguardosPdf())
+        throw new Error('Cambió la empresa, sesión o permisos. Se detuvo el lote.');
+    };
+    histBulkBusy=true; updateHistBulkControls(); renderHistorial();
+    try{
+      const options = await pedirOpcionesPdfResguardo('',canChangeFechaPdf(),true);
+      if(options.cancelled) return;
+      assertContext();
+      // Freeze today's date once, including batches crossing midnight.
+      options.fechaOverride = options.fechaOverride || new Date();
+      if(!window.JSZip) throw new Error('No está disponible ZIP. Recarga la página y revisa la conexión.');
+      const zip = new window.JSZip();
+      await ensureJsPdf();
+      const branding = await fetchBrandingImages(company.nombre);
+      const report=[];
+      const issues=[];
+      const zipFilenames=new Set();
+      let generated=0, failed=0, warnings=0;
+      const headers={apikey:SB_KEY,Authorization:`Bearer ${token}`};
+      async function readRows(url){
+        assertContext();
+        const response=await fetch(url,{headers});
+        if(!response.ok) throw new Error(`No se pudieron cargar los datos (HTTP ${response.status}).`);
+        const rows=await response.json();
+        if(!Array.isArray(rows)) throw new Error('Respuesta de datos inválida.');
+        return rows;
+      }
+      for(let i=0;i<ids.length;i++){
+        try{ assertContext(); }catch(error){
+          failed += ids.length-i;
+          const issue=`${ids.length-i} resguardo(s) sin procesar: ${error.message}`;
+          report.push(issue);
+          issues.push(issue);
+          break;
+        }
+        const id=ids[i];
+        show(`Generando ${i+1} de ${ids.length}…`);
+        try{
+          const rows=await readRows(`${SB_URL}/rest/v1/resguardo_sessions?id=eq.${encodeURIComponent(id)}&empresa_id=eq.${encodeURIComponent(company.id)}&select=id,nuevo_responsable,nueva_ubicacion,nueva_localizacion,observaciones_pdf,autorizada,aplicada`);
+          const session=rows[0];
+          if(!session) throw new Error('Resguardo no disponible.');
+          if(!isSessionAutorizada(session)) throw new Error('Resguardo sin autorización o aplicación.');
+          const entries=[];
+          for(let offset=0;;offset+=500){
+            const page=await readRows(`${SB_URL}/rest/v1/resguardo_entries?session_id=eq.${encodeURIComponent(id)}&select=codigo,codigo_barras,descripcion,ubicacion_original,genero&order=id.asc&limit=500&offset=${offset}`);
+            entries.push(...page);
+            if(page.length<500) break;
+          }
+          assertContext();
+          const notes=options.preserveNotes ? String(session.observaciones_pdf || '') : options.observacionesGenerales;
+          const result=await window.imprimirResguardoSesionPdf({
+            empresaNombre:company.nombre,empresaId:company.id,sessionId:id,
+            nuevoResponsable:session.nuevo_responsable,nuevaUbicacion:session.nueva_ubicacion,
+            nuevaLocalizacion:session.nueva_localizacion,autorizada:session.autorizada,aplicada:session.aplicada,
+            entries,branding,keepNotes:options.preserveNotes,
+            batchOptions:{...options,observacionesGenerales:notes}
+          });
+          let pdfFilename=resguardoPdfFileName(id,session.nuevo_responsable,options.fechaOverride);
+          if(zipFilenames.has(pdfFilename)){
+            const stem=pdfFilename.slice(0,-4);
+            let suffix=2;
+            while(zipFilenames.has(`${stem}_${suffix}.pdf`)) suffix++;
+            pdfFilename=`${stem}_${suffix}.pdf`;
+          }
+          zipFilenames.add(pdfFilename);
+          zip.file(pdfFilename,result.blob);
+          generated++;
+          if(company.id === empresaSeleccionada?.id){
+            const local = histAll.find(s=>s.id===id);
+            if(local){
+              if(!options.preserveNotes) local.observacionesPdf=notes;
+              if(userEmail && userEmail.toLowerCase() !== 'admin@activos.mx') local.pdfGeneradoPor=userEmail;
+            }
+          }
+          if(result.warning){
+            warnings++;
+            issues.push(`${id}: PDF generado, pero no se confirmó su historial: ${result.warning}`);
+          }
+          report.push(`${id} → ${pdfFilename}: ${result.warning ? 'PDF generado; NO se confirmó su historial: '+result.warning : 'PDF generado e historial registrado.'}`);
+          histSelectedIds.delete(id);
+        }catch(error){
+          failed++;
+          const issue=`${id}: ERROR: ${error.message || error}`;
+          report.push(issue);
+          issues.push(issue);
+        }
+      }
+      let zipFilename='';
+      if(generated){
+        show('Preparando descarga ZIP…');
+        zip.file('Resultado_del_lote.txt',[
+          `PDF(s) generados: ${generated}`,
+          `Fallidos: ${failed}`,
+          `Advertencias de historial: ${warnings}`,
+          '',
+          ...report
+        ].join('\n'));
+        const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url;
+        const generatedAt=new Date();
+        const timePart=`${String(generatedAt.getHours()).padStart(2,'0')}-${String(generatedAt.getMinutes()).padStart(2,'0')}-${String(generatedAt.getSeconds()).padStart(2,'0')}`;
+        zipFilename=`Resguardos_${safeFileName(company.nombre).replace(/\s+/g,'_')}_${fechaLocalInput()}_${timePart}.zip`;
+        a.download=zipFilename;
+        document.body.append(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+      }
+      const summary=`${generated} PDF(s) generados, ${failed} fallidos, ${warnings} con advertencia de historial.${zipFilename ? `\nZIP: ${zipFilename}` : ''}`;
+      show([summary,...issues].join('\n'),true);
+    }catch(error){ show(error.message || String(error),true); }
+    finally{ histBulkBusy=false; renderHistorial(); }
+  };
+
+  window.cerrarResumenPdfsMasivos = function(){
+    if(histBulkBusy) return;
+    qs('hist-bulk-status')?.classList.add('hidden');
+    safeSetText('hist-bulk-status-message','');
+    qs('hist-bulk-status-close')?.classList.add('hidden');
+  };
+
+  function setupScrollTopButton(){
+    const button = qs('btn-scroll-top');
+    if(!button) return;
+
+    const scrolledContainers = new Set();
+    const threshold = () => Math.max(520, Math.round((window.innerHeight || 700) * 0.75));
+    const update = () => {
+      const minScroll = threshold();
+      for(const el of scrolledContainers){
+        if(!el.isConnected || !el.getClientRects().length || el.scrollTop < minScroll){
+          scrolledContainers.delete(el);
+        }
+      }
+      const visible = (window.scrollY || window.pageYOffset || 0) >= minScroll ||
+        [...scrolledContainers].some(el => el.scrollTop >= minScroll);
+      button.classList.toggle('is-visible', visible);
+      button.setAttribute('aria-hidden', visible ? 'false' : 'true');
+      button.tabIndex = visible ? 0 : -1;
+    };
+
+    const onNestedScroll = event => {
+      const target = event.target;
+      if(target instanceof HTMLElement && target !== document.body && target !== document.documentElement){
+        if(target.scrollTop >= threshold()) scrolledContainers.add(target);
+        else scrolledContainers.delete(target);
+        update();
+      }
+    };
+
+    const scrollToStart = target => {
+      try{
+        target.scrollTo({
+          top:0,
+          behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth'
+        });
+      }catch{
+        try{ target.scrollTop = 0; }catch{}
+      }
+    };
+
+    window.addEventListener('scroll', update, { passive:true });
+    window.addEventListener('resize', update, { passive:true });
+    document.addEventListener('scroll', onNestedScroll, { passive:true, capture:true });
+    button.addEventListener('click', () => {
+      scrollToStart(window);
+      for(const el of scrolledContainers) if(el.isConnected) scrollToStart(el);
+      update();
+    });
+    window.__updateScrollTopButton = update;
+    update();
+  }
+
+  setupScrollTopButton();
 
   // Estado inicial
   try{ updatePrintButtonState(); syncGlobals(); }catch(e){}
