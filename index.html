@@ -211,6 +211,8 @@
     .editor-sku-link .material-symbols-rounded{font-size:16px; opacity:.72; flex:0 0 auto}
     .editor-pdf-badge{margin:0; padding:1px 5px; cursor:pointer; font:inherit; flex:0 0 auto; background:#FEF2F2; color:#B91C1C; border-color:#FECACA}
     .editor-pdf-badge:hover{background:#FEE2E2}
+    .editor-factura-badge{background:#FEF2F2; color:#B91C1C; border-color:#FECACA; font-size:10px; padding:1px 4px}
+    .editor-pedimento-badge{background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; font-size:10px; padding:1px 4px}
     .editor-sku-link:hover{text-decoration:underline}
     .editor-bottombar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:16px; background:#fff; box-shadow:0 -6px 18px rgba(0,40,100,.04)}
     .editor-bottombar .pagination{margin:0; justify-content:flex-end}
@@ -1214,6 +1216,9 @@
     <div id="view-detalle" class="card hidden">
       <div class="topmenu" style="margin-bottom:10px">
         <button class="btn tonal" onclick="volverASkusDesdeDetalle()"><span class="material-symbols-rounded">arrow_back</span> Volver</button>
+        <button id="btn-detalle-pdf" class="btn tonal" type="button" aria-label="Generar PDF del activo">
+          <span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span> PDF del activo
+        </button>
         <button id="btn-detalle-catalogos" class="btn tonal" onclick="abrirCatalogos()"><span class="material-symbols-rounded">category</span> Catálogos</button>
 
         <span class="divider"></span>
@@ -1247,7 +1252,7 @@
 
       <div class="section full">
         <div class="item">
-          <div class="label"><span class="material-symbols-rounded">description</span> Descripción</div>
+          <div class="label"><span class="material-symbols-rounded">description</span> Descripción, marca, modelo y serie</div>
           <div id="det-descripcion-completa" class="value"></div>
         </div>
       </div>
@@ -1269,9 +1274,25 @@
         <div class="item"><div class="label"><span class="material-symbols-rounded">calendar_clock</span> Fecha de registro</div><div id="det-fecha-reg" class="value"></div></div>
       </div>
 
-      <div class="section full">
+      <div id="det-depreciacion" class="section hidden">
+        <div class="item">
+          <div class="label"><span class="material-symbols-rounded">event</span> Fecha de depreciación</div>
+          <div id="det-fecha-depreciacion" class="value"></div>
+        </div>
+        <div id="det-costo-depreciado-wrap" class="item hidden">
+          <div class="label"><span class="material-symbols-rounded">payments</span> Costo depreciado</div>
+          <div id="det-costo-depreciado" class="value"></div>
+        </div>
+      </div>
+      <p id="det-acciones-estado" role="status" aria-live="polite" class="meta"></p>
+
+      <div id="det-facturas-section" class="section full">
         <div class="label"><span class="material-symbols-rounded">picture_as_pdf</span> Factura(s)</div>
         <div id="det-facturas" style="display:flex; gap:8px; flex-wrap:wrap"></div>
+      </div>
+      <div id="det-pedimentos-section" class="section full hidden">
+        <div class="label"><span class="material-symbols-rounded">picture_as_pdf</span> Pedimento(s)</div>
+        <div id="det-pedimentos" style="display:flex; gap:8px; flex-wrap:wrap"></div>
       </div>
     </div>
 
@@ -1602,6 +1623,9 @@
           <div class="modal-sub" id="pdf-viewer-sub">Vista previa sin descargar</div>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
+          <a id="pdf-viewer-download" class="icon-btn hidden" title="Guardar PDF" aria-label="Guardar PDF" download>
+            <span class="material-symbols-rounded" aria-hidden="true">download</span>
+          </a>
           <button class="icon-btn" type="button" onclick="openPdfViewerNewTab()" title="Abrir en pestaña">
             <span class="material-symbols-rounded">open_in_new</span>
           </button>
@@ -1735,9 +1759,10 @@
     <span class="material-symbols-rounded" aria-hidden="true">arrow_upward</span>
   </button>
 
-  <script src="config.js?v=2026.11.08.4-37"></script>
+  <script src="config.js?v=2026.11.24.2-40"></script>
   <script src="catalogos-realtime.js?v=2026.11.02.2-1"></script>
-  <script src="app.js?v=2026.11.08.4-37"></script>
+  <script src="activo-detalle.js?v=2026.11.24.2-40"></script>
+  <script src="app.js?v=2026.11.24.2-42"></script>
   <script src="entregable.js?v=2026.11.02.1-8"></script>
 </body>
 </html>

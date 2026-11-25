@@ -413,6 +413,7 @@ window.fetch = async function(input, init){
     puedeDescargarMasivoResguardosPDF:false,
     puedeCambiarFechaResguardosHistorial:false,
     puedeDescargarFoto:false,
+    puedeEditarSku:false,
     puedeImportarExportarSkusCsv:false,
     puedeAccederEditorMasivo:false,
     puedeAccederEntregableHtml:false
@@ -432,6 +433,7 @@ window.fetch = async function(input, init){
     puedeDescargarMasivoResguardosPDF:true,
     puedeCambiarFechaResguardosHistorial:true,
     puedeDescargarFoto:true,
+    puedeEditarSku:true,
     puedeImportarExportarSkusCsv:true,
     puedeAccederEditorMasivo:true,
     puedeAccederEntregableHtml:true
@@ -484,6 +486,7 @@ window.fetch = async function(input, init){
       puedeDescargarMasivoResguardosPDF: isSuper || esAdmin || raw?.puedeDescargarMasivoResguardosPDF === true,
       puedeCambiarFechaResguardosHistorial: isSuper || esAdmin || raw?.puedeCambiarFechaResguardosHistorial === true,
       puedeDescargarFoto: isSuper || esAdmin || raw?.puedeDescargarFoto === true,
+      puedeEditarSku: isSuper || esAdmin || raw?.puedeEditarSku === true,
 
       puedeImportarExportarSkusCsv: isSuper || esAdmin || raw?.puedeImportarExportarSkusCsv === true,
       puedeAccederEditorMasivo: isSuper || raw?.puedeAccederEditorMasivo === true,
@@ -537,7 +540,7 @@ window.fetch = async function(input, init){
         "puedeAccederResguardoDashboard","puedeAccederResguardosHistorial",
         "puedeBorrarResguardosHistorial","puedeAutorizarAplicarResguardosHistorial",
         "puedeExportarResCvsPDF","puedeDescargarMasivoResguardosPDF","puedeCambiarFechaResguardosHistorial",
-        "puedeDescargarFoto",
+        "puedeDescargarFoto","puedeEditarSku",
         "puedeImportarExportarSkusCsv",
         "puedeAccederEditorMasivo",
         "puedeAccederEntregableHtml"
@@ -2449,6 +2452,7 @@ async function cargarEmpresasAutorizadas(){
   // ✅ Permisos por empresa (servidor: empresa_user_permissions)
   // Actualiza los permisos al entrar a la empresa: pueden cambiar desde Android.
   await cargarPermisosEmpresaActual(true);
+  cargarReglasDepreciacion(empresaSeleccionada).catch(()=>{});
 
   switchView('view-selector');
   try{ applyPermisosUI(); }catch{}
@@ -3327,10 +3331,123 @@ function resetChipFiltroUI(){
     }
   });
 
+  const detalleWeb = window.ActivoDetalleWeb;
+  let detalleCarga = 0;
+
+  function detalleActualSigue(empresa, activo, carga){
+    return empresa === empresaSeleccionada && cacheSkus[indiceActual]?.id === activo.id &&
+      carga === detalleCarga && !qs('view-detalle').classList.contains('hidden');
+  }
+
+  function cargarReglasDepreciacion(empresa){
+    if(empresa.reglasPendientes) return empresa.reglasPendientes;
+    const consulta = (async()=>{
+      const url = `${SB_URL}/rest/v1/empresas?id=eq.${encodeURIComponent(empresa.id)}&select=depreciacion`;
+      const {data} = await fetchSupabaseJsonWithRetry(url, {cache:'no-store', headers:{
+        apikey:SB_KEY, Authorization:`Bearer ${sessionToken}`
+      }}, {attempts:2, errorMessage:'No se pudo consultar la depreciación'});
+      if(!data?.length) throw new Error('No se encontró la configuración de la empresa.');
+      return detalleWeb.normalizarReglas(data[0].depreciacion);
+    })();
+    empresa.reglasPendientes = consulta.finally(()=>{ empresa.reglasPendientes = null; });
+    return empresa.reglasPendientes;
+  }
+
+  async function leerActivoParaDetalle(empresa, activo){
+    const endpoint = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresa.id)}&id=eq.${encodeURIComponent(activo.id)}`;
+    const {data} = await fetchSupabaseJsonWithRetry(
+      endpoint + '&select=fecha_depreciacion,baja_at',
+      {cache:'no-store', headers:{apikey:SB_KEY, Authorization:`Bearer ${sessionToken}`}},
+      {attempts:2, errorMessage:'No se pudieron consultar los datos del activo'}
+    );
+    if(!data?.length) throw new Error('El activo ya no está disponible.');
+    return data[0];
+  }
+
+  function mostrarDepreciacionDetalle(reglas, activo, fecha){
+    show(qs('det-depreciacion'), reglas?.habilitada === true);
+    if(!reglas?.habilitada) return;
+    const visible = detalleWeb.fechaVisible(fecha);
+    qs('det-fecha-depreciacion').textContent = visible || 'Sin capturar';
+    const costo = detalleWeb.costoDepreciado(activo.costo, fecha, reglas);
+    show(qs('det-costo-depreciado-wrap'), !!visible);
+    qs('det-costo-depreciado').textContent = costo == null ? 'Sin costo registrado' : fmtMoney(costo);
+  }
+
+  async function actualizarDepreciacionDetalle(empresa, activo, carga){
+    try{
+      const reglas = await cargarReglasDepreciacion(empresa);
+      if(!detalleActualSigue(empresa, activo, carga)) return;
+      let fecha = '';
+      if(reglas.habilitada && activo.id){
+        const extra = await leerActivoParaDetalle(empresa, activo);
+        fecha = extra.fecha_depreciacion;
+      }
+      if(detalleActualSigue(empresa, activo, carga)) mostrarDepreciacionDetalle(reglas, activo, fecha);
+    }catch(e){
+      if(detalleActualSigue(empresa, activo, carga)) qs('det-acciones-estado').textContent = 'No se pudo consultar la depreciación.';
+    }
+  }
+
+  qs('btn-detalle-pdf').addEventListener('click', async ()=>{
+    const empresa = empresaSeleccionada, activo = cacheSkus[indiceActual], carga = detalleCarga;
+    if(!empresa?.id || !activo?.id || !canSkus()) return;
+    const boton = qs('btn-detalle-pdf'), status = qs('det-acciones-estado');
+    const exportarFoto = canDescargarFoto();
+    boton.disabled = true;
+    status.textContent = 'Preparando PDF…';
+    try{
+      const headers = {apikey:SB_KEY, Authorization:`Bearer ${sessionToken}`};
+      const [reglas, extra, logoUrl, adjuntos] = await Promise.all([
+        cargarReglasDepreciacion(empresa),
+        leerActivoParaDetalle(empresa, activo),
+        fetchEmpresaLogoUrl(empresa.nombre).catch(()=>null),
+        exportarFoto ? cargarAdjuntosDetalleSku(activo.sku, empresa) : []
+      ]);
+      if(!detalleActualSigue(empresa, activo, carga)) return;
+      const principal = adjuntos.filter(isFotoAdjunto).sort((a,b)=>fotoOrdenAdjunto(a)-fotoOrdenAdjunto(b))[0];
+      let foto = null;
+      if(principal && canDescargarFoto()){
+        const respuesta = await fetch(storageObjectUrl(principal.bucket, principal.path), {headers});
+        if(!respuesta.ok) throw new Error('No se pudo cargar la fotografía del activo.');
+        foto = await respuesta.blob();
+      }
+      const logo = logoUrl ? await fetch(logoUrl).then(r=>r.ok ? r.blob() : null).catch(()=>null) : null;
+      const ubicaciones = parseCantidadesUbicacion(activo.cantidades_ubicacion);
+      const cantidad = ubicaciones.length ? ubicaciones.reduce((suma,item)=>suma+item.cantidad,0) : activo.cantidad;
+      const costo = detalleWeb.costoDepreciado(activo.costo, extra.fecha_depreciacion, reglas);
+      const pdf = await detalleWeb.crearPdf({
+        empresa:empresa.nombre, foto, logo, ubicaciones,
+        notaFoto: !exportarFoto && isTrue(activo.has_foto) ? 'Sin permiso para exportar la foto' :
+          isTrue(activo.has_foto) ? 'Foto no disponible' : 'Sin foto registrada',
+        campos:[
+          ['SKU',activo.sku], ['Código de barras',activo.codigo_barras], ['Descripción',activo.descripcion],
+          ['Marca',activo.marca], ['Modelo',activo.modelo], ['Serie',activo.numero_serie],
+          ['Género',activo.genero], ['Cantidad',cantidad], ['Costo original',fmtMoney(activo.costo)],
+          ['Fecha de adquisición',fmtDate(activo.fecha_adquisicion)],
+          ['Fecha de depreciación',reglas.habilitada ? detalleWeb.fechaVisible(extra.fecha_depreciacion) : ''],
+          ['Costo depreciado',costo == null ? '' : fmtMoney(costo)], ['Responsable',activo.responsable],
+          ['Ubicación',activo.ubicacion], ['Localización',activo.localizacion],
+          ['Fecha de registro',fmtDate(activo.created_at)], ['Estatus',isTrue(activo.dado_de_baja) ? 'Baja' : 'Activo'],
+          ['Fecha de baja',isTrue(activo.dado_de_baja) ? formatCsvDateTimeMexico(extra.baja_at) : '']
+        ]
+      });
+      if(!detalleActualSigue(empresa, activo, carga) || (foto && !canDescargarFoto())) return;
+      mostrarPdfEnVisor(pdf, `Detalle_${String(activo.sku).replace(/[^a-z0-9._-]/gi,'_').slice(0,64)}.pdf`, true);
+      status.textContent = '';
+    }catch(e){
+      if(detalleActualSigue(empresa, activo, carga)) status.textContent = e.message || 'No se pudo generar el PDF.';
+    }finally{ boton.disabled = false; }
+  });
+
   function verDetalleByIndex(idx){
     indiceActual = idx;
     const i = cacheSkus[idx];
     switchView('view-detalle');
+    const carga = ++detalleCarga;
+    show(qs('det-depreciacion'), false);
+    qs('det-acciones-estado').textContent = '';
+    actualizarDepreciacionDetalle(empresaSeleccionada, i, carga);
 
     const sku    = getv(i,'sku');
     skuRetornoDetalle = String(sku || '').trim();
@@ -3384,17 +3501,17 @@ function resetChipFiltroUI(){
     }
   }
 
-  async function cargarAdjuntosDetalleSku(sku){
-    if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre) return [];
+  async function cargarAdjuntosDetalleSku(sku, empresa = empresaSeleccionada){
+    if(!empresa?.id && !empresa?.nombre) return [];
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     const selectCols = encodeURIComponent('sku,tipo,bucket,path,filename,mime');
     const urls = [];
 
-    if(empresaSeleccionada?.id){
-      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
+    if(empresa?.id){
+      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresa.id)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
     }
-    if(empresaSeleccionada?.nombre){
-      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresaSeleccionada.nombre)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
+    if(empresa?.nombre){
+      urls.push(`${SB_URL}/rest/v1/adjuntos?empresa=eq.${encodeURIComponent(empresa.nombre)}&sku=eq.${encodeURIComponent(sku)}&select=${selectCols}`);
     }
 
     const all = [];
@@ -3429,7 +3546,13 @@ function resetChipFiltroUI(){
 
   function isPdfAdjunto(a){
     const t = adjuntoTipo(a);
-    return ['pdf','factura','factura_pdf','documento_pdf'].includes(t) || t === 'application/pdf' || /\.pdf$/i.test(String(a?.path || a?.filename || ''));
+    return ['pdf','factura','factura_pdf','pedimento','documento_pdf'].includes(t) || t === 'application/pdf' || /\.pdf$/i.test(String(a?.path || a?.filename || ''));
+  }
+
+  function isPedimentoPdfAdjunto(a){
+    const tipo = String(a?.tipo || '').trim().toLowerCase();
+    const nombre = `${a?.filename || ''} ${a?.path || ''}`;
+    return tipo === 'pedimento' || /pedimento/i.test(nombre);
   }
 
   function adjuntoNombre(a, fallback){
@@ -3472,14 +3595,21 @@ function resetChipFiltroUI(){
 
     const rawBlob = await rf.blob();
     const blob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type:'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    mostrarPdfEnVisor(blob, adjuntoNombre(a, 'PDF'));
+  }
 
+  function mostrarPdfEnVisor(blob, nombre, permitirGuardar = false){
     closePdfViewer();
+    const url = URL.createObjectURL(blob);
     pdfViewerObjectUrl = url;
-    pdfViewerNombre = adjuntoNombre(a, 'PDF');
+    pdfViewerNombre = nombre;
+    const descargar = qs('pdf-viewer-download');
+    descargar.href = url;
+    descargar.download = nombre;
+    show(descargar, permitirGuardar);
 
     safeSetText('pdf-viewer-title', pdfViewerNombre || 'Visor PDF');
-    safeSetText('pdf-viewer-sub', 'Vista previa sin descargar');
+    safeSetText('pdf-viewer-sub', permitirGuardar ? 'Detalle del activo' : 'Vista previa sin descargar');
     const frame = qs('pdf-viewer-frame');
     const modal = qs('pdf-viewer-modal');
     if(frame) frame.src = `${url}#toolbar=1&navpanes=0&view=FitH`;
@@ -3568,37 +3698,50 @@ function resetChipFiltroUI(){
 
   async function cargarFacturas(sku){
     const cont = qs('det-facturas');
+    const pedimentosCont = qs('det-pedimentos');
+    const pedimentosSection = qs('det-pedimentos-section');
     cont.innerHTML = '';
+    if(pedimentosCont) pedimentosCont.innerHTML = '';
+    show(pedimentosSection, false);
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
       const adjuntos = await cargarAdjuntosDetalleSku(sku);
       const files = adjuntos.filter(isPdfAdjunto);
+      const facturas = files.filter(f => !isPedimentoPdfAdjunto(f));
+      const pedimentos = files.filter(isPedimentoPdfAdjunto);
 
-      if(!files.length){
+      if(!facturas.length){
         const actual = cacheSkus[indiceActual] || {};
         if(isTrue(getRaw(actual,'has_factura_pdf','hasFacturaPdf','hasFacturaPDF'))){
           cont.innerHTML = `<div class="chip" title="El activo está marcado con PDF, pero no se encontró el adjunto en Storage."><span class="material-symbols-rounded">info</span><span>PDF marcado, adjunto no localizado</span></div>`;
         }
-        return;
       }
 
-      files.forEach((f, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'btn tonal';
-        btn.type = 'button';
-        const nombre = adjuntoNombre(f, `PDF ${idx + 1}`);
-        btn.title = nombre;
-        btn.innerHTML = `<span class="material-symbols-rounded">preview</span> Ver PDF${files.length > 1 ? ' ' + (idx + 1) : ''}`;
-        btn.onclick = async (ev)=>{
-          ev.stopPropagation();
-          try{
-            await abrirPdfEnVisor(f, headers, 'PDF');
-          }catch(e){
-            alert(e.message || 'Error al abrir PDF');
-          }
-        };
-        cont.appendChild(btn);
-      });
+      const renderPdfButtons = (container, documents, label) => {
+        documents.forEach((f, idx) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn tonal';
+          btn.type = 'button';
+          const nombre = adjuntoNombre(f, `${label} PDF ${idx + 1}`);
+          btn.title = nombre;
+          btn.innerHTML = `<span class="material-symbols-rounded">preview</span> Ver ${label}${documents.length > 1 ? ` ${idx + 1}` : ''}`;
+          btn.onclick = async (ev)=>{
+            ev.stopPropagation();
+            try{
+              await abrirPdfEnVisor(f, headers, `${label} PDF`);
+            }catch(e){
+              alert(e.message || `Error al abrir ${label} PDF`);
+            }
+          };
+          container.appendChild(btn);
+        });
+      };
+
+      renderPdfButtons(cont, facturas, 'factura');
+      if(pedimentos.length && pedimentosCont){
+        renderPdfButtons(pedimentosCont, pedimentos, 'pedimento');
+        show(pedimentosSection, true);
+      }
     }catch(e){
       console.error(e);
       cont.innerHTML = `<div class="chip"><span class="material-symbols-rounded">error</span><span>No se pudo cargar el PDF</span></div>`;
@@ -3872,6 +4015,7 @@ function resetChipFiltroUI(){
   let editorActivosBulkAttachRunning = false;
   let editorActivosColDragFrom = null;
   let editorActivosColDragMoved = false;
+  let editorActivosReglasDepreciacion = null;
 
   // Sticky fijas a la izquierda (no se reordenan). El resto se puede arrastrar.
   const EDITOR_ACTIVOS_STICKY_FIELDS = ['__select', 'sku', 'codigo_barras', 'descripcion'];
@@ -3891,19 +4035,21 @@ function resetChipFiltroUI(){
     { field:'cantidad', label:'Cantidad', width:105, min:85, type:'number' },
     { field:'costo', label:'Costo', width:115, min:90, type:'number' },
     { field:'fecha_adquisicion', label:'Fecha adquisición', width:150, min:125, type:'date' },
+    { field:'fecha_depreciacion', label:'Fecha de depreciación', width:165, min:140, type:'date' },
+    { field:'costo_depreciado', label:'Costo depreciado', width:155, min:130, type:'number', readonly:true },
     { field:'dado_de_baja', label:'Dado de baja', width:130, min:105, type:'bool' },
     { field:'baja_at', label:'Fecha baja', width:135, min:115, type:'date' }
   ];
 
   const EDITOR_ACTIVOS_EDITABLES = [
-    'descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','dado_de_baja','baja_at'
+    'descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at'
   ];
-  // CSV: MISMO orden y nombres que Gestión SKUs / Android (ANDROID_ACTIVOS_CSV_HEADERS)
+  // CSV del editor con los campos de depreciación al final.
   // sku,Descripcion,Marca,Modelo,Serie,genero,ubicacion,localizacion,responsable,
-  // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt
+  // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt,fechaDepreciacion,costoDepreciado
   const EDITOR_ACTIVOS_CSV_FIELDS = [
     'sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable',
-    'codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at'
+    'codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at','fecha_depreciacion','costo_depreciado'
   ];
   const EDITOR_ACTIVOS_CSV_LABELS = {
     sku:'sku',
@@ -3921,7 +4067,9 @@ function resetChipFiltroUI(){
     costo:'costo',
     fecha_adquisicion:'fechaAdquisicion',
     dado_de_baja:'dadoDeBaja',
-    baja_at:'bajaAt'
+    baja_at:'bajaAt',
+    fecha_depreciacion:'fechaDepreciacion',
+    costo_depreciado:'costoDepreciado'
   };
 
   function editorActivosHasUnsaved(){ return editorActivosModified.size > 0; }
@@ -3956,6 +4104,20 @@ function resetChipFiltroUI(){
       .map(c => c.field)
       .filter(f => !EDITOR_ACTIVOS_STICKY_FIELDS.includes(f));
   }
+  function editorActivosTieneDepreciacion(){
+    return editorActivosReglasDepreciacion?.habilitada === true;
+  }
+  function editorActivosCalcularCostoDepreciado(row){
+    if(!editorActivosTieneDepreciacion() || !row?.fecha_depreciacion) return null;
+    return detalleWeb.costoDepreciado(row.costo, row.fecha_depreciacion, editorActivosReglasDepreciacion);
+  }
+  function editorActivosCostoDepreciadoTexto(row){
+    if(!row?.fecha_depreciacion) return '';
+    return row.costo_depreciado == null ? 'Sin costo registrado' : fmtMoney(row.costo_depreciado);
+  }
+  function editorActivosActualizarCostoDepreciado(row){
+    row.costo_depreciado = editorActivosCalcularCostoDepreciado(row);
+  }
   function editorActivosLoadColumnOrder(){
     const defaults = editorActivosDefaultMovableOrder();
     try{
@@ -3985,7 +4147,9 @@ function resetChipFiltroUI(){
     if(!editorActivosColumnOrder.length) editorActivosLoadColumnOrder();
     const rest = editorActivosColumnOrder
       .map(f => editorActivosColByField(f))
-      .filter(c => c && (c.always || !editorActivosHiddenColumns.has(c.field)));
+      .filter(c => c &&
+        (editorActivosTieneDepreciacion() || !['fecha_depreciacion','costo_depreciado'].includes(c.field)) &&
+        (c.always || !editorActivosHiddenColumns.has(c.field)));
     return sticky.concat(rest);
   }
   function editorActivosColumnWidth(col){
@@ -4268,7 +4432,7 @@ function resetChipFiltroUI(){
     if(field === 'dado_de_baja') return editorActivosBool(a) === editorActivosBool(b);
     if(field === 'cantidad') return String(Number(a || 0)) === String(Number(b || 0));
     if(field === 'costo') return String(editorActivosSafeNumber(a) ?? '') === String(editorActivosSafeNumber(b) ?? '');
-    if(field === 'fecha_adquisicion' || field === 'baja_at') return String(parseCsvDateToDateOnly(a) || '') === String(parseCsvDateToDateOnly(b) || '');
+    if(field === 'fecha_adquisicion' || field === 'fecha_depreciacion' || field === 'baja_at') return String(parseCsvDateToDateOnly(a) || '') === String(parseCsvDateToDateOnly(b) || '');
     return String(a ?? '').trim() === String(b ?? '').trim();
   }
   function editorActivosSetModifiedField(key, field, val){
@@ -4307,15 +4471,28 @@ function resetChipFiltroUI(){
     if(!empresaSeleccionada?.id){ alert('Selecciona empresa'); return; }
     if(!canEditorActivos()){ alert('No tienes permiso de Editor Masivo para esta empresa.'); return; }
     if(!editorActivosConfirmDiscard('Tienes cambios sin guardar.\n\n¿Quieres recargar los activos y descartar esos cambios?')) return;
-    const empresaIdCarga = String(empresaSeleccionada.id);
+    const empresaCarga = empresaSeleccionada;
+    const empresaIdCarga = String(empresaCarga.id);
     const ctxCarga = (typeof getCtxVersion === 'function') ? getCtxVersion() : 0;
     const body = qs('editor-activos-body');
     if(body) body.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:28px; color:#64748B; font-weight:800">Cargando activos...</td></tr>';
     editorActivosStatus('Cargando activos de la empresa...');
     editorActivosModified = new Map(); editorActivosSelected = new Set(); editorActivosOriginal = new Map();
+    editorActivosReglasDepreciacion = null;
+    let reglasDepreciacionNoDisponibles = false;
     try{
+      let reglasDepreciacionCarga = null;
+      try{
+        reglasDepreciacionCarga = await cargarReglasDepreciacion(empresaCarga);
+      }catch(e){
+        console.warn('No se pudieron consultar las reglas de depreciación para el editor', e);
+        reglasDepreciacionNoDisponibles = true;
+      }
+      if(String(empresaSeleccionada?.id || '') !== empresaIdCarga || ((typeof getCtxVersion === 'function') && getCtxVersion() !== ctxCarga)) return;
+      editorActivosReglasDepreciacion = reglasDepreciacionCarga;
+      editorActivosInitColumnTools();
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at','has_factura_pdf'];
+      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at','has_factura_pdf'];
       const limit = 1000;
       let offset = 0;
       let all = [];
@@ -4335,13 +4512,19 @@ function resetChipFiltroUI(){
         marca: r.marca ?? '', modelo: r.modelo ?? '', numero_serie: r.numero_serie ?? '',
         genero: r.genero ?? '', ubicacion: r.ubicacion ?? '', localizacion: r.localizacion ?? '', responsable: r.responsable ?? '', codigo_barras: r.codigo_barras ?? '',
         cantidad: r.cantidad ?? '', cantidades_ubicacion: parseCantidadesUbicacion(r.cantidades_ubicacion), costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
+        fecha_depreciacion: editorActivosToInputDate(r.fecha_depreciacion), costo_depreciado: null,
         dado_de_baja: !!r.dado_de_baja, baja_at: editorActivosToInputDate(r.baja_at), created_at: r.created_at ?? '',
         _hasFoto: false,
         _fotoCount: 0,
         _hasPdf: editorActivosBool(r.has_factura_pdf),
         _pdfCount: editorActivosBool(r.has_factura_pdf) ? 1 : 0,
-        _pdfAdjuntos: []
+        _pdfAdjuntos: [],
+        _facturaAdjuntos: [],
+        _pedimentoAdjuntos: [],
+        _facturaCount: editorActivosBool(r.has_factura_pdf) ? 1 : 0,
+        _pedimentoCount: 0
       }));
+      editorActivosRows.forEach(editorActivosActualizarCostoDepreciado);
       editorActivosRows.forEach(r => editorActivosOriginal.set(editorActivosKey(r), editorActivosCloneComparable(r)));
 
       let totalConFoto = 0, totalMulti = 0, totalTres = 0, totalConPdf = 0;
@@ -4371,9 +4554,15 @@ function resetChipFiltroUI(){
         });
         editorActivosRows.forEach(r => {
           const pdfs = editorActivosSortedPdfs(pdfsBySku.get(String(r.sku || '').trim()));
+          const facturas = pdfs.filter(pdf => !isPedimentoPdfAdjunto(pdf));
+          const pedimentos = pdfs.filter(isPedimentoPdfAdjunto);
           r._pdfAdjuntos = pdfs;
           r._hasPdf = pdfs.length > 0 || !!r._hasPdf;
           r._pdfCount = pdfs.length || (r._hasPdf ? 1 : 0);
+          r._facturaAdjuntos = facturas;
+          r._pedimentoAdjuntos = pedimentos;
+          r._facturaCount = facturas.length || (r._hasPdf && !pedimentos.length ? 1 : 0);
+          r._pedimentoCount = pedimentos.length;
           if(r._hasPdf) totalConPdf++;
         });
       }catch(e){
@@ -4381,6 +4570,10 @@ function resetChipFiltroUI(){
         editorActivosRows.forEach(r => {
           r._pdfAdjuntos = [];
           r._pdfCount = r._hasPdf ? 1 : 0;
+          r._facturaAdjuntos = [];
+          r._pedimentoAdjuntos = [];
+          r._facturaCount = r._hasPdf ? 1 : 0;
+          r._pedimentoCount = 0;
           if(r._hasPdf) totalConPdf++;
         });
       }
@@ -4390,7 +4583,8 @@ function resetChipFiltroUI(){
       editorActivosLastSignature = '';
       editorActivosStatus(
         `Editor cargado: ${editorActivosRows.length} activo(s). ` +
-        `Con foto: ${totalConFoto} · 2+ fotos: ${totalMulti} · 3 fotos: ${totalTres} · Con PDF: ${totalConPdf}.`
+        `Con foto: ${totalConFoto} · 2+ fotos: ${totalMulti} · 3 fotos: ${totalTres} · Con PDF: ${totalConPdf}.` +
+        (reglasDepreciacionNoDisponibles ? ' No se pudo consultar la configuración de depreciación.' : '')
       );
       aplicarFiltrosEditorActivos();
     }catch(e){
@@ -4522,6 +4716,10 @@ function resetChipFiltroUI(){
     const key = editorActivosKey(row);
     const modified = !!(editorActivosModified.get(key) || {})[field];
     const cls = modified ? 'editor-input editor-modified' : 'editor-input';
+    if(field === 'costo_depreciado'){
+      const value = editorActivosCostoDepreciadoTexto(row);
+      return `<td data-col="${field}" class="editor-readonly" title="Calculado según la fecha y las reglas de depreciación de la empresa">${escapeHtml(value)}</td>`;
+    }
     if(field === 'cantidad' && parseCantidadesUbicacion(row.cantidades_ubicacion).length){
       return `<td data-col="${field}" class="qty-locked-cell" title="Cantidad calculada por las cantidades registradas por ubicación"><div class="qty-locked-wrap"><input class="editor-input qty-locked-input" type="number" value="${escapeHtml(row[field] ?? '')}" readonly aria-readonly="true"><span class="material-symbols-rounded" title="Edítala desde el lápiz de Cantidad por ubicación">lock</span></div></td>`;
     }
@@ -4541,14 +4739,18 @@ function resetChipFiltroUI(){
       const fotoBadge = n > 0
         ? `<span class="editor-foto-badge ${badgeClass}" title="${n} foto(s) · clic para ver galería"><span class="material-symbols-rounded">photo_camera</span>×${n}</span>`
         : '';
-      const pdfCount = Number(row._pdfCount || 0) || (row._hasPdf ? 1 : 0);
-      const pdfBadge = pdfCount > 0
-        ? `<button type="button" class="editor-foto-badge editor-pdf-badge" data-key="${escapeHtml(key)}" onclick="editorActivosVerPdfSku(this.dataset.key)" title="Abrir PDF del SKU (${pdfCount})" aria-label="Abrir PDF del SKU"><span class="material-symbols-rounded">picture_as_pdf</span>×${pdfCount}</button>`
+      const facturaCount = Number(row._facturaCount || 0);
+      const pedimentoCount = Number(row._pedimentoCount || 0);
+      const facturaBadge = facturaCount > 0
+        ? `<button type="button" class="editor-foto-badge editor-pdf-badge editor-factura-badge" data-key="${escapeHtml(key)}" onclick="editorActivosVerPdfSku(this.dataset.key,'factura')" title="Abrir factura(s) PDF (${facturaCount})" aria-label="Abrir factura(s) PDF"><span class="material-symbols-rounded">picture_as_pdf</span>Fac ×${facturaCount}</button>`
+        : '';
+      const pedimentoBadge = pedimentoCount > 0
+        ? `<button type="button" class="editor-foto-badge editor-pdf-badge editor-pedimento-badge" data-key="${escapeHtml(key)}" onclick="editorActivosVerPdfSku(this.dataset.key,'pedimento')" title="Abrir pedimento(s) PDF (${pedimentoCount})" aria-label="Abrir pedimento(s) PDF"><span class="material-symbols-rounded">picture_as_pdf</span>Ped ×${pedimentoCount}</button>`
         : '';
       const title = n > 0
         ? (n === 1 ? 'Ver foto del SKU' : `Ver galería (${n} fotos) del SKU`)
         : 'SKU sin foto registrada';
-      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><div class="editor-sku-actions"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoBadge}</button>${pdfBadge}</div></td>`;
+      return `<td data-col="sku" class="editor-sticky-1 editor-readonly"><div class="editor-sku-actions"><button type="button" class="editor-sku-link" data-key="${escapeHtml(key)}" onclick="editorActivosVerFotoSku(this.dataset.key)" title="${title}"><b>${escapeHtml(row.sku)}</b>${fotoBadge}</button>${facturaBadge}${pedimentoBadge}</div></td>`;
     }
     if(col.field === 'descripcion'){
       // Editable (sticky): misma celda de input que el resto de campos
@@ -4592,8 +4794,13 @@ function resetChipFiltroUI(){
     }
     let val = input.value;
     if(field === 'dado_de_baja') val = input.value === '1';
-    if(field === 'fecha_adquisicion' || field === 'baja_at') val = parseCsvDateToDateOnly(val) || '';
+    if(field === 'fecha_adquisicion' || field === 'fecha_depreciacion' || field === 'baja_at') val = parseCsvDateToDateOnly(val) || '';
     row[field] = val;
+    if(field === 'fecha_depreciacion' || field === 'costo'){
+      editorActivosActualizarCostoDepreciado(row);
+      const costoCell = input.closest('tr')?.querySelector('[data-col="costo_depreciado"]');
+      if(costoCell) costoCell.textContent = editorActivosCostoDepreciadoTexto(row);
+    }
     editorActivosSetModifiedField(key, field, val);
     editorActivosUpdateSearch(row);
     const isMod = !!(editorActivosModified.get(key) || {})[field];
@@ -4640,6 +4847,7 @@ function resetChipFiltroUI(){
     const orig = editorActivosOriginal.get(key);
     if(!row || !orig) return;
     EDITOR_ACTIVOS_EDITABLES.forEach(f => { row[f] = orig[f]; });
+    editorActivosActualizarCostoDepreciado(row);
     editorActivosModified.delete(key);
     editorActivosUpdateSearch(row);
   }
@@ -4664,7 +4872,8 @@ function resetChipFiltroUI(){
     if(!editorActivosSelected.size){ alert('Selecciona primero una o más filas.'); return; }
     const selectedRows = editorActivosRows.filter(r => editorActivosSelected.has(editorActivosKey(r)));
     const editableFields = EDITOR_ACTIVOS_EDITABLES.filter(field =>
-      field !== 'cantidad' || !selectedRows.some(row => parseCantidadesUbicacion(row.cantidades_ubicacion).length)
+      (field !== 'cantidad' || !selectedRows.some(row => parseCantidadesUbicacion(row.cantidades_ubicacion).length)) &&
+      (field !== 'fecha_depreciacion' || editorActivosTieneDepreciacion())
     );
     const labels = editableFields.map((f,i)=>`${i+1}. ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===f)?.label || f}`).join('\n');
     const op = prompt(`Campo a modificar en ${editorActivosSelected.size} activo(s):\n\n${labels}\n\nEscribe el número o nombre del campo:`);
@@ -4674,7 +4883,7 @@ function resetChipFiltroUI(){
     let val = prompt(`Nuevo valor para ${EDITOR_ACTIVOS_COLUMNS.find(c=>c.field===field)?.label || field}:\n\nPara Dado de baja usa Sí/No o 1/0.\nPara fecha usa AAAA-MM-DD o DD/MM/AAAA.`);
     if(val === null) return;
     if(field === 'dado_de_baja') val = editorActivosBool(val);
-    if(field === 'fecha_adquisicion' || field === 'baja_at'){
+    if(field === 'fecha_adquisicion' || field === 'fecha_depreciacion' || field === 'baja_at'){
       val = parseCsvDateToDateOnly(val) || '';
       if(!val && !confirm('La fecha quedó vacía o no fue reconocida. ¿Continuar?')) return;
     }
@@ -4692,6 +4901,7 @@ function resetChipFiltroUI(){
     selectedRows.forEach(row => {
       const key = editorActivosKey(row);
       row[field] = val;
+      if(field === 'fecha_depreciacion' || field === 'costo') editorActivosActualizarCostoDepreciado(row);
       editorActivosSetModifiedField(key, field, val);
       editorActivosUpdateSearch(row);
     });
@@ -4700,7 +4910,8 @@ function resetChipFiltroUI(){
   }
 
   function editorActivosColumnasConfig(){
-    const optional = EDITOR_ACTIVOS_COLUMNS.filter(c => !c.always);
+    const optional = EDITOR_ACTIVOS_COLUMNS.filter(c => !c.always &&
+      (editorActivosTieneDepreciacion() || !['fecha_depreciacion','costo_depreciado'].includes(c.field)));
     const txt = optional.map((c,i)=>`${i+1}. [${editorActivosHiddenColumns.has(c.field)?'oculta':'visible'}] ${c.label}`).join('\n');
     const ans = prompt(`Configurar columnas\n\nEscribe números de columnas a OCULTAR separados por coma.\nDeja vacío para mostrar todas.\n\n${txt}`,[...editorActivosHiddenColumns].map(f => optional.findIndex(c=>c.field===f)+1).filter(n=>n>0).join(','));
     if(ans === null) return;
@@ -4741,7 +4952,7 @@ function resetChipFiltroUI(){
       if(raw && n === null) errors.push('Costo inválido');
       if(n !== null && n < 0) errors.push('Costo negativo');
     }
-    ['fecha_adquisicion','baja_at'].forEach(f => {
+    ['fecha_adquisicion','fecha_depreciacion','baja_at'].forEach(f => {
       if(Object.prototype.hasOwnProperty.call(changes,f)){
         const raw = String(changes[f] ?? '').trim();
         if(raw && !parseCsvDateToDateOnly(raw)) errors.push(`${f} inválida`);
@@ -4769,7 +4980,7 @@ function resetChipFiltroUI(){
         let val = changes[field];
         if(['cantidad'].includes(field)) val = Number(String(val ?? '').trim()) || 0;
         else if(['costo'].includes(field)) val = editorActivosSafeNumber(val);
-        else if(field === 'fecha_adquisicion') val = parseCsvDateToDateOnly(val) || null;
+        else if(field === 'fecha_adquisicion' || field === 'fecha_depreciacion') val = parseCsvDateToDateOnly(val) || null;
         else if(field === 'baja_at') val = parseCsvDateToEpochMs(val); // BIGINT epoch ms
         else if(field === 'dado_de_baja') val = editorActivosBool(val);
         else val = String(val ?? '').trim();
@@ -4930,7 +5141,7 @@ function resetChipFiltroUI(){
     }
   }
 
-  async function editorActivosVerPdfSku(key){
+  async function editorActivosVerPdfSku(key, tipoDocumento='factura'){
     if(!empresaSeleccionada?.id && !empresaSeleccionada?.nombre){ alert('Selecciona empresa.'); return; }
     const row = editorActivosRows.find(r => editorActivosKey(r) === String(key));
     if(!row){ alert('No se encontró el SKU en el editor.'); return; }
@@ -4940,26 +5151,34 @@ function resetChipFiltroUI(){
     const oldStatus = qs('editor-activos-status')?.textContent || '';
     const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
     try{
-      let pdfs = editorActivosSortedPdfs(row._pdfAdjuntos);
+      const seleccionarTipoPdf = adjuntos => editorActivosSortedPdfs(adjuntos)
+        .filter(pdf => tipoDocumento === 'pedimento'
+          ? isPedimentoPdfAdjunto(pdf)
+          : !isPedimentoPdfAdjunto(pdf));
+      let pdfs = seleccionarTipoPdf(tipoDocumento === 'pedimento' ? row._pedimentoAdjuntos : row._facturaAdjuntos);
       if(!pdfs.length){
-        editorActivosStatus(`Buscando PDF del SKU ${sku}...`);
+        editorActivosStatus(`Buscando ${tipoDocumento} PDF del SKU ${sku}...`);
         const bySku = await editorActivosFetchPdfsBatch([row], headers);
-        pdfs = editorActivosSortedPdfs(bySku.get(sku));
-        row._pdfAdjuntos = pdfs;
-        row._hasPdf = pdfs.length > 0 || !!row._hasPdf;
-        row._pdfCount = pdfs.length || (row._hasPdf ? 1 : 0);
+        row._pdfAdjuntos = editorActivosSortedPdfs(bySku.get(sku));
+        row._facturaAdjuntos = row._pdfAdjuntos.filter(pdf => !isPedimentoPdfAdjunto(pdf));
+        row._pedimentoAdjuntos = row._pdfAdjuntos.filter(isPedimentoPdfAdjunto);
+        row._hasPdf = row._pdfAdjuntos.length > 0 || !!row._hasPdf;
+        row._pdfCount = row._pdfAdjuntos.length || (row._hasPdf ? 1 : 0);
+        row._facturaCount = row._facturaAdjuntos.length || (row._hasPdf && !row._pedimentoAdjuntos.length ? 1 : 0);
+        row._pedimentoCount = row._pedimentoAdjuntos.length;
+        pdfs = seleccionarTipoPdf(tipoDocumento === 'pedimento' ? row._pedimentoAdjuntos : row._facturaAdjuntos);
         renderEditorActivos();
       }
       if(!pdfs.length){
-        editorActivosStatus(oldStatus || `SKU ${sku} sin PDF localizado.`);
-        alert(`No se encontró un archivo PDF en Storage para el SKU ${sku}.`);
+        editorActivosStatus(oldStatus || `SKU ${sku} sin ${tipoDocumento} PDF localizado.`);
+        alert(`No se encontró un PDF de ${tipoDocumento} en Storage para el SKU ${sku}.`);
         return;
       }
 
       const pdf = pdfs[0];
-      editorActivosStatus(`Abriendo PDF del SKU ${sku}...`);
-      await abrirPdfEnVisor(pdf, headers, 'PDF');
-      editorActivosStatus(oldStatus || `PDF abierto: SKU ${sku}${pdfs.length > 1 ? ` · más reciente de ${pdfs.length}` : ''}.`);
+      editorActivosStatus(`Abriendo ${tipoDocumento} PDF del SKU ${sku}...`);
+      await abrirPdfEnVisor(pdf, headers, tipoDocumento === 'pedimento' ? 'Pedimento PDF' : 'Factura PDF');
+      editorActivosStatus(oldStatus || `${tipoDocumento === 'pedimento' ? 'Pedimento' : 'Factura'} abierto: SKU ${sku}${pdfs.length > 1 ? ` · más reciente de ${pdfs.length}` : ''}.`);
     }catch(e){
       console.error(e);
       editorActivosStatus(oldStatus || 'Error al abrir PDF del SKU.');
@@ -5105,7 +5324,7 @@ function resetChipFiltroUI(){
       if(!inList) return [];
       const order = withOrder ? '&order=sku.asc,created_at.desc' : '&order=sku.asc';
       const urls = [];
-      const tipos = '&tipo=in.(factura,pdf,factura_pdf,documento_pdf)';
+      const tipos = '&tipo=in.(factura,pdf,factura_pdf,documento_pdf,pedimento)';
       if(empresaSeleccionada?.id){
         urls.push(`${SB_URL}/rest/v1/adjuntos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.(${inList})${tipos}&select=${encodeURIComponent(selectCols)}${order}`);
       }
@@ -5814,49 +6033,28 @@ function resetChipFiltroUI(){
   function exportarEditorActivosCsv(){
     const rows = editorActivosFiltered.length ? editorActivosFiltered : editorActivosRows;
     if(!rows.length){ alert('Primero carga el editor.'); return; }
-    // Cabeceras y formato idénticos a exportarSkusCsv / Android
-    const headers = (typeof ANDROID_ACTIVOS_CSV_HEADERS !== 'undefined' && ANDROID_ACTIVOS_CSV_HEADERS.length)
-      ? ANDROID_ACTIVOS_CSV_HEADERS.slice()
-      : EDITOR_ACTIVOS_CSV_FIELDS.map(f => EDITOR_ACTIVOS_CSV_LABELS[f] || f);
+    const csvFields = editorActivosTieneDepreciacion()
+      ? EDITOR_ACTIVOS_CSV_FIELDS
+      : EDITOR_ACTIVOS_CSV_FIELDS.filter(f => !['fecha_depreciacion','costo_depreciado'].includes(f));
+    const headers = csvFields.map(f => EDITOR_ACTIVOS_CSV_LABELS[f] || f);
     const lines = [headers.join(',')];
     rows.forEach(r => {
-      // Reutiliza el mismo serializador que Gestión SKUs
-      if(typeof activoRowToAndroidCsv === 'function'){
-        lines.push(activoRowToAndroidCsv({
-          sku: r.sku,
-          descripcion: r.descripcion,
-          marca: r.marca,
-          modelo: r.modelo,
-          numero_serie: r.numero_serie,
-          genero: r.genero,
-          ubicacion: r.ubicacion,
-          localizacion: r.localizacion,
-          responsable: r.responsable,
-          codigo_barras: r.codigo_barras,
-          cantidad: r.cantidad,
-          created_at: r.created_at,
-          costo: r.costo,
-          fecha_adquisicion: r.fecha_adquisicion,
-          dado_de_baja: r.dado_de_baja,
-          baja_at: r.baja_at
-        }));
-        return;
-      }
-      lines.push(EDITOR_ACTIVOS_CSV_FIELDS.map(f => {
-        if(f === 'fecha_adquisicion') return csvEscape(formatCsvDateOnly(r[f]));
+      lines.push(csvFields.map(f => {
+        if(f === 'fecha_adquisicion' || f === 'fecha_depreciacion') return csvEscape(formatCsvDateOnly(r[f]));
         if(f === 'baja_at' || f === 'created_at') return csvEscape(formatCsvDateTimeMexico(r[f]));
         if(f === 'dado_de_baja') return csvEscape(r[f] ? 1 : 0);
+        if(f === 'costo_depreciado') return csvEscape(r[f] == null ? '' : Number(r[f]).toFixed(2));
         return csvEscape(r[f] ?? '');
       }).join(','));
     });
     const emp = (empresaSeleccionada?.nombre || 'empresa').toString().trim().replace(/\s+/g,'_');
     downloadTextFile(`editor_activos_${emp}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
-    editorActivosStatus(`CSV exportado: ${rows.length} activo(s). Columnas = Gestión SKUs / Android.`);
+    editorActivosStatus(`CSV exportado: ${rows.length} activo(s).`);
   }
 
   function editorActivosHeaderToField(h){
     const n = normHeader(h);
-    const aliases = { descripcion:'descripcion', serie:'numero_serie', numero_serie:'numero_serie', codigobarras:'codigo_barras', codigo_barras:'codigo_barras', codigo_barras_:'codigo_barras', fechadquisicion:'fecha_adquisicion', fechaadquisicion:'fecha_adquisicion', fecha_adquisicion:'fecha_adquisicion', dadodebaja:'dado_de_baja', dado_de_baja:'dado_de_baja', bajaat:'baja_at', baja_at:'baja_at', fecharegistro:'created_at', fecha_registro:'created_at' };
+    const aliases = { descripcion:'descripcion', serie:'numero_serie', numero_serie:'numero_serie', codigobarras:'codigo_barras', codigo_barras:'codigo_barras', codigo_barras_:'codigo_barras', fechadquisicion:'fecha_adquisicion', fechaadquisicion:'fecha_adquisicion', fecha_adquisicion:'fecha_adquisicion', fechadepreciacion:'fecha_depreciacion', fecha_de_depreciacion:'fecha_depreciacion', fecha_depreciacion:'fecha_depreciacion', costodepreciado:'costo_depreciado', costo_depreciado:'costo_depreciado', dadodebaja:'dado_de_baja', dado_de_baja:'dado_de_baja', bajaat:'baja_at', baja_at:'baja_at', fecharegistro:'created_at', fecha_registro:'created_at' };
     return aliases[n] || n;
   }
 
@@ -5869,7 +6067,9 @@ function resetChipFiltroUI(){
       const headers = table[0].map(editorActivosHeaderToField);
       const idxSku = headers.indexOf('sku');
       if(idxSku < 0){ alert('El CSV debe incluir columna sku.'); return; }
-      const importables = headers.map((field,index)=>({field,index})).filter(x => EDITOR_ACTIVOS_EDITABLES.includes(x.field));
+      const importables = headers.map((field,index)=>({field,index})).filter(x =>
+        EDITOR_ACTIVOS_EDITABLES.includes(x.field) && (x.field !== 'fecha_depreciacion' || editorActivosTieneDepreciacion())
+      );
       if(!importables.length){ alert('No hay columnas editables para importar.'); return; }
       const map = new Map(editorActivosRows.map(r => [editorActivosKey(r).toLowerCase(), r]));
       let actualizados=0, omitidos=0, sinCambios=0, errores=0, repetidos=0;
@@ -5887,7 +6087,7 @@ function resetChipFiltroUI(){
         for(const {field,index} of importables){
           let val = String(cols[index] ?? '').trim();
           if(field === 'dado_de_baja') val = editorActivosBool(val);
-          if(field === 'fecha_adquisicion' || field === 'baja_at'){
+          if(field === 'fecha_adquisicion' || field === 'fecha_depreciacion' || field === 'baja_at'){
             if(val && !parseCsvDateToDateOnly(val)){ errores++; errorLines.push(`Fila ${i+1} SKU ${sku}: fecha inválida en ${field}`); continue; }
             val = parseCsvDateToDateOnly(val) || '';
           }
@@ -5917,6 +6117,9 @@ function resetChipFiltroUI(){
           row[field] = val;
           editorActivosSetModifiedField(key, field, val);
         });
+        if(Object.prototype.hasOwnProperty.call(change, 'fecha_depreciacion') || Object.prototype.hasOwnProperty.call(change, 'costo')){
+          editorActivosActualizarCostoDepreciado(row);
+        }
         editorActivosUpdateSearch(row);
       });
       editorActivosStatus(`CSV aplicado en pantalla. Con cambios: ${actualizados}. Omitidos: ${omitidos}.`);
@@ -8524,15 +8727,7 @@ function renderCatalogo(){
    ========================= */
 (async function(){
   // ---------- jsPDF on-demand ----------
-  async function ensureJsPdf(){
-    if(window.jspdf && window.jspdf.jsPDF) return;
-    await new Promise((resolve,reject)=>{
-      const s=document.createElement('script');
-      s.src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
-      s.onload=resolve; s.onerror=()=>reject(new Error("No se pudo cargar jsPDF"));
-      document.head.appendChild(s);
-    });
-  }
+  const ensureJsPdf = window.ActivoDetalleWeb.ensureJsPdf;
 
   // ---------- Helpers ----------
   // ✅ Igual que en Android (ResguardoPdfGenerator.kt): texto legal breve
