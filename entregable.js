@@ -100,9 +100,15 @@
     return 'image/jpeg';
   }
 
+  function isPedimentoPdf(adjunto){
+    const type = String(adjunto?.tipo || '').trim().toLowerCase();
+    const name = `${adjunto?.filename || ''} ${adjunto?.path || ''}`;
+    return type === 'pedimento' || /pedimento/i.test(name);
+  }
+
   async function fetchActivosForDeliverable(headers, empresaId, signal){
     const columns = [
-      'sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion',
+      'sku','descripcion','marca','modelo','numero_serie','pedimento','genero','ubicacion','localizacion',
       'responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo',
       'fecha_adquisicion','dado_de_baja','baja_at'
     ];
@@ -240,6 +246,7 @@
         marca:String(row?.marca || ''),
         modelo:String(row?.modelo || ''),
         serie:String(row?.numero_serie || ''),
+        pedimento:String(row?.pedimento || ''),
         genero:String(row?.genero || ''),
         ubicacion:String(row?.ubicacion || ''),
         localizacion:String(row?.localizacion || ''),
@@ -259,7 +266,7 @@
         setProgress(`Preparando adjunto: ${file.nombre}...`, Math.min(98, 90 + Math.round(8 * index / Math.max(rows.length, 1))));
         const id = `archivo-${fileId++}`;
         const count = Math.ceil(file.blob.size / chunkBytes);
-        rowData.adjuntos.push({ tipo:file.tipo, nombre:file.nombre, mime:file.mime, id, parts:count, size:file.blob.size });
+        rowData.adjuntos.push({ tipo:file.tipo, documento:file.documento || '', nombre:file.nombre, mime:file.mime, id, parts:count, size:file.blob.size });
         for(let part=0; part<count; part++){
           if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
           const data = await blobToBase64(file.blob.slice(part * chunkBytes, (part + 1) * chunkBytes));
@@ -321,7 +328,7 @@
     showSummary('', false);
     setProgress('Preparando visor independiente...', 1);
     try{
-      const templateUrl = new URL('entregable-viewer.template.html?v=2026.11.02.1-3', location.href);
+      const templateUrl = new URL('entregable-viewer.template.html?v=2026.11.25.5-1', location.href);
       const templateResponse = await fetch(templateUrl.href, { signal });
       if(!templateResponse.ok) throw new Error(`No se pudo cargar la plantilla del visor (HTTP ${templateResponse.status}).`);
       const template = await templateResponse.text();
@@ -344,7 +351,12 @@
           ? editorActivosSortedPdfs(files.filter(file => typeof isPdfAdjunto === 'function' && isPdfAdjunto(file)))
           : files.filter(file => /\.pdf$/i.test(String(file.path || file.filename || '')));
         fotos.forEach(adjunto => tareas.push({ sku, tipo:'foto', adjunto }));
-        pdfs.forEach(adjunto => tareas.push({ sku, tipo:'pdf', adjunto }));
+        pdfs.forEach(adjunto => tareas.push({
+          sku,
+          tipo:'pdf',
+          documento:isPedimentoPdf(adjunto) ? 'pedimento' : 'factura',
+          adjunto
+        }));
       });
 
       const archivosBySku = new Map(activos.map(row => [String(row?.sku || '').trim(), []]));
@@ -375,7 +387,7 @@
             ? editorActivosSafeFileName(rawName, tarea.tipo === 'pdf' ? 'documento.pdf' : 'foto.jpg')
             : safeFilename(rawName, 'adjunto');
           const cleanSku = typeof editorActivosSafeFileName === 'function' ? editorActivosSafeFileName(tarea.sku, 'SKU') : safeFilename(tarea.sku, 'SKU');
-          const file = { tipo:tarea.tipo, nombre:`${cleanSku}_${cleanName}`, mime, blob };
+          const file = { tipo:tarea.tipo, documento:tarea.documento || '', nombre:`${cleanSku}_${cleanName}`, mime, blob };
           if(!archivosBySku.has(tarea.sku)) archivosBySku.set(tarea.sku, []);
           archivosBySku.get(tarea.sku).push(file);
           bytesDescargados += blob.size || 0;
@@ -416,8 +428,9 @@
       anchor.remove();
       setProgress('Entregable HTML descargado.', 100);
       const fotosIncluidas = tareas.filter(tarea => tarea.tipo === 'foto').length;
-      const pdfsIncluidos = tareas.filter(tarea => tarea.tipo === 'pdf').length;
-      showSummary(`${activos.length.toLocaleString('es-MX')} SKU(s) · ${fotosIncluidas.toLocaleString('es-MX')} foto(s) · ${pdfsIncluidos.toLocaleString('es-MX')} PDF(s) · ${bytesToMiB(htmlBlob.size)}. El archivo es autocontenido y se puede abrir sin conexión.`, true);
+      const facturasIncluidas = tareas.filter(tarea => tarea.documento === 'factura').length;
+      const pedimentosIncluidos = tareas.filter(tarea => tarea.documento === 'pedimento').length;
+      showSummary(`${activos.length.toLocaleString('es-MX')} SKU(s) · ${fotosIncluidas.toLocaleString('es-MX')} foto(s) · ${facturasIncluidas.toLocaleString('es-MX')} factura(s) · ${pedimentosIncluidos.toLocaleString('es-MX')} pedimento(s) · ${bytesToMiB(htmlBlob.size)}. El archivo es autocontenido y se puede abrir sin conexión.`, true);
       setTimeout(()=>{ if(createdUrl) URL.revokeObjectURL(createdUrl); }, 5 * 60_000);
       revokeScheduled = true;
     }catch(error){
