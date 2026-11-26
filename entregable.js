@@ -221,7 +221,24 @@
     return await response.blob();
   }
 
-  async function asStandaloneHtmlBlob(metadata, rows, archivosBySku, template, signal){
+  async function incorporarAdjunto(file, index, output, signal){
+    const id = `archivo-${index}`;
+    const chunkBytes = 768 * 1024; // Múltiplo de 3 para codificar cada bloque por separado.
+    const size = file.blob.size;
+    const parts = Math.ceil(size / chunkBytes);
+    for(let part=0; part<parts; part++){
+      if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+      const data = await blobToBase64(file.blob.slice(part * chunkBytes, (part + 1) * chunkBytes));
+      output.push(new Blob([
+        `<script type="application/octet-stream" id="${id}-${part}">`,
+        data,
+        '</script>\n'
+      ], { type:'text/html;charset=utf-8' }));
+    }
+    return { tipo:file.tipo, documento:file.documento, nombre:file.nombre, mime:file.mime, id, parts, size };
+  }
+
+  async function asStandaloneHtmlBlob(metadata, rows, tareas, template, headers, signal){
     const placeholder = '__ENTREGABLE_PAYLOAD__';
     const filesPlaceholder = '__ENTREGABLE_FILES__';
     const markerIndex = template.indexOf(placeholder);
@@ -231,9 +248,63 @@
     // El inventario contiene referencias pequeñas. Los binarios se codifican
     // por bloques independientes; nunca forman una única cadena de JSON.
     const output = [template.slice(0, filesIndex)];
+    const archivosBySku = new Map(rows.map(row => [String(row?.sku || '').trim(), []]));
+    let bytesDescargados = 0;
+    let procesados = 0;
+    const fallidos = [];
+    const conexion = navigator.connection;
+    const redLenta = conexion?.saveData || ['slow-2g','2g','3g'].includes(conexion?.effectiveType);
+    const limite = redLenta || window.matchMedia('(pointer: coarse)').matches ? 4 : 10;
+    let ultimaActualizacion = 0;
+    setProgress('Preparando fotos y PDF...', 40);
+    const resultados = await editorActivosMapLimit(tareas, limite, async (tarea, index) => {
+      let lastError = null;
+      let blob = null;
+      for(let intento=1; intento<=2; intento++){
+        if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
+        try{
+          blob = await fetchAttachmentBlob(tarea.adjunto, headers, signal);
+          break;
+        }catch(error){
+          if(signal.aborted || error?.name === 'AbortError') throw error;
+          lastError = error;
+          if(intento < 2) await new Promise(resolve => setTimeout(resolve, 450 + Math.random() * 450));
+        }
+      }
+      let archivo = null;
+      if(!blob){
+        fallidos.push({ sku:tarea.sku, name:adjuntoNombre(tarea.adjunto, tarea.tipo), error:lastError?.message || 'Error de descarga' });
+      }else{
+        const mime = getMimeForAttachment(blob, tarea.adjunto, tarea.tipo);
+        const rawName = typeof adjuntoNombre === 'function' ? adjuntoNombre(tarea.adjunto, tarea.tipo) : `${tarea.tipo}`;
+        const cleanName = typeof editorActivosSafeFileName === 'function'
+          ? editorActivosSafeFileName(rawName, tarea.tipo === 'pdf' ? 'documento.pdf' : 'foto.jpg')
+          : safeFilename(rawName, 'adjunto');
+        const cleanSku = typeof editorActivosSafeFileName === 'function' ? editorActivosSafeFileName(tarea.sku, 'SKU') : safeFilename(tarea.sku, 'SKU');
+        const file = { tipo:tarea.tipo, documento:tarea.documento || '', nombre:`${cleanSku}_${cleanName}`, mime, blob };
+        archivo = await incorporarAdjunto(file, index, output, signal);
+        bytesDescargados += archivo.size;
+      }
+      procesados++;
+      const ahora = performance.now();
+      if(procesados === tareas.length || ahora - ultimaActualizacion >= 150){
+        ultimaActualizacion = ahora;
+        const pct = Math.round(40 + 48 * procesados / tareas.length);
+        setProgress(`Descargando y preparando adjuntos: ${procesados.toLocaleString('es-MX')}/${tareas.length.toLocaleString('es-MX')} · ${bytesToMiB(bytesDescargados)} · errores: ${fallidos.length}`, pct);
+      }
+      return archivo;
+    });
+
+    if(fallidos.length){
+      const detalle = fallidos.slice(0, 6).map(item => `${item.sku}: ${item.name} (${item.error})`).join('\n');
+      throw new Error(`No se generó el HTML porque ${fallidos.length} de ${tareas.length} adjuntos no se pudieron descargar.\n${detalle}${fallidos.length > 6 ? `\n... y ${fallidos.length - 6} más.` : ''}`);
+    }
+    resultados.forEach((archivo, index) => {
+      archivosBySku.get(tareas[index].sku).push(archivo);
+    });
+
+    setProgress('Preparando el visor interactivo...', 90);
     const manifest = [];
-    const chunkBytes = 768 * 1024; // Múltiplo de 3: cada bloque Base64 es independiente.
-    let fileId = 0;
     const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
     for(let index=0; index<rows.length; index++){
@@ -260,27 +331,8 @@
         dadoDeBaja:!!row?.dado_de_baja,
         bajaAt:row?.baja_at || ''
       };
-      rowData.adjuntos = [];
-      const files = archivosBySku.get(sku) || [];
-      for(const file of files){
-        setProgress(`Preparando adjunto: ${file.nombre}...`, Math.min(98, 90 + Math.round(8 * index / Math.max(rows.length, 1))));
-        const id = `archivo-${fileId++}`;
-        const count = Math.ceil(file.blob.size / chunkBytes);
-        rowData.adjuntos.push({ tipo:file.tipo, documento:file.documento || '', nombre:file.nombre, mime:file.mime, id, parts:count, size:file.blob.size });
-        for(let part=0; part<count; part++){
-          if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
-          const data = await blobToBase64(file.blob.slice(part * chunkBytes, (part + 1) * chunkBytes));
-          output.push(new Blob([
-            `<script type="application/octet-stream" id="${id}-${part}">`,
-            data,
-            '</script>\n'
-          ], { type:'text/html;charset=utf-8' }));
-          await yieldToBrowser();
-        }
-        file.blob = null;
-      }
+      rowData.adjuntos = archivosBySku.get(sku) || [];
       manifest.push(rowData);
-      archivosBySku.delete(sku);
 
       if((index + 1) % 100 === 0){
         const pct = Math.min(98, 90 + Math.round(8 * (index + 1) / Math.max(rows.length, 1)));
@@ -359,58 +411,15 @@
         }));
       });
 
-      const archivosBySku = new Map(activos.map(row => [String(row?.sku || '').trim(), []]));
-      let bytesDescargados = 0;
-      let procesados = 0;
-      const fallidos = [];
-      setProgress(`Descargando ${tareas.length.toLocaleString('es-MX')} adjunto(s)...`, 40);
-      await editorActivosMapLimit(tareas, 4, async tarea => {
-        let lastError = null;
-        let blob = null;
-        for(let intento=1; intento<=2; intento++){
-          if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
-          try{
-            blob = await fetchAttachmentBlob(tarea.adjunto, headers, signal);
-            break;
-          }catch(error){
-            if(signal.aborted || error?.name === 'AbortError') throw error;
-            lastError = error;
-            if(intento < 2) await new Promise(resolve => setTimeout(resolve, 450));
-          }
-        }
-        if(!blob){
-          fallidos.push({ sku:tarea.sku, name:adjuntoNombre(tarea.adjunto, tarea.tipo), error:lastError?.message || 'Error de descarga' });
-        }else{
-          const mime = getMimeForAttachment(blob, tarea.adjunto, tarea.tipo);
-          const rawName = typeof adjuntoNombre === 'function' ? adjuntoNombre(tarea.adjunto, tarea.tipo) : `${tarea.tipo}`;
-          const cleanName = typeof editorActivosSafeFileName === 'function'
-            ? editorActivosSafeFileName(rawName, tarea.tipo === 'pdf' ? 'documento.pdf' : 'foto.jpg')
-            : safeFilename(rawName, 'adjunto');
-          const cleanSku = typeof editorActivosSafeFileName === 'function' ? editorActivosSafeFileName(tarea.sku, 'SKU') : safeFilename(tarea.sku, 'SKU');
-          const file = { tipo:tarea.tipo, documento:tarea.documento || '', nombre:`${cleanSku}_${cleanName}`, mime, blob };
-          if(!archivosBySku.has(tarea.sku)) archivosBySku.set(tarea.sku, []);
-          archivosBySku.get(tarea.sku).push(file);
-          bytesDescargados += blob.size || 0;
-        }
-        procesados++;
-        const pct = tareas.length ? Math.round(40 + 48 * procesados / tareas.length) : 88;
-        setProgress(`Descargando adjuntos: ${procesados.toLocaleString('es-MX')}/${tareas.length.toLocaleString('es-MX')} · ${bytesToMiB(bytesDescargados)} · errores: ${fallidos.length}`, pct);
-      });
-
-      if(fallidos.length){
-        const detalle = fallidos.slice(0, 6).map(item => `${item.sku}: ${item.name} (${item.error})`).join('\n');
-        throw new Error(`No se generó el HTML porque ${fallidos.length} de ${tareas.length} adjuntos no se pudieron descargar.\n${detalle}${fallidos.length > 6 ? `\n... y ${fallidos.length - 6} más.` : ''}`);
-      }
       if(signal.aborted) throw new DOMException('Cancelado', 'AbortError');
       if(!await refreshPermissions()) throw new Error('El permiso Entregable HTML fue desactivado.');
       if(signal.aborted || String(empresaSeleccionada?.id || '') !== String(empresaInicio.id) || (typeof getCtxVersion === 'function' && getCtxVersion() !== ctxInicio)){
         throw new DOMException('La generación se canceló o la empresa activa cambió.', 'AbortError');
       }
-      setProgress('Preparando el visor interactivo...', 90);
       const htmlBlob = await asStandaloneHtmlBlob({
         empresa:empresaInicio.nombre,
         generado:new Intl.DateTimeFormat('es-MX', { dateStyle:'medium', timeStyle:'short', timeZone:'America/Mexico_City' }).format(new Date())
-      }, activos, archivosBySku, template, signal);
+      }, activos, tareas, template, headers, signal);
       if(!await refreshPermissions()) throw new Error('El permiso Entregable HTML fue desactivado.');
       if(signal.aborted || String(empresaSeleccionada?.id || '') !== String(empresaInicio.id) || (typeof getCtxVersion === 'function' && getCtxVersion() !== ctxInicio)){
         throw new DOMException('La generación se canceló o la empresa activa cambió.', 'AbortError');
@@ -442,6 +451,7 @@
       showSummary(cancelled ? '' : message, !cancelled);
       if(!cancelled) console.error('Error generando entregable HTML', error);
     }finally{
+      if(!signal.aborted) abortController.abort();
       if(createdUrl && !revokeScheduled) URL.revokeObjectURL(createdUrl);
       abortController = null;
       setBusy(false);
