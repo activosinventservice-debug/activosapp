@@ -98,14 +98,15 @@
     }
   }
 
-  async function crearPdf({empresa, foto, logo, notaFoto, campos, ubicaciones}) {
+  async function crearPdf({empresa, titulo, foto, logo, notaFoto, campos, ubicaciones}) {
     const [, fotoImg, logoImg] = await Promise.all([
       ensureJsPdf(),
       foto ? imagenPdf(foto, 1450) : null,
       logo ? imagenPdf(logo, 384).catch(() => null) : null
     ]);
     const doc = new window.jspdf.jsPDF({ unit:'pt', format:'letter', compress:true });
-    doc.setProperties({title:'Detalle del activo', subject:empresa});
+    const tituloPdf = String(titulo || '').trim() || 'Sin código de barras';
+    doc.setProperties({title:tituloPdf, subject:empresa});
     const azul = [19,60,82], tinta = [24,43,56], papel = [242,247,250];
     let y = 126;
     let pagina = 0;
@@ -121,7 +122,7 @@
       doc.roundedRect(36,32,540,77,8,8,'F');
       doc.setTextColor(255,255,255);
       doc.setFont('helvetica','bold').setFontSize(20);
-      doc.text('Detalle del activo',52,64);
+      doc.text(doc.splitTextToSize(tituloPdf, logoImg ? 396 : 504).slice(0,2),52,64);
       doc.setFont('helvetica','normal').setFontSize(10.5);
       doc.text(doc.splitTextToSize(empresa, logoImg ? 396 : 504).slice(0,2),52,83);
       if (logoImg) {

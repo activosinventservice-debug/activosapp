@@ -1383,23 +1383,23 @@ document.addEventListener('keydown', (e)=>{
   // Columnas idénticas a Android LocalStore.exportActivosCsv (compatibilidad cruzada).
   // Sin has_foto / has_factura_pdf: los adjuntos no dependen del CSV.
   const ANDROID_ACTIVOS_CSV_HEADERS = [
-    "sku","Descripcion","Marca","Modelo","Serie",
+    "sku","Descripcion","Marca","Modelo","Serie","Pedimento",
     "genero","ubicacion","localizacion","responsable",
     "codigoBarras","cantidad","fechaRegistro",
     "costo","fechaAdquisicion","dadoDeBaja","bajaAt"
   ];
   const ANDROID_ACTIVOS_CSV_HEADERS_UBICACIONES = [
-    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(0, 11),
+    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(0, 12),
     "cantidadesPorUbicacion",
-    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(11)
+    ...ANDROID_ACTIVOS_CSV_HEADERS.slice(12)
   ];
   const ANDROID_ACTIVOS_SELECT_COLS = [
-    "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+    "sku","descripcion","marca","modelo","numero_serie","pedimento","genero","ubicacion","localizacion",
     "responsable","codigo_barras","cantidad","created_at","costo","fecha_adquisicion",
     "dado_de_baja","baja_at"
   ];
   const ANDROID_ACTIVOS_SELECT_COLS_UBICACIONES = [
-    "sku","descripcion","marca","modelo","numero_serie","genero","ubicacion","localizacion",
+    "sku","descripcion","marca","modelo","numero_serie","pedimento","genero","ubicacion","localizacion",
     "responsable","codigo_barras","cantidad","cantidades_ubicacion","created_at","costo","fecha_adquisicion",
     "dado_de_baja","baja_at"
   ];
@@ -1426,6 +1426,7 @@ document.addEventListener('keydown', (e)=>{
       r?.marca,
       r?.modelo,
       r?.numero_serie,
+      r?.pedimento,
       r?.genero,
       r?.ubicacion,
       r?.localizacion,
@@ -1475,11 +1476,11 @@ document.addEventListener('keydown', (e)=>{
       for(let i=0;i<filas;i++){
         const n = start + i;
         const sku = String(n).padStart(6,'0');
-        // 16 columnas = ANDROID_ACTIVOS_CSV_HEADERS (sin has_foto / has_factura_pdf)
-        // sku,Descripcion,Marca,Modelo,Serie,genero,ubicacion,localizacion,responsable,
+        // 17 columnas = ANDROID_ACTIVOS_CSV_HEADERS (sin has_foto / has_factura_pdf)
+        // sku,Descripcion,Marca,Modelo,Serie,Pedimento,genero,ubicacion,localizacion,responsable,
         // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt
         const row = [
-          sku, "", "", "", "",
+          sku, "", "", "", "", "",
           "", "", "", "",
           "", "1", "", "",
           "", "0", ""
@@ -1602,7 +1603,11 @@ document.addEventListener('keydown', (e)=>{
     setSkusMsg("Exportando filtrado...");
     try{
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = ANDROID_ACTIVOS_SELECT_COLS;
+      // La vista que resuelve filtros de catálogo no expone Pedimento;
+      // para ese caso lo completamos después consultando activos por SKU.
+      const selectCols = hasExtra
+        ? ANDROID_ACTIVOS_SELECT_COLS.filter(col => col !== "pedimento")
+        : ANDROID_ACTIVOS_SELECT_COLS;
 
       function buildBaseUrl(){
         let url = `${SB_URL}/rest/v1/${hasExtra?'web_activos_catalogos_v':'activos'}?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&select=${encodeURIComponent(selectCols.join(","))}`;
@@ -1641,7 +1646,26 @@ document.addEventListener('keydown', (e)=>{
         return all;
       }
 
-      const all = await fetchAll();
+      let all = await fetchAll();
+      if(hasExtra && all.length){
+        const pedimentoBySku = new Map();
+        const skus = all.map(row => String(row?.sku || '').trim()).filter(Boolean);
+        const chunkSize = 120;
+        for(let i=0;i<skus.length;i+=chunkSize){
+          const chunk = skus.slice(i, i + chunkSize);
+          const inList = chunk.map(s => `"${String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"`).join(',');
+          const skuFilter = encodeURIComponent(`(${inList})`);
+          const url = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresaSeleccionada.id)}&sku=in.${skuFilter}&select=sku,pedimento`;
+          const res = await fetch(url, { headers });
+          if(!res.ok) throw new Error(await res.text().catch(()=>`HTTP ${res.status}`));
+          const rows = await res.json().catch(()=>[]);
+          (Array.isArray(rows) ? rows : []).forEach(row => {
+            const sku = String(row?.sku || '').trim();
+            if(sku) pedimentoBySku.set(sku, row?.pedimento ?? '');
+          });
+        }
+        all = all.map(row => ({ ...row, pedimento: pedimentoBySku.get(String(row?.sku || '').trim()) ?? '' }));
+      }
       const out = [ANDROID_ACTIVOS_CSV_HEADERS.join(",")];
       for(const r of all) out.push(activoRowToAndroidCsv(r));
 
@@ -1884,6 +1908,7 @@ function toBool(v){
       marca: idxOfAny("Marca","marca"),
       modelo: idxOfAny("Modelo","modelo"),
       serie: idxOfAny("Serie","serie","numero_serie"),
+      pedimento: idxOfAny("Pedimento","pedimento"),
       genero: idxOfAny("genero","Genero"),
       ubicacion: idxOfAny("ubicacion","Ubicacion"),
       localizacion: idxOfAny("localizacion","Localizacion"),
@@ -1914,7 +1939,7 @@ function toBool(v){
     for(const r of dataRows){
       const sku = (r[mapIdx.sku]||"").trim();
       if(!sku) continue;
-      rowsPrep.push({
+      const prepared = {
         sku,
         descripcion: mapIdx.descripcion>=0 ? (r[mapIdx.descripcion]||"").trim() : "",
         marca: mapIdx.marca>=0 ? ((r[mapIdx.marca]||"").trim() || null) : null,
@@ -1930,7 +1955,11 @@ function toBool(v){
         fecha_adquisicion: mapIdx.fecha_adquisicion>=0 ? parseCsvDateToDateOnly(r[mapIdx.fecha_adquisicion]) : null,
         dado_de_baja: mapIdx.dado_de_baja>=0 ? toBool(r[mapIdx.dado_de_baja]) : false,
         baja_at: mapIdx.baja_at>=0 ? parseCsvDateToEpochMs(r[mapIdx.baja_at]) : null
-      });
+      };
+      // CSV anteriores no traen Pedimento: omitir la propiedad conserva el dato existente.
+      // Si la columna está presente y la celda vacía, el import permite limpiarla.
+      if(mapIdx.pedimento >= 0) prepared.pedimento = (r[mapIdx.pedimento] || "").trim() || null;
+      rowsPrep.push(prepared);
     }
 
     if(!rowsPrep.length){ setSkusMsg("No hay filas válidas para importar"); return; }
@@ -1971,7 +2000,7 @@ function toBool(v){
         : sessionCreatorNombre;
       let bajaAt = r.baja_at;
       if(bajaAt === '' || bajaAt === undefined || !Number.isFinite(bajaAt)) bajaAt = null;
-      return {
+      const obj = {
         empresa_id: empresaSeleccionada.id,
         sku: r.sku,
         descripcion: r.descripcion,
@@ -1992,6 +2021,8 @@ function toBool(v){
         creado_por_email: email,
         creado_por_nombre: nombre
       };
+      if(Object.prototype.hasOwnProperty.call(r, 'pedimento')) obj.pedimento = r.pedimento;
+      return obj;
     });
 
     setSkusMsg(`Importando ${objs.length}...`);
@@ -2122,11 +2153,10 @@ function toBool(v){
   }
 
   // ---------------- Branding (UI) ----------------
-  // Carga discreta del logo por empresa desde servidor Storage (mismo path que PDF)
+  // Los logos de esta base viven en Storage: activo/<empresa>/branding/logo.png.
   const __empresaLogoCache = new Map(); // key: slug -> { url, ts }
 
-  // ✅ Helper (UI): convierte nombre de empresa a slug de storage
-  // Debe coincidir con la lógica del PDF (lowercase + _ + sin caracteres raros)
+  // Helper legado usado para logos guardados por versiones antiguas de la web.
   function empresaSafe(nombre){
     return String(nombre || "")
       .trim()
@@ -2143,19 +2173,22 @@ function toBool(v){
     try{ if(entry?.url && entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url); }catch{}
   }
 
-  async function fetchEmpresaLogoUrl(empresaNombre){
+  async function fetchEmpresaLogo(empresaRef){
     const SB_URL = window.SB_URL;
     const SB_KEY = window.SB_KEY;
     const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : window.sessionToken;
     if(!SB_URL || !SB_KEY || !token) return null;
 
-    const slug = makeEmpresaSlug(empresaNombre);
+    const empresa = empresaRef && typeof empresaRef === 'object' ? empresaRef : {nombre:empresaRef};
+    const nombre = norm(empresa.nombre);
+    const bucket = 'activo';
+    const path = nombre ? `${makeEmpresaSlug(nombre)}/branding/logo.png` : '';
+    if(!path) return null;
+    const slug = makeEmpresaSlug(nombre);
     const cached = __empresaLogoCache.get(slug);
     // Cache 10 minutos
-    if(cached && (Date.now() - cached.ts) < 10*60*1000) return cached.url;
+    if(cached && (Date.now() - cached.ts) < 10*60*1000) return cached;
 
-    const bucket = 'activo';
-    const path = `${slug}/branding/logo.png`;
     const url = `${SB_URL}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`;
 
     const res = await fetch(url, { headers:{ 'apikey': SB_KEY, 'Authorization': `Bearer ${token}` } });
@@ -2166,8 +2199,17 @@ function toBool(v){
     const blobUrl = URL.createObjectURL(blob);
 
     if(cached) __revokeIfNeeded(cached);
-    __empresaLogoCache.set(slug, { url: blobUrl, ts: Date.now() });
-    return blobUrl;
+    const entry = { url:blobUrl, blob, ts:Date.now() };
+    __empresaLogoCache.set(slug, entry);
+    return entry;
+  }
+
+  async function fetchEmpresaLogoUrl(empresaRef){
+    return (await fetchEmpresaLogo(empresaRef))?.url || null;
+  }
+
+  async function fetchEmpresaLogoBlob(empresaRef){
+    return (await fetchEmpresaLogo(empresaRef))?.blob || null;
   }
 
   function queueEmpresaLogoHydration(empresas){
@@ -2183,7 +2225,7 @@ function toBool(v){
       if(!id || !nombre) continue;
       const img = document.querySelector(`img[data-empresa-logo="${CSS.escape(id)}"]`);
       if(!img) continue;
-      const blobUrl = await fetchEmpresaLogoUrl(nombre);
+      const blobUrl = await fetchEmpresaLogoUrl(e);
       if(blobUrl){
         img.src = blobUrl;
         img.classList.remove('skeleton');
@@ -2227,7 +2269,7 @@ function toBool(v){
       imgChip.classList.add('skeleton');
     }
 
-    const blobUrl = await fetchEmpresaLogoUrl(nombre);
+    const blobUrl = await fetchEmpresaLogoUrl(empresaSeleccionada);
 
     if(blobUrl){
       if(imgTop){
@@ -3356,7 +3398,7 @@ function resetChipFiltroUI(){
   async function leerActivoParaDetalle(empresa, activo){
     const endpoint = `${SB_URL}/rest/v1/activos?empresa_id=eq.${encodeURIComponent(empresa.id)}&id=eq.${encodeURIComponent(activo.id)}`;
     const {data} = await fetchSupabaseJsonWithRetry(
-      endpoint + '&select=fecha_depreciacion,baja_at',
+      endpoint + '&select=pedimento,fecha_depreciacion,baja_at',
       {cache:'no-store', headers:{apikey:SB_KEY, Authorization:`Bearer ${sessionToken}`}},
       {attempts:2, errorMessage:'No se pudieron consultar los datos del activo'}
     );
@@ -3374,16 +3416,25 @@ function resetChipFiltroUI(){
     qs('det-costo-depreciado').textContent = costo == null ? 'Sin costo registrado' : fmtMoney(costo);
   }
 
-  async function actualizarDepreciacionDetalle(empresa, activo, carga){
+  async function actualizarDatosDetalle(empresa, activo, carga){
+    const datos = leerActivoParaDetalle(empresa, activo);
+    datos.then(extra => {
+      if(detalleActualSigue(empresa, activo, carga)){
+        qs('det-pedimento').textContent = norm(extra.pedimento) || 'Sin capturar';
+      }
+    }, () => {
+      if(detalleActualSigue(empresa, activo, carga)){
+        qs('det-pedimento').textContent = 'No se pudo consultar';
+      }
+    });
+
     try{
       const reglas = await cargarReglasDepreciacion(empresa);
-      if(!detalleActualSigue(empresa, activo, carga)) return;
-      let fecha = '';
-      if(reglas.habilitada && activo.id){
-        const extra = await leerActivoParaDetalle(empresa, activo);
-        fecha = extra.fecha_depreciacion;
+      if(!detalleActualSigue(empresa, activo, carga) || !reglas.habilitada) return;
+      const extra = await datos;
+      if(detalleActualSigue(empresa, activo, carga)){
+        mostrarDepreciacionDetalle(reglas, activo, extra.fecha_depreciacion);
       }
-      if(detalleActualSigue(empresa, activo, carga)) mostrarDepreciacionDetalle(reglas, activo, fecha);
     }catch(e){
       if(detalleActualSigue(empresa, activo, carga)) qs('det-acciones-estado').textContent = 'No se pudo consultar la depreciación.';
     }
@@ -3398,10 +3449,10 @@ function resetChipFiltroUI(){
     status.textContent = 'Preparando PDF…';
     try{
       const headers = {apikey:SB_KEY, Authorization:`Bearer ${sessionToken}`};
-      const [reglas, extra, logoUrl, adjuntos] = await Promise.all([
+      const [reglas, extra, logoBlob, adjuntos] = await Promise.all([
         cargarReglasDepreciacion(empresa),
         leerActivoParaDetalle(empresa, activo),
-        fetchEmpresaLogoUrl(empresa.nombre).catch(()=>null),
+        fetchEmpresaLogoBlob(empresa).catch(()=>null),
         exportarFoto ? cargarAdjuntosDetalleSku(activo.sku, empresa) : []
       ]);
       if(!detalleActualSigue(empresa, activo, carga)) return;
@@ -3412,17 +3463,18 @@ function resetChipFiltroUI(){
         if(!respuesta.ok) throw new Error('No se pudo cargar la fotografía del activo.');
         foto = await respuesta.blob();
       }
-      const logo = logoUrl ? await fetch(logoUrl).then(r=>r.ok ? r.blob() : null).catch(()=>null) : null;
+      const logo = logoBlob;
       const ubicaciones = parseCantidadesUbicacion(activo.cantidades_ubicacion);
       const cantidad = ubicaciones.length ? ubicaciones.reduce((suma,item)=>suma+item.cantidad,0) : activo.cantidad;
       const costo = detalleWeb.costoDepreciado(activo.costo, extra.fecha_depreciacion, reglas);
       const pdf = await detalleWeb.crearPdf({
-        empresa:empresa.nombre, foto, logo, ubicaciones,
+        empresa:empresa.nombre, titulo: norm(activo.codigo_barras) || norm(activo.sku) || 'Sin código de barras', foto, logo, ubicaciones,
         notaFoto: !exportarFoto && isTrue(activo.has_foto) ? 'Sin permiso para exportar la foto' :
           isTrue(activo.has_foto) ? 'Foto no disponible' : 'Sin foto registrada',
         campos:[
           ['SKU',activo.sku], ['Código de barras',activo.codigo_barras], ['Descripción',activo.descripcion],
           ['Marca',activo.marca], ['Modelo',activo.modelo], ['Serie',activo.numero_serie],
+          ['Pedimento',extra.pedimento],
           ['Género',activo.genero], ['Cantidad',cantidad], ['Costo original',fmtMoney(activo.costo)],
           ['Fecha de adquisición',fmtDate(activo.fecha_adquisicion)],
           ['Fecha de depreciación',reglas.habilitada ? detalleWeb.fechaVisible(extra.fecha_depreciacion) : ''],
@@ -3433,7 +3485,7 @@ function resetChipFiltroUI(){
         ]
       });
       if(!detalleActualSigue(empresa, activo, carga) || (foto && !canDescargarFoto())) return;
-      mostrarPdfEnVisor(pdf, `Detalle_${String(activo.sku).replace(/[^a-z0-9._-]/gi,'_').slice(0,64)}.pdf`, true);
+      mostrarPdfEnVisor(pdf, `Detalle_${String(activo.sku).replace(/[^a-z0-9._-]/gi,'_').slice(0,64)}.pdf`, true, norm(activo.codigo_barras) || norm(activo.sku) || 'Sin código de barras');
       status.textContent = '';
     }catch(e){
       if(detalleActualSigue(empresa, activo, carga)) status.textContent = e.message || 'No se pudo generar el PDF.';
@@ -3447,7 +3499,8 @@ function resetChipFiltroUI(){
     const carga = ++detalleCarga;
     show(qs('det-depreciacion'), false);
     qs('det-acciones-estado').textContent = '';
-    actualizarDepreciacionDetalle(empresaSeleccionada, i, carga);
+    qs('det-pedimento').textContent = 'Consultando…';
+    actualizarDatosDetalle(empresaSeleccionada, i, carga);
 
     const sku    = getv(i,'sku');
     skuRetornoDetalle = String(sku || '').trim();
@@ -3598,7 +3651,7 @@ function resetChipFiltroUI(){
     mostrarPdfEnVisor(blob, adjuntoNombre(a, 'PDF'));
   }
 
-  function mostrarPdfEnVisor(blob, nombre, permitirGuardar = false){
+  function mostrarPdfEnVisor(blob, nombre, permitirGuardar = false, subtitle = ''){
     closePdfViewer();
     const url = URL.createObjectURL(blob);
     pdfViewerObjectUrl = url;
@@ -3609,7 +3662,7 @@ function resetChipFiltroUI(){
     show(descargar, permitirGuardar);
 
     safeSetText('pdf-viewer-title', pdfViewerNombre || 'Visor PDF');
-    safeSetText('pdf-viewer-sub', permitirGuardar ? 'Detalle del activo' : 'Vista previa sin descargar');
+    safeSetText('pdf-viewer-sub', subtitle || (permitirGuardar ? 'Detalle del activo' : 'Vista previa sin descargar'));
     const frame = qs('pdf-viewer-frame');
     const modal = qs('pdf-viewer-modal');
     if(frame) frame.src = `${url}#toolbar=1&navpanes=0&view=FitH`;
@@ -3702,7 +3755,6 @@ function resetChipFiltroUI(){
     const pedimentosSection = qs('det-pedimentos-section');
     cont.innerHTML = '';
     if(pedimentosCont) pedimentosCont.innerHTML = '';
-    show(pedimentosSection, false);
     const headers = { 'apikey':SB_KEY, 'Authorization':`Bearer ${sessionToken}` };
     try{
       const adjuntos = await cargarAdjuntosDetalleSku(sku);
@@ -4027,6 +4079,7 @@ function resetChipFiltroUI(){
     { field:'marca', label:'Marca', width:135, min:90 },
     { field:'modelo', label:'Modelo', width:135, min:90 },
     { field:'numero_serie', label:'Serie', width:135, min:90 },
+    { field:'pedimento', label:'Pedimento', width:170, min:120 },
     { field:'genero', label:'Género', width:150, min:100 },
     { field:'ubicacion', label:'Ubicación', width:190, min:120 },
     { field:'localizacion', label:'Localización', width:170, min:110 },
@@ -4042,13 +4095,13 @@ function resetChipFiltroUI(){
   ];
 
   const EDITOR_ACTIVOS_EDITABLES = [
-    'descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at'
+    'descripcion','marca','modelo','numero_serie','pedimento','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at'
   ];
   // CSV del editor con los campos de depreciación al final.
-  // sku,Descripcion,Marca,Modelo,Serie,genero,ubicacion,localizacion,responsable,
+  // sku,Descripcion,Marca,Modelo,Serie,Pedimento,genero,ubicacion,localizacion,responsable,
   // codigoBarras,cantidad,fechaRegistro,costo,fechaAdquisicion,dadoDeBaja,bajaAt,fechaDepreciacion,costoDepreciado
   const EDITOR_ACTIVOS_CSV_FIELDS = [
-    'sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable',
+    'sku','descripcion','marca','modelo','numero_serie','pedimento','genero','ubicacion','localizacion','responsable',
     'codigo_barras','cantidad','created_at','costo','fecha_adquisicion','dado_de_baja','baja_at','fecha_depreciacion','costo_depreciado'
   ];
   const EDITOR_ACTIVOS_CSV_LABELS = {
@@ -4057,6 +4110,7 @@ function resetChipFiltroUI(){
     marca:'Marca',
     modelo:'Modelo',
     numero_serie:'Serie',
+    pedimento:'Pedimento',
     genero:'genero',
     ubicacion:'ubicacion',
     localizacion:'localizacion',
@@ -4419,7 +4473,7 @@ function resetChipFiltroUI(){
     return String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   }
   function editorActivosUpdateSearch(row){
-    row._search = [row.sku,row.descripcion,row.marca,row.modelo,row.numero_serie,row.genero,row.ubicacion,row.localizacion,row.responsable,row.codigo_barras]
+    row._search = [row.sku,row.descripcion,row.marca,row.modelo,row.numero_serie,row.pedimento,row.genero,row.ubicacion,row.localizacion,row.responsable,row.codigo_barras]
       .map(v => editorActivosNormFilter(v)).join(' | ');
     return row;
   }
@@ -4492,7 +4546,7 @@ function resetChipFiltroUI(){
       editorActivosReglasDepreciacion = reglasDepreciacionCarga;
       editorActivosInitColumnTools();
       const headers = { apikey: SB_KEY, Authorization: `Bearer ${sessionToken}` };
-      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at','has_factura_pdf'];
+      const selectCols = ['sku','descripcion','marca','modelo','numero_serie','pedimento','genero','ubicacion','localizacion','responsable','codigo_barras','cantidad','cantidades_ubicacion','created_at','costo','fecha_adquisicion','fecha_depreciacion','dado_de_baja','baja_at','has_factura_pdf'];
       const limit = 1000;
       let offset = 0;
       let all = [];
@@ -4509,7 +4563,7 @@ function resetChipFiltroUI(){
       editorActivosRows = all.map(r => editorActivosUpdateSearch({
         sku: String(r.sku ?? '').trim(),
         descripcion: String(r.descripcion ?? ''),
-        marca: r.marca ?? '', modelo: r.modelo ?? '', numero_serie: r.numero_serie ?? '',
+        marca: r.marca ?? '', modelo: r.modelo ?? '', numero_serie: r.numero_serie ?? '', pedimento: r.pedimento ?? '',
         genero: r.genero ?? '', ubicacion: r.ubicacion ?? '', localizacion: r.localizacion ?? '', responsable: r.responsable ?? '', codigo_barras: r.codigo_barras ?? '',
         cantidad: r.cantidad ?? '', cantidades_ubicacion: parseCantidadesUbicacion(r.cantidades_ubicacion), costo: r.costo ?? '', fecha_adquisicion: editorActivosToInputDate(r.fecha_adquisicion),
         fecha_depreciacion: editorActivosToInputDate(r.fecha_depreciacion), costo_depreciado: null,
@@ -6054,7 +6108,7 @@ function resetChipFiltroUI(){
 
   function editorActivosHeaderToField(h){
     const n = normHeader(h);
-    const aliases = { descripcion:'descripcion', serie:'numero_serie', numero_serie:'numero_serie', codigobarras:'codigo_barras', codigo_barras:'codigo_barras', codigo_barras_:'codigo_barras', fechadquisicion:'fecha_adquisicion', fechaadquisicion:'fecha_adquisicion', fecha_adquisicion:'fecha_adquisicion', fechadepreciacion:'fecha_depreciacion', fecha_de_depreciacion:'fecha_depreciacion', fecha_depreciacion:'fecha_depreciacion', costodepreciado:'costo_depreciado', costo_depreciado:'costo_depreciado', dadodebaja:'dado_de_baja', dado_de_baja:'dado_de_baja', bajaat:'baja_at', baja_at:'baja_at', fecharegistro:'created_at', fecha_registro:'created_at' };
+    const aliases = { descripcion:'descripcion', serie:'numero_serie', numero_serie:'numero_serie', pedimento:'pedimento', codigobarras:'codigo_barras', codigo_barras:'codigo_barras', codigo_barras_:'codigo_barras', fechadquisicion:'fecha_adquisicion', fechaadquisicion:'fecha_adquisicion', fecha_adquisicion:'fecha_adquisicion', fechadepreciacion:'fecha_depreciacion', fecha_de_depreciacion:'fecha_depreciacion', fecha_depreciacion:'fecha_depreciacion', costodepreciado:'costo_depreciado', costo_depreciado:'costo_depreciado', dadodebaja:'dado_de_baja', dado_de_baja:'dado_de_baja', bajaat:'baja_at', baja_at:'baja_at', fecharegistro:'created_at', fecha_registro:'created_at' };
     return aliases[n] || n;
   }
 
