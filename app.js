@@ -2949,6 +2949,10 @@ function resetChipFiltroUI(){
     const cant = getv(i,'cantidad','qty','existencia');
     const costoRaw = getRaw(i,'costo','costo_unitario','costoUnitario','precio_compra');
     const costoFmt = fmtMoney(costoRaw);
+    const dadoDeBaja = isTrue(getRaw(i,'dado_de_baja','dadoDeBaja'));
+    const estadoBaja = dadoDeBaja
+      ? `<span class="asset-status-baja" title="Este activo está dado de baja" aria-label="Activo dado de baja"><span class="material-symbols-rounded">block</span></span>`
+      : '';
     const metaBits = [
       genero && `<span><b>Género:</b> ${escapeHtml(genero)}</span>`,
       cant && `<span><b>Cant.:</b> ${escapeHtml(cant)}</span>`,
@@ -2962,7 +2966,7 @@ function resetChipFiltroUI(){
           <div class="sku">${escapeHtml(sku)}</div>
           ${adjuntosIcons}
         </div>
-        ${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}
+        ${estadoBaja || cb ? `<div class="barcode-line">${estadoBaja}${cb ? `<div class="barcode">${escapeHtml(cb)}</div>`:''}</div>`:''}
       </div>
       <div>
         <div class="desc">${escapeHtml(desc)}</div>
